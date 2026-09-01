@@ -179,7 +179,7 @@ O papel `parser` existe porque o `worker` desembrulha DEKs e usa credenciais ban
 | `recorrencias` | Regra e materialização | `criarRecorrencia`, `editarRecorrencia`, `materializarAte(horizonte)` | `tenancy`, `domain/recorrencia`, `lancamentos` |
 | `planejamento` | Teto e piso por categoria × competência | `definir`, `copiarDe(competencia)`, `avaliar(competencia)` | `tenancy`, `agregacao`, `domain/{planejamento,razao}` |
 | `objetivos` | Acúmulo plurimensal | `criarObjetivo`, `progresso`, `registrarAporte`, `avaliarTravessia` | `tenancy`, `domain/objetivo` |
-| `ingestao` | **O seam do ADR 0003** | `BankSyncProvider`, `registrarAdapter`, `executarSincronizacao(conexaoId)`, `receberArquivo(arquivo, tipo)`, `promoverBrutos(sincronizacaoId)` | `tenancy`, `parsing`, `domain/ingestao`, `lancamentos` |
+| `ingestao` | **O seam do ADR 0003** | `BankSyncProvider`, `registrarAdapter`, `executarSincronizacao(conexaoId)`, `receberArquivo(arquivo, tipo)`, `promoverBrutos(sincronizacaoId)`, **`revogarConexao(conexaoId, motivo)`** | `tenancy`, `parsing`, `domain/ingestao`, `lancamentos` |
 | `parsing` | **Fronteira de processo** para entrada hostil | `parsearEmSandbox(caminho, tipo, limites): Promise<Result<Normalizado, ParseError>>` | Nada além de `child_process` e Zod. **Não** importa `tenancy` nem Drizzle |
 | `conciliacao` | Sugestão e decisão | `gerarSugestoes(sincronizacaoId)`, `aceitar`, `rejeitar` | `tenancy`, `domain/conciliacao` |
 | `inteligencia` | Categorização automática, OCR | `sugerirCategoria(descricao)`, `lerRecibo(anexoId)` | `tenancy`, `parsing`, `domain/categorizacao` |
@@ -197,6 +197,30 @@ O papel `parser` existe porque o `worker` desembrulha DEKs e usa credenciais ban
 **Teste da deleção.** Apagar `tenancy`: todo módulo precisaria configurar `app.tenant_id` — alavancagem máxima. Apagar `agregacao`: **oito** superfícies (o rodapé, cinco relatórios, `faturas.total_centavos`, o realizado do Planejamento) precisariam lembrar de excluir transferência — que é exatamente o bloqueio B17. Apagar `parsing`: o parser volta para o processo que tem a KEK. Apagar `outbox`: cada escrita ganha lógica de "enfileirei mas o commit falhou".
 
 **Módulo raso e aceito:** `filas` é fino de propósito — existe para que o processador de job seja função pública de módulo (§2.4a).
+
+**A interface `BankSyncProvider`** — o seam do ADR 0003, **emendado pelo ADR 0019**, que lhe acrescentou a revogação. Todo adapter (`manual`, `ofx-import`, `csv-import`, `pluggy`) implementa **todas** as operações; nenhuma é opcional e nenhuma lança por "não se aplica".
+
+```ts
+interface BankSyncProvider {
+  // Entrada — ADR 0003, inalterado
+  conectar(…)  ·  sincronizar(…)  ·  receberArquivo(…)   // devolvem LancamentoBruto
+
+  // Saída — ADR 0019
+  revogar(alvo: AlvoRevogacao, opcoes: { sinal: AbortSignal; prazoMs: number })
+    : Promise<ResultadoRevogacao>
+}
+
+type ResultadoRevogacao =
+  | { estado: 'revogado'; em: Date; referencia?: string }   // o acesso deixou de existir agora
+  | { estado: 'ja_revogado'; em?: Date }                    // não há acesso a encerrar — sucesso
+  | { estado: 'nao_aplicavel'; motivo: string }             // manual, ofx-import, csv-import: zero I/O
+  | { estado: 'falha_temporaria'; codigo: CodigoRevogacao; tentarApos?: Date }
+  | { estado: 'falha_permanente'; codigo: CodigoRevogacao; detalhe: string }
+```
+
+`AlvoRevogacao` é um **descritor sem material cifrado** (`tenantId`, `conexaoId`, `provider`, `externalId`, `motivo`, `chaveIdempotencia`, `tentativa`) — não a linha de `conexoes`, que a esta altura já teve `dek_cifrada` e `credenciais_cifradas` zeradas na transação da revogação. É o que permite a **retentativa persistente** depois do crypto-shredding. `revogar` não escreve no banco, não conhece `tenancy` e não devolve segredo; persistir estado é do orquestrador, `revogarConexao`. `registrarAdapter` **recusa** adapter que não declare `modeloDeCredencial` (ADR 0018 §D0) e `revogacaoRemota`.
+
+`conexoes` ganha o eixo `revogacao_remota` (`nao_aplicavel | confirmada | pendente | falhou`) ao lado de `status`: o primeiro diz o que sabemos do agregador, o segundo o que a Mavia fez. Os dez casos que a suíte de contrato **S3** precisa provar estão no ADR 0019 §D8.
 
 ### 1.5 `apps/web` e `apps/mobile`
 
@@ -914,7 +938,7 @@ Alinhado a `docs/produto/arquitetura-informacao.md` §2. Cada linha é o conjunt
 
 ## 7. Decisões que exigem ADR
 
-Renumeradas: 0001–0009 estão escritas, **0018 está reservada** ao envelope encryption (outro autor).
+Renumeradas: **0001–0009, 0018 e 0019 já estão escritas** — 0018 é o envelope encryption e 0019 é a revogação no `BankSyncProvider`, ambas de outros autores. As desta tabela seguem propostas, não escritas.
 
 | # | Decisão | Por que merece ADR |
 |---|---|---|
@@ -926,12 +950,12 @@ Renumeradas: 0001–0009 estão escritas, **0018 está reservada** ao envelope e
 | **0015** | Cursor keyset assinado por HMAC, vinculado a tenant e filtro, resolvido aritmeticamente | Resolve A-09 e A-10. Um cursor resolvido por lookup vira oráculo de existência cross-tenant |
 | **0016** | Parsing de arquivo de usuário em processo `parser` descartável, sem segredo e sem rede | Resolve A-32/33/34, o vetor que compromete todos os tenants de uma vez. É decisão de topologia de processo, não de biblioteca |
 | **0017** | Processador de job é função pública do módulo; a fila só registra | Evita um seam novo (§2.4a). Sem registro, a primeira sessão que usa `@Processor()` o desfaz |
-| **0019** | Política de conflito offline é pura e mora em `packages/domain` | Evita o segundo seam novo (§2.4b) e impede regra de negócio em `apps/mobile` |
 | **0020** | Papéis de banco, resolução de tenant em quatro etapas, e as duas exceções declaradas de leitura sem contexto | Resolve A-02, A-03, A-05. Complementa o ADR 0004 com o *como*; errar aqui falha em silêncio |
 | **0021** | `packages/ui` importa apenas `packages/domain` | Fronteira de pacote; sem registro, a primeira sessão que precisa de um tipo de resposta acopla o design system à API |
 | **0022** | Moeda única por tenant no MVP, imposta no banco | Resolve B19: hoje o modelo permite criar o estado (duas moedas) para o qual a tela principal não tem número correto possível |
 | **0023** | Exportação é operação privilegiada: reautenticação, teto, auditoria, notificação ao titular e TTL curto de uso único | Resolve A-28. É a rota mais valiosa do produto para uma sessão roubada, e mais barata que paginar 4.000 lançamentos |
 | **0024** | Identificadores de tabela de negócio são UUID v4 (não v7) | ADR 0004 exige "não sequencial"; v7 vaza ordem de criação. O custo de localidade de escrita precisa estar registrado como aceito |
+| **0025** | Política de conflito offline é pura e mora em `packages/domain` | Evita o segundo seam novo (§2.4b) e impede regra de negócio em `apps/mobile` |
 
 ---
 
