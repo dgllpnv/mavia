@@ -29,6 +29,13 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-17** | Vender os três planos desde o lançamento da cobrança | **Sim, os três** | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-18** | Nomes dos planos | **Pessoal · Família · Negócio** | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-19** | Ciclo de cobrança | **Mensal e anual com desconto** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-20** | Reembolso além do prazo legal | **Integral em 30 dias, sem perguntar o motivo** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-21** | Graça no pagamento em atraso | **14 dias**, alinhados à retentativa da Stripe | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-23** | MFA obrigatório para `proprietario`? | **Não.** Opcional, com reautenticação em doze operações e obrigatório para conectar banco e criar chave de API | `docs/produto/spec-autenticacao.md` |
+| **DP-24** | Vidas de sessão | Padrão aceito: **14/30 dias web, 60/180 mobile** | `docs/produto/spec-autenticacao.md` |
+| **DP-25** | Existe canal humano de recuperação? | **Não existe.** Confirmado | `docs/produto/spec-autenticacao.md` |
+| **DP-26** | Teto de tenants por usuário | Padrão aceito: **3 por dia, 10 ativos** | `docs/produto/spec-autenticacao.md` |
+| **DP-27** | Preços e desconto anual | **R$ 59 · R$ 79 · R$ 99** por mês; anual = 10 × mensal | `docs/produto/spec-planos-e-assinatura.md` |
 
 **DP-10** (`BankSyncProvider.revogar()`) era consequência técnica da DP-9, não escolha do dono. Resolvida por ADR própria.
 
@@ -63,6 +70,26 @@ Não haverá emissão automática no lançamento. Nenhuma integração fiscal en
 A assimetria decide. Em contrapartida, o documento vem com quatro vetos escritos: nunca é identificador, nunca é antifraude, nunca é enriquecido em base externa, nunca sai em log ou resposta a quem não é `proprietario`. E a política de retenção foi **corrigida por escrito** — ela prometia não coletar documento algum, e um documento normativo que promete o que o produto não cumpre torna todo o resto suspeito.
 
 Se a emissão for definitivamente abandonada, a base legal desaparece e a tabela é apagada por inteiro. A saída está escrita para a coleta não virar permanente por inércia.
+
+---
+
+## Preço — o que o patamar escolhido implica
+
+Os preços definidos pelo dono do produto são **R$ 59 (Pessoal), R$ 79 (Família) e R$ 99 (Negócio)** por mês, com o anual custando dez mensalidades.
+
+Registro factual, sem juízo: isso coloca a Mavia **acima do Organizze em todos os níveis** — o plano de entrada fica 69% mais caro que os R$ 35 dele. A especificação de planos foi originalmente escrita ancorada naquela referência, e o raciocínio de posicionamento está sendo refeito, não apenas a tabela de valores.
+
+A consequência que precisa estar escrita no produto: **preço acima do concorrente é promessa implícita**. A especificação deve declarar qual é essa promessa, e as cotas precisam ser revistas — cobrar mais e limitar igual é a combinação que produz cancelamento.
+
+---
+
+## Perder a Conta Google significa perder o espaço
+
+Confirmado pelo dono do produto: **não existe canal humano de recuperação.**
+
+O motivo é duro e vale estar escrito: qualquer canal humano de recuperação é também o caminho de quem se passa pelo cliente. Suporte capaz de devolver acesso é suporte capaz de dar acesso a um impostor — e num produto financeiro essa é a superfície mais atacada que existe.
+
+O custo é real e recai sobre o produto, não sobre o cliente: a tela de cadastro precisa dizer isso com todas as letras, e a de sucesso precisa oferecer criar senha ou MFA **na hora**, não num menu de configurações que ninguém visita.
 
 ---
 
