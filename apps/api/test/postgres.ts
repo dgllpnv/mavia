@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
@@ -11,13 +12,23 @@ import { aplicarMigrations } from '../src/db/migrar.js'
  * testes sobem um Postgres de verdade, aplicam as migrations reais e exercitam
  * as policies como o banco de produção as executará.
  *
+ * **As migrations rodam como `mavia_migrate`, não como superusuário.** Isso não
+ * é preciosismo: rodando como superusuário, tudo passa — e passar assim esconde
+ * exatamente os erros de permissão que aparecem no primeiro deploy. Rodar como
+ * o papel real já revelou dois requisitos que nenhum documento de arquitetura
+ * mencionava: `CREATEROLE` e `CREATE` na base.
+ *
  * O container é próprio da suíte e não toca o ambiente local do `mavia.bat`.
  */
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const MIGRATIONS = join(AQUI, '..', 'migrations')
+const BOOTSTRAP = join(AQUI, '..', '..', '..', 'infra', 'bootstrap-papeis.sql')
+
+const SENHA_MIGRATE = 'mavia_local_dev'
 
 export interface BancoDeTeste {
+  /** Conexão de superusuário. Usada só para semear, como um caminho privilegiado faria. */
   readonly cliente: Client
   encerrar(): Promise<void>
 }
@@ -29,14 +40,29 @@ export async function subirPostgres(): Promise<BancoDeTeste> {
     .withEnvironment({ TZ: 'UTC', PGTZ: 'UTC' })
     .start()
 
-  const cliente = new Client({ connectionString: container.getConnectionUri() })
-  await cliente.connect()
-  await aplicarMigrations(cliente, MIGRATIONS)
+  const superusuario = new Client({ connectionString: container.getConnectionUri() })
+  await superusuario.connect()
+
+  // Papéis que em produção nascem fora das migrations, provisionados pelo SRE.
+  await superusuario.query(await readFile(BOOTSTRAP, 'utf8'))
+
+  // A partir daqui, o papel real. Se faltar um privilégio, o teste falha aqui
+  // e não no dia do deploy.
+  const migrador = new Client({
+    host: container.getHost(),
+    port: container.getPort(),
+    database: container.getDatabase(),
+    user: 'mavia_migrate',
+    password: SENHA_MIGRATE,
+  })
+  await migrador.connect()
+  await aplicarMigrations(migrador, MIGRATIONS)
+  await migrador.end()
 
   return {
-    cliente,
+    cliente: superusuario,
     async encerrar() {
-      await cliente.end()
+      await superusuario.end()
       await container.stop()
     },
   }
@@ -51,9 +77,9 @@ export const USUARIO_B = 'bbbbbbbb-0000-0000-0000-00000000000b'
 /**
  * Semeia dois tenants completos e isolados.
  *
- * Roda como superusuário de propósito: em produção quem cria tenant é um
- * caminho privilegiado, não o papel `mavia_app` da requisição. Ver a lacuna
- * registrada no fim de `rls.test.ts`.
+ * Roda como superusuário de propósito: em produção quem cria tenant é o caminho
+ * privilegiado do cadastro (`auth.*`, migration 0004), não o papel `mavia_app`
+ * da requisição.
  */
 export async function semearDoisTenants(cliente: Client): Promise<void> {
   await cliente.query(
@@ -61,8 +87,8 @@ export async function semearDoisTenants(cliente: Client): Promise<void> {
     [TENANT_A, TENANT_B],
   )
   await cliente.query(
-    `INSERT INTO usuarios (id, email, nome)
-     VALUES ($1, 'ana@exemplo.com', 'Ana'), ($2, 'bruno@exemplo.com', 'Bruno')`,
+    `INSERT INTO usuarios (id, email, nome, email_verificado_em)
+     VALUES ($1, 'ana@exemplo.com', 'Ana', now()), ($2, 'bruno@exemplo.com', 'Bruno', now())`,
     [USUARIO_A, USUARIO_B],
   )
   await cliente.query(
@@ -88,9 +114,19 @@ export async function comoApp<T>(
   contexto: { tenantId?: string; usuarioId?: string },
   trabalho: () => Promise<T>,
 ): Promise<T> {
+  return comoPapel(cliente, 'mavia_app', contexto, trabalho)
+}
+
+/** Idem, para qualquer papel — usado para provar o que cada um NÃO pode. */
+export async function comoPapel<T>(
+  cliente: Client,
+  papel: string,
+  contexto: { tenantId?: string; usuarioId?: string },
+  trabalho: () => Promise<T>,
+): Promise<T> {
   await cliente.query('BEGIN')
   try {
-    await cliente.query('SET LOCAL ROLE mavia_app')
+    await cliente.query(`SET LOCAL ROLE ${papel}`)
     if (contexto.usuarioId !== undefined) {
       await cliente.query('SELECT set_config($1, $2, true)', ['app.usuario_id', contexto.usuarioId])
     }

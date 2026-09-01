@@ -45,15 +45,19 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 **O que prova:** o seam S2 como o arquiteto exigiu — **dois tenants em toda rota**, e uma transação sem contexto lança erro em vez de retornar linha.
 
-### 1D · Deploy na VPS
+### 1D · Deploy na VPS — **adiado por decisão do dono do produto**
 
-**Entrega:** o ambiente de produção existindo, ainda sem produto dentro.
+**Movido para depois do épico 5**, quando a aplicação estiver completa e testada localmente.
 
-- Docker Compose, Traefik com TLS, papéis de banco separados
-- Backup com recuperação a ponto no tempo, e **restauração testada de verdade** — backup não testado não é backup
-- Observabilidade: erro, latência e a métrica de negócio
+> Não há pressa para subir. A VPS recebe o produto pronto, não um esqueleto.
 
-**Ao fim do épico 1 você consegue:** acessar a Mavia num domínio seu, entrar com Google, e ver uma tela vazia. É pouco de ver e é o alicerce de tudo.
+A decisão é boa e economiza trabalho real: ambiente de produção mantido durante meses sem produto dentro custa atenção, atualização de segurança e depuração de infraestrutura, sem devolver nada. O ambiente local do `mavia.bat` cobre todo o desenvolvimento até lá, e os testes de integração sobem o próprio Postgres via Testcontainers.
+
+**O que isso não adia:** as migrations continuam sendo escritas em modo expand/contract desde já, e os papéis de banco continuam separados no ambiente local. Escrever migration destrutiva "porque ainda não tem produção" é a dívida que aparece no dia do primeiro deploy.
+
+**Quando acontecer, entrega:** Docker Compose e Traefik com TLS · papéis de banco separados · backup com recuperação a ponto no tempo e **restauração testada de verdade** · observabilidade com erro, latência e a métrica de negócio.
+
+**Ao fim do épico 1 você consegue:** rodar a Mavia inteira na sua máquina, criar conta, entrar com Google e consumir a API.
 
 ---
 
@@ -95,7 +99,7 @@ Tokens em `packages/ui` · dashboard · extrato denso com o trilho · formulári
 
 ## Épico 5 — Mobile *(fim do MVP)*
 
-**Entrega:** os apps Android e iOS.
+**Entrega:** os apps Android e iOS. **É aqui que a etapa 1D, o deploy na VPS, entra** — com a aplicação completa e testada localmente, conforme decidido.
 
 Expo · offline-first com fila durável e idempotência · lançamento em três toques · biometria · push · build e envio às lojas.
 

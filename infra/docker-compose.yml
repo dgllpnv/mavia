@@ -26,6 +26,9 @@ services:
       - '127.0.0.1:4732:5432'
     volumes:
       - postgres-dados:/var/lib/postgresql/data
+      # Roda uma única vez, na criação do volume: provisiona os papéis que em
+      # produção nascem fora das migrations. Depois de `mavia reset`, roda de novo.
+      - ./bootstrap-papeis.sql:/docker-entrypoint-initdb.d/10-papeis.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U mavia -d mavia']
       interval: 3s
