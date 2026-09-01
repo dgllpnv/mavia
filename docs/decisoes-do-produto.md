@@ -25,18 +25,34 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-13** | Estrutura de planos no lançamento | **Espelhar o Organizze**, com os três níveis | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-14** | Provedor de assinatura | **Stripe** | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-15** | Experimentação | **7 dias, sem exigir cartão** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-16** | Emissão de nota fiscal | **Sem emissão automática no lançamento.** No futuro, integração própria com a prefeitura de Salvador (BA) | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-17** | Vender os três planos desde o lançamento da cobrança | **Sim, os três** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-18** | Nomes dos planos | **Pessoal · Família · Negócio** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-19** | Ciclo de cobrança | **Mensal e anual com desconto** | `docs/produto/spec-planos-e-assinatura.md` |
 
 **DP-10** (`BankSyncProvider.revogar()`) era consequência técnica da DP-9, não escolha do dono. Resolvida por ADR própria.
 
 ---
 
-## Ressalva registrada sobre os planos
+## Os planos — e a proposta do coordenador que foi recusada
 
-O dono do produto escolheu espelhar a estrutura de três planos do Organizze desde o lançamento, com a ressalva de posicionamento apresentada e aceita: os dois planos superiores do Organizze cobram pela **conexão bancária automática**, que na Mavia é o épico 12 e depende de a receita cobrir o custo do agregador (ADR 0003).
+O dono do produto escolheu espelhar a estrutura de três planos do Organizze. O coordenador ressalvou que os dois planos superiores de lá vendem **conexão bancária automática**, que na Mavia é o épico 12, e propôs modelá-los mas mantê-los **indisponíveis para compra** até lá.
 
-A posição adotada é **modelar os três planos desde já e manter os Conectados indisponíveis para compra até o épico 12 existir**. Modelar não é vender: cobrar por uma função que ainda não funciona produz reembolso e desgaste, que custam mais do que a receita antecipada.
+**O `product-financeiro` recusou essa proposta, e a recusa foi aceita.** O argumento:
 
-Esta ressalva é reversível por decisão do dono do produto. Se ele optar por abrir a venda antes, a consequência a assumir é a expectativa criada no cliente.
+> Trocar a porta trancada por receita real é o que destrava o gatilho do ADR 0003.
+
+Um plano que ninguém pode comprar gera receita zero — e o gatilho para contratar o agregador **é a receita**. A proposta do coordenador atrasava exatamente aquilo que pretendia proteger.
+
+A solução usa a ordem dos épicos: compartilhamento (10) vem **antes** de billing (11). Quando a cobrança entrar no ar, os planos superiores terão o que vender de verdade — **pessoas no espaço** e **múltiplos espaços**. Quando o épico 12 chegar, a conexão entra nos dois **sem aumento de preço**, que é o melhor evento de retenção disponível.
+
+Daí os nomes `Pessoal`, `Família` e `Negócio`: eles nomeiam o que o plano entrega, continuam verdadeiros antes e depois do épico 12, e não prometem o que ainda não existe. Pré-venda com desconto foi recusada — reembolso diferido, art. 35 do CDC e risco de estorno em massa.
+
+## Nota fiscal — o que fica pendente
+
+Não haverá emissão automática no lançamento. A intenção é, no futuro, integrar diretamente com a prefeitura de **Salvador, na Bahia**.
+
+A consequência de engenharia, levantada e ainda em análise: **se o CPF/CNPJ não for coletado no checkout, emitir a nota depois exige pedir o documento a clientes que já assinaram** — caro, constrangedor e de baixa taxa de resposta. Essa decisão precisa sair antes do épico 11, não depois.
 
 ---
 
