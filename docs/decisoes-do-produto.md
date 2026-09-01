@@ -36,6 +36,8 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-25** | Existe canal humano de recuperação? | **Não existe.** Confirmado | `docs/produto/spec-autenticacao.md` |
 | **DP-26** | Teto de tenants por usuário | Padrão aceito: **3 por dia, 10 ativos** | `docs/produto/spec-autenticacao.md` |
 | **DP-27** | Preços e desconto anual | **R$ 59 · R$ 79 · R$ 99** por mês; anual = 10 × mensal | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-28** | Ajustar cotas por causa do preço maior | **Não.** Cotas mantidas como estão. Sem promessa de prazo de suporte na página | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-29** | Duração do teste (7 dias) | **Mantida.** Reavaliar com dado de conversão, não por opinião | `docs/produto/spec-planos-e-assinatura.md` |
 
 **DP-10** (`BankSyncProvider.revogar()`) era consequência técnica da DP-9, não escolha do dono. Resolvida por ADR própria.
 
@@ -80,6 +82,18 @@ Os preços definidos pelo dono do produto são **R$ 59 (Pessoal), R$ 79 (Famíli
 Registro factual, sem juízo: isso coloca a Mavia **acima do Organizze em todos os níveis** — o plano de entrada fica 69% mais caro que os R$ 35 dele. A especificação de planos foi originalmente escrita ancorada naquela referência, e o raciocínio de posicionamento está sendo refeito, não apenas a tabela de valores.
 
 A consequência que precisa estar escrita no produto: **preço acima do concorrente é promessa implícita**. A especificação deve declarar qual é essa promessa, e as cotas precisam ser revistas — cobrar mais e limitar igual é a combinação que produz cancelamento.
+
+---
+
+## Cotas mantidas — o risco registrado
+
+O `product-financeiro` recomendou subir duas cotas por causa do preço mais alto: `pessoas` no Pessoal de 1 para 2, e anexos de 2/10/30 para 5/20/50 GB. **O dono do produto decidiu manter as cotas como estão.**
+
+O risco que ele apontou fica registrado, sem re-litígio: *a R$ 35 um plano solo é "o barato"; a R$ 59 acima do mercado, dizer a alguém que ele não pode dividir com quem divide as contas dele é a objeção mais previsível* — e casal é o caso mais comum de finanças pessoais no Brasil.
+
+**A reversão é barata, e é isso que torna a decisão de baixo risco.** Cota é catálogo, não arquitetura: subir `pessoas` no Pessoal é editar uma configuração e fazer deploy, sem migração de dado e sem retrabalho. Se a objeção aparecer na conversão ou no cancelamento, muda-se.
+
+Também decidido: **nenhuma promessa de prazo de suporte na página de preços.** É a promessa mais barata de escrever e a mais cara de quebrar, e o projeto tem uma pessoa. Atender bem sem publicar prazo é possível; publicar prazo e falhar, não.
 
 ---
 
