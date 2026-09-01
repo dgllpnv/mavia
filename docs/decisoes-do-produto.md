@@ -21,8 +21,22 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-9** | Destino dos dados sincronizados após revogação | **Permanecem e param de atualizar** | `docs/compliance/retencao-e-eliminacao.md` |
 | **DP-11** | Categorização por IA: local ou terceiro | **Local, sem terceiro.** Regra do usuário e histórico do espaço | `docs/compliance/retencao-e-eliminacao.md` |
 | **D3.3** | Onde vive a chave mestra (KEK) | **Guardião local com KEK selada** | `docs/adr/0018-envelope-encryption.md` |
+| **DP-12** | Como as pessoas entram na plataforma | **Google e também e-mail e senha.** Os dois caminhos | `docs/produto/spec-autenticacao.md` |
+| **DP-13** | Estrutura de planos no lançamento | **Espelhar o Organizze**, com os três níveis | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-14** | Provedor de assinatura | **Stripe** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-15** | Experimentação | **7 dias, sem exigir cartão** | `docs/produto/spec-planos-e-assinatura.md` |
 
 **DP-10** (`BankSyncProvider.revogar()`) era consequência técnica da DP-9, não escolha do dono. Resolvida por ADR própria.
+
+---
+
+## Ressalva registrada sobre os planos
+
+O dono do produto escolheu espelhar a estrutura de três planos do Organizze desde o lançamento, com a ressalva de posicionamento apresentada e aceita: os dois planos superiores do Organizze cobram pela **conexão bancária automática**, que na Mavia é o épico 12 e depende de a receita cobrir o custo do agregador (ADR 0003).
+
+A posição adotada é **modelar os três planos desde já e manter os Conectados indisponíveis para compra até o épico 12 existir**. Modelar não é vender: cobrar por uma função que ainda não funciona produz reembolso e desgaste, que custam mais do que a receita antecipada.
+
+Esta ressalva é reversível por decisão do dono do produto. Se ele optar por abrir a venda antes, a consequência a assumir é a expectativa criada no cliente.
 
 ---
 
