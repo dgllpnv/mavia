@@ -1,0 +1,53 @@
+# Ambiente local de desenvolvimento da Mavia.
+#
+# Bloco de portas 47xx — escolhido para não colidir com 80 nem 8080, e para
+# não brigar com um Postgres ou Redis que já exista na máquina nas portas
+# padrão. Ver infra/README.md.
+#
+# Toda porta é publicada em 127.0.0.1 de propósito: sem o prefixo, o Docker
+# abre no 0.0.0.0 e expõe o banco para a rede local inteira.
+
+name: mavia-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mavia-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mavia
+      POSTGRES_PASSWORD: mavia_local_dev
+      POSTGRES_DB: mavia
+      # UTC no banco, sempre. A conversão para America/Sao_Paulo é do
+      # domínio, nunca do servidor — ver CLAUDE.md §2, regra 7.
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:4732:5432'
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mavia -d mavia']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: mavia-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:4779:6379'
+    volumes:
+      - redis-dados:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-dados:
+  redis-dados:

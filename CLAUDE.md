@@ -176,6 +176,14 @@ Testes contra Postgres real, não mock. RLS não pode ser mockada.
 
 ## 8. Comandos
 
+```bat
+mavia               :: sobe Postgres e Redis locais e espera ficar saudável
+mavia down          :: derruba, preservando os dados
+mavia reset         :: zera o banco local
+```
+
+**Bloco de portas 47xx**, e ele não se negocia caso a caso: Postgres 4732, Redis 4779, API 4711, web 4710. **80 e 8080 estão fora** por decisão do dono do produto, e as portas padrão de Postgres e Redis também, para não colidir com serviço já instalado na máquina. Tudo publicado em `127.0.0.1`, nunca em `0.0.0.0`. Ver `infra/README.md`.
+
 ```bash
 pnpm dev            # sobe api + web + mobile
 pnpm test           # suíte completa
