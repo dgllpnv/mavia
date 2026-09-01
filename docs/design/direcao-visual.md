@@ -1,6 +1,13 @@
 # Direção visual da Mavia — "Papel e trilho"
 
-- **Status:** proposta do `engenheiro-frontend-web`, aguardando escolha humana entre as três direções (seção 8)
+> **Status: APROVADA em 2026-09-01.** O dono do produto escolheu a direção **A — "Papel e trilho"**,
+> **sobre fundo claro**. O claro é a identidade canônica da Mavia; o modo escuro da §2.5 permanece
+> como preferência do usuário, não como a cara do produto. Quando os dois conflitarem numa escolha,
+> **o claro vence**. As direções B e C da §8 ficam como registro do que foi considerado e descartado.
+> Ver `docs/adr/0006`, Emenda 1. Prévia navegável: `docs/design/preview-direcao-visual.html`.
+
+
+- **Status:** **Aprovada.** Proposta pelo `engenheiro-frontend-web`, escolhida pelo dono do produto em 2026-09-01, sobre fundo claro. Normativa a partir daqui.
 - **Data:** 2026-09-01
 - **Normativo acima deste documento:** `docs/design.md` (seções 1, 2, 3 e 5) e `docs/adr/0006-identidade-visual-autoral.md`
 - **Pesquisa de base:** `docs/pesquisa/organizze-teardown.md`

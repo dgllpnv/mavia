@@ -1,0 +1,666 @@
+<title>Mavia — direção visual</title>
+
+<style>
+  /* ─────────── tokens: claro ─────────── */
+  :root {
+    --paper-0:#FFFEFB; --surface-1:#FBF9F4; --surface-2:#F4F1E8; --surface-3:#EDE9DD;
+    --line:#E3DED2; --line-forte:#CFC8B6;
+    --ink-4:#A79F8B; --ink-3:#756E5D; --ink-2:#575144; --ink-1:#1C1A16; --ink-0:#0E0D0B;
+    --petroleo:#0B4F5F; --petroleo-hi:#0E6478; --petroleo-wash:#EEF7F9;
+    --receita:#0F6B43; --despesa:#A32B22; --atencao:#8A5A00;
+    --d1:#1B6FA8; --d2:#8C4A28; --d3:#17A177; --d4:#9E2E62; --d5:#B08C10; --d6:#D2649A;
+    --shadow-2:0 2px 4px rgba(28,26,22,.08), 0 16px 40px rgba(28,26,22,.18);
+
+    --font-num:"Archivo","Archivo Expanded","Helvetica Neue",Helvetica,Arial,sans-serif;
+    --font-body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  :root[data-theme="light"] {
+    --paper-0:#FFFEFB; --surface-1:#FBF9F4; --surface-2:#F4F1E8; --surface-3:#EDE9DD;
+    --line:#E3DED2; --line-forte:#CFC8B6;
+    --ink-4:#A79F8B; --ink-3:#756E5D; --ink-2:#575144; --ink-1:#1C1A16; --ink-0:#0E0D0B;
+    --petroleo:#0B4F5F; --petroleo-hi:#0E6478; --petroleo-wash:#EEF7F9;
+    --receita:#0F6B43; --despesa:#A32B22; --atencao:#8A5A00;
+    --d1:#1B6FA8; --d2:#8C4A28; --d3:#17A177; --d4:#9E2E62; --d5:#B08C10; --d6:#D2649A;
+    --shadow-2:0 2px 4px rgba(28,26,22,.08), 0 16px 40px rgba(28,26,22,.18);
+  }
+
+  /* ─────────── base ─────────── */
+  body {
+    background:var(--paper-0); color:var(--ink-1);
+    font-family:var(--font-body); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:1100px; margin:0 auto; padding:64px 24px 96px; }
+  h1,h2,h3 { font-family:var(--font-num); font-weight:700; text-wrap:balance; margin:0; }
+  h1 { font-size:56px; line-height:1.0; letter-spacing:-.03em; color:var(--ink-0); }
+  h2 { font-size:36px; line-height:1.05; letter-spacing:-.02em; }
+  h3 { font-size:18px; line-height:1.3; letter-spacing:-.005em; font-weight:600; }
+  p { margin:0; max-width:66ch; }
+  a { color:var(--petroleo); }
+  .eyebrow {
+    font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-3); font-weight:500; font-family:var(--font-body);
+  }
+  .muted { color:var(--ink-3); }
+  .lede { font-size:18px; line-height:1.45; color:var(--ink-2); max-width:60ch; }
+
+  section { margin-top:96px; }
+  .stack { display:flex; flex-direction:column; gap:16px; }
+  .stack-lg { display:flex; flex-direction:column; gap:24px; }
+  .rule { height:1px; background:var(--line); border:0; margin:44px 0 0; }
+
+  /* ─────────── o trilho ─────────── */
+  .trilho { position:relative; height:2px; background:var(--line); border-radius:0; }
+  .trilho::before {
+    content:""; position:absolute; top:0; bottom:0; left:0;
+    width:var(--carga,50%); background:var(--ink-1);
+  }
+  .trilho--despesa::before { left:auto; right:0; }
+  .trilho::after {
+    content:""; position:absolute; top:-3px; left:var(--marca,80%);
+    width:1px; height:8px; background:var(--ink-2);
+  }
+  .trilho--sem-marca::after { display:none; }
+  .trilho--estouro::before {
+    background:
+      repeating-linear-gradient(45deg,
+        var(--despesa) 0 2px, transparent 2px 4px), var(--ink-1);
+  }
+
+  /* ─────────── dinheiro ─────────── */
+  .valor {
+    font-family:var(--font-num); font-variant-numeric:tabular-nums lining-nums slashed-zero;
+    font-weight:600; color:var(--ink-1); white-space:nowrap;
+  }
+  .valor .sinal { display:inline-block; width:.62em; color:var(--ink-1); }
+  .valor .cifra { font-size:.72em; color:var(--ink-3); margin-right:.18em; }
+  .valor--previsto { font-weight:400; color:var(--ink-2); }
+  .valor--receita .sinal { color:var(--receita); }
+  .valor--receita .num { color:var(--receita); }
+  .valor--despesa .sinal { color:var(--despesa); }
+  .valor--despesa .num { color:var(--despesa); }
+
+  .heroi {
+    font-family:var(--font-num); font-weight:700; font-size:56px; line-height:1;
+    letter-spacing:-.03em; color:var(--ink-0);
+  }
+  .heroi .cifra { font-size:.42em; color:var(--ink-3); vertical-align:.9em; margin-right:.12em; }
+  .heroi .cent { font-size:.55em; color:var(--ink-2); vertical-align:.75em; margin-left:.04em; }
+
+  /* ─────────── grades ─────────── */
+  .duas { display:grid; grid-template-columns:7fr 4fr; gap:44px; align-items:start; }
+  .par  { display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:start; }
+  @media (max-width:820px) { .duas, .par { grid-template-columns:1fr; gap:32px; } }
+
+  /* ─────────── extrato ─────────── */
+  .app {
+    border:1px solid var(--line); background:var(--surface-1);
+    overflow-x:auto; border-radius:0;
+  }
+  .app-nav {
+    height:48px; display:flex; align-items:center; gap:24px; padding:0 16px;
+    border-bottom:1px solid var(--line); background:var(--surface-2);
+  }
+  .app-marca { font-family:var(--font-num); font-weight:700; letter-spacing:-.02em; font-size:16px; }
+  .app-nav a { font-size:13px; color:var(--ink-3); text-decoration:none; }
+  .app-nav a.on { color:var(--ink-1); font-weight:600; box-shadow:inset 0 -2px 0 var(--petroleo); padding-bottom:14px; }
+  .app-head { height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
+  .app-filtros {
+    height:32px; display:flex; align-items:center; gap:8px; padding:0 16px;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    background:var(--surface-2); font-size:13px; color:var(--ink-2);
+  }
+  .chip {
+    border:1px solid var(--line-forte); border-radius:2px; padding:1px 8px;
+    background:var(--surface-1); font-size:12px; color:var(--ink-2);
+  }
+  .chip.on { border-color:var(--petroleo); color:var(--petroleo); background:var(--petroleo-wash); }
+
+  table.extrato { width:100%; border-collapse:collapse; min-width:720px; }
+  table.extrato th {
+    height:28px; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-3); font-weight:500; text-align:left; padding:0 8px;
+    background:var(--surface-2); border-bottom:1px solid var(--line-forte);
+  }
+  table.extrato th.r, table.extrato td.r { text-align:right; }
+  .dia td {
+    height:24px; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-3); background:var(--surface-2); padding:0 8px; font-weight:500;
+  }
+  table.extrato td { height:36px; padding:0 8px; border-bottom:1px solid var(--line); font-size:15px; }
+  .est { width:24px; color:var(--ink-3); font-size:13px; }
+  .est.ok { color:var(--ink-1); }
+  .dt { width:64px; font-size:13px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+  .parc { font-size:13px; color:var(--ink-3); margin-left:6px; font-variant-numeric:tabular-nums; }
+  .cat { font-size:13px; color:var(--ink-2); white-space:nowrap; }
+  .quad { display:inline-block; width:8px; height:8px; margin-right:6px; vertical-align:1px; }
+  .conta { font-size:13px; color:var(--ink-3); white-space:nowrap; }
+  .saldo-dia td { height:24px; border-bottom:none; font-size:13px; color:var(--ink-3); }
+  .saldo-dia .trilho-cel { padding-bottom:8px; }
+  .app-rodape {
+    border-top:1px solid var(--line-forte); background:var(--surface-2);
+    padding:10px 16px 12px; display:flex; flex-direction:column; gap:6px;
+  }
+
+  /* ─────────── densidade ─────────── */
+  .painel { border:1px solid var(--line); background:var(--surface-1); }
+  .painel-topo {
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding:10px 12px; border-bottom:1px solid var(--line); background:var(--surface-2);
+  }
+  .clip { height:504px; overflow:hidden; position:relative; }
+  .clip::after {
+    content:""; position:absolute; left:0; right:0; bottom:0; height:56px;
+    background:linear-gradient(transparent, var(--surface-1)); pointer-events:none;
+  }
+  .lin-m { height:36px; display:flex; align-items:center; gap:8px; padding:0 12px;
+           border-bottom:1px solid var(--line); font-size:15px; }
+  .cab-m { height:24px; display:flex; align-items:center; padding:0 12px; background:var(--surface-2);
+           font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); }
+  .lin-o { height:56px; display:flex; align-items:center; gap:12px; padding:0 12px;
+           border-bottom:1px solid var(--line); font-size:15px; }
+  .cab-o { height:40px; display:flex; align-items:center; padding:0 12px;
+           font-size:13px; color:var(--ink-3); }
+  .bola { width:32px; height:32px; border-radius:999px; flex:none; }
+  .contador { font-family:var(--font-num); font-weight:700; font-size:36px; letter-spacing:-.02em; }
+
+  /* ─────────── paleta ─────────── */
+  .swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:12px; }
+  .sw { border:1px solid var(--line); }
+  .sw-cor { height:56px; }
+  .sw-meta { padding:8px 10px; display:flex; flex-direction:column; gap:2px; }
+  .sw-nome { font-size:13px; font-weight:500; }
+  .sw-hex { font-family:var(--font-mono); font-size:11px; color:var(--ink-3); text-transform:uppercase; }
+  .sw-ct { font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+
+  /* ─────────── direções ─────────── */
+  .dirs { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+  @media (max-width:880px) { .dirs { grid-template-columns:1fr; } }
+  .dir { border:1px solid var(--line); padding:24px; background:var(--surface-1); display:flex; flex-direction:column; gap:12px; }
+  .dir.rec { border-color:var(--petroleo); box-shadow:inset 3px 0 0 var(--petroleo); }
+  .dir-letra { font-family:var(--font-num); font-weight:700; font-size:36px; line-height:1; color:var(--ink-4); }
+  .dir.rec .dir-letra { color:var(--petroleo); }
+  .selo { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--petroleo); font-weight:600; }
+  .risco { font-size:13px; color:var(--ink-3); border-top:1px solid var(--line); padding-top:10px; margin-top:auto; }
+
+  .nota {
+    border-left:2px solid var(--line-forte); padding:2px 0 2px 16px;
+    font-size:14px; color:var(--ink-2); max-width:62ch;
+  }
+  .aviso {
+    background:var(--surface-2); border:1px solid var(--line);
+    padding:16px 20px; font-size:14px; color:var(--ink-2);
+  }
+  table.dados { width:100%; border-collapse:collapse; font-size:14px; }
+  table.dados th { text-align:left; font-weight:500; font-size:11px; letter-spacing:.06em;
+                   text-transform:uppercase; color:var(--ink-3); padding:0 12px 8px 0; }
+  table.dados td { padding:8px 12px 8px 0; border-top:1px solid var(--line); vertical-align:top; }
+  table.dados td.n { font-variant-numeric:tabular-nums; text-align:right; font-family:var(--font-num); }
+  :focus-visible { outline:2px solid var(--petroleo); outline-offset:2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="stack">
+    <span class="eyebrow">Mavia · direção visual · 1 set 2026</span>
+    <h1>Papel e trilho</h1>
+    <p class="lede">
+      A organização do Organizze com o peso de um jornal financeiro, e uma ideia própria:
+      o realizado&nbsp;×&nbsp;previsto deixa de ser seis linhas escondidas atrás de um chevron
+      e vira forma, sob cada número que importa.
+    </p>
+    <div class="trilho" style="--carga:62%;--marca:81%;max-width:420px;margin-top:8px"></div>
+  </header>
+
+  <div class="aviso" style="margin-top:44px">
+    <strong>Direção aprovada em 1&nbsp;set&nbsp;2026: A — Papel e trilho, sobre fundo claro.</strong>
+    Esta página é a direção fixada, não mais uma proposta. O claro é a identidade canônica da Mavia:
+    é ele que define a marca, as capturas de tela e o primeiro contato. As direções
+    <strong>B</strong> e <strong>C</strong> seguem descritas no fim, como registro do que foi
+    considerado e descartado.
+  </div>
+
+  <!-- ══════════ 1. O TRILHO ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">01 · o elemento-assinatura</span>
+      <h2>O trilho</h2>
+      <p>
+        Uma régua de 2&nbsp;px, quadrada nas pontas, sob todo número em curso. Três partes,
+        uma gramática só, e uma frase que a define em qualquer tela:
+        <strong>quanto disto já é fato, e onde estava previsto terminar.</strong>
+        O denominador muda de tela para tela e é sempre nomeado ao lado. A forma, nunca.
+      </p>
+    </div>
+
+    <div class="par">
+      <div class="stack">
+        <div style="max-width:340px">
+          <div class="valor" style="font-size:24px"><span class="cifra">R$</span>4.281<span>,90</span></div>
+          <div class="trilho" style="--carga:62%;--marca:81%;margin-top:6px"></div>
+        </div>
+        <table class="dados">
+          <tr><th>parte</th><th>o que é</th></tr>
+          <tr><td><strong>trilho</strong></td><td>o total esperado — o denominador</td></tr>
+          <tr><td><strong>carga</strong></td><td>o que já é fato — o realizado</td></tr>
+          <tr><td><strong>marca</strong></td><td>onde o previsto termina</td></tr>
+        </table>
+      </div>
+
+      <div class="stack">
+        <div class="nota">
+          <strong>A carga é tinta, nunca a cor da marca.</strong> Pintá-la de petróleo faria o
+          usuário procurar significado na cor da identidade.
+        </div>
+        <div class="nota">
+          <strong>Estouro é textura, não cor.</strong> O trecho excedente ganha hachura a 45°
+          e um rótulo curto — cor sozinha nunca carrega isso.
+        </div>
+        <div class="nota">
+          <strong>Direção codifica sinal.</strong> Despesa carrega da direita para a esquerda;
+          receita, da esquerda para a direita. Segundo canal, gratuito, sem depender de cor.
+        </div>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <div class="par">
+      <div class="stack">
+        <span class="eyebrow">receita · carrega da esquerda</span>
+        <div style="max-width:300px">
+          <div class="valor valor--receita" style="font-size:18px"><span class="sinal">+</span><span class="cifra">R$</span><span class="num">7.200,00</span></div>
+          <div class="trilho" style="--carga:88%;--marca:74%;margin-top:6px"></div>
+        </div>
+        <span class="eyebrow" style="margin-top:16px">despesa · carrega da direita</span>
+        <div style="max-width:300px">
+          <div class="valor valor--despesa" style="font-size:18px"><span class="sinal">−</span><span class="cifra">R$</span><span class="num">1.116,00</span></div>
+          <div class="trilho trilho--despesa" style="--carga:46%;--marca:70%;margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="stack">
+        <span class="eyebrow">limite estourado · hachura, não cor</span>
+        <div style="max-width:300px">
+          <div class="valor" style="font-size:18px"><span class="cifra">R$</span>1.312,00</div>
+          <div class="trilho trilho--estouro" style="--carga:100%;--marca:76%;margin-top:6px"></div>
+          <div class="muted" style="font-size:13px;margin-top:8px">
+            <span class="valor" style="font-size:13px;color:var(--despesa)">+ R$ 312</span> acima do teto de Alimentação
+          </div>
+        </div>
+        <div class="nota" style="margin-top:16px">
+          O mesmo desenho serve saldo do mês, saldo do dia, ciclo de fatura,
+          consumo de limite e projeção de gráfico. Um vocabulário, seis usos.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 2. EXTRATO ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">02 · a tela central</span>
+      <h2>Lançamentos</h2>
+      <p>
+        Sem card, sem ícone em círculo, sem faixa de alerta permanente. O filtro
+        <code>Tipo</code> do Organizze — treze opções lineares que colapsam três eixos
+        ortogonais — vira três seletores independentes de três a quatro opções.
+      </p>
+    </div>
+
+    <div class="app">
+      <div class="app-nav">
+        <span class="app-marca">mavia</span>
+        <a href="#" tabindex="-1">visão geral</a>
+        <a href="#" class="on" tabindex="-1">lançamentos</a>
+        <a href="#" tabindex="-1">cartões</a>
+        <a href="#" tabindex="-1">planejamento</a>
+        <a href="#" tabindex="-1">relatórios</a>
+      </div>
+
+      <div class="app-head">
+        <h3 style="font-size:24px">Lançamentos</h3>
+        <div style="display:flex;align-items:center;gap:12px;font-size:14px;color:var(--ink-2)">
+          <span>‹</span><strong style="font-family:var(--font-num)">setembro 2026</strong>
+          <span class="chip">mês ▾</span><span>›</span>
+        </div>
+      </div>
+
+      <div class="app-filtros">
+        <span class="chip on">natureza ▾</span>
+        <span class="chip">estado ▾</span>
+        <span class="chip">origem ▾</span>
+        <span class="chip">conta ▾</span>
+        <span class="chip">categoria ▾</span>
+        <span style="margin-left:auto;color:var(--atencao);font-size:12px">3 em atraso</span>
+      </div>
+
+      <table class="extrato">
+        <thead>
+          <tr>
+            <th style="width:24px"></th><th style="width:64px">Data</th><th>Descrição</th>
+            <th>Categoria</th><th>Conta</th><th class="r" style="width:132px">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="dia"><td colspan="6">seg 15 set</td></tr>
+          <tr>
+            <td class="est ok">✓</td><td class="dt">15/09</td>
+            <td>Mercado Extra<span class="parc">3/5</span></td>
+            <td class="cat"><span class="quad" style="background:var(--d3)"></span>Alimentação</td>
+            <td class="conta">Nubank</td>
+            <td class="r"><span class="valor valor--despesa"><span class="sinal">−</span><span class="cifra">R$</span><span class="num">316,40</span></span></td>
+          </tr>
+          <tr>
+            <td class="est ok">✓</td><td class="dt">15/09</td><td>Uber</td>
+            <td class="cat"><span class="quad" style="background:var(--d1)"></span>Transporte</td>
+            <td class="conta">Itaú</td>
+            <td class="r"><span class="valor valor--despesa"><span class="sinal">−</span><span class="cifra">R$</span><span class="num">24,90</span></span></td>
+          </tr>
+          <tr>
+            <td class="est">○</td><td class="dt">15/09</td><td>Academia</td>
+            <td class="cat"><span class="quad" style="background:var(--d4)"></span>Saúde</td>
+            <td class="conta">Nubank</td>
+            <td class="r"><span class="valor valor--previsto"><span class="sinal">−</span><span class="cifra">R$</span>149,00</span></td>
+          </tr>
+          <tr class="saldo-dia">
+            <td colspan="4"></td>
+            <td class="r muted">saldo no dia</td>
+            <td class="r"><span class="valor"><span class="sinal">+</span><span class="cifra">R$</span>8.412,50</span></td>
+          </tr>
+          <tr class="saldo-dia"><td colspan="4"></td><td colspan="2" class="trilho-cel">
+            <div class="trilho" style="--carga:71%;--marca:88%"></div>
+          </td></tr>
+
+          <tr class="dia"><td colspan="6">ter 16 set</td></tr>
+          <tr>
+            <td class="est ok">✓</td><td class="dt">16/09</td><td>Salário</td>
+            <td class="cat"><span class="quad" style="background:var(--d5)"></span>Renda</td>
+            <td class="conta">Itaú</td>
+            <td class="r"><span class="valor valor--receita"><span class="sinal">+</span><span class="cifra">R$</span><span class="num">7.200,00</span></span></td>
+          </tr>
+          <tr>
+            <td class="est">⇄</td><td class="dt">16/09</td><td>Para reserva</td>
+            <td class="cat"><span style="color:var(--ink-3)">⇄</span> Transferência</td>
+            <td class="conta">Itaú</td>
+            <td class="r"><span class="valor"><span class="sinal">−</span><span class="cifra">R$</span>500,00</span></td>
+          </tr>
+          <tr>
+            <td class="est">⇄</td><td class="dt">16/09</td><td>De conta corrente</td>
+            <td class="cat"><span style="color:var(--ink-3)">⇄</span> Transferência</td>
+            <td class="conta">Nubank</td>
+            <td class="r"><span class="valor"><span class="sinal">+</span><span class="cifra">R$</span>500,00</span></td>
+          </tr>
+          <tr class="saldo-dia">
+            <td colspan="4"></td>
+            <td class="r muted">saldo no dia</td>
+            <td class="r"><span class="valor"><span class="sinal">+</span><span class="cifra">R$</span>15.612,50</span></td>
+          </tr>
+          <tr class="saldo-dia"><td colspan="4"></td><td colspan="2" class="trilho-cel">
+            <div class="trilho" style="--carga:92%;--marca:88%"></div>
+          </td></tr>
+        </tbody>
+      </table>
+
+      <div class="app-rodape">
+        <div style="font-size:13px;color:var(--ink-3)">
+          saldo anterior <span class="valor" style="font-size:13px;font-weight:400">R$ 1.212,00</span> ·
+          receitas <span class="valor valor--receita" style="font-size:13px;font-weight:400"><span class="sinal">+</span>R$ 7.200,00</span> ·
+          despesas <span class="valor valor--despesa" style="font-size:13px;font-weight:400"><span class="sinal">−</span>R$ 490,30</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap">
+          <div>
+            <span class="eyebrow">saldo</span>
+            <div class="heroi" style="font-size:36px"><span class="cifra">R$</span>15.612<span class="cent">50</span></div>
+          </div>
+          <div style="flex:1;min-width:200px;padding-bottom:10px">
+            <div class="trilho" style="--carga:78%;--marca:91%"></div>
+          </div>
+          <div style="text-align:right;padding-bottom:4px">
+            <span class="eyebrow">previsto</span>
+            <div class="valor valor--previsto" style="font-size:18px"><span class="cifra">R$</span>17.180,00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nota">
+      <strong>✓</strong> efetivado · <strong>○</strong> previsto · <strong>⇄</strong> transferência.
+      O estado é um glifo clicável na primeira coluna que alterna pago e não pago direto na lista —
+      herdado do Organizze, que acertou nisso. Transferência é neutra de propósito: pintá-la de
+      verde ou vermelho é exatamente o erro que faz pagamento de fatura virar despesa duplicada.
+    </div>
+  </section>
+
+  <!-- ══════════ 3. DENSIDADE ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">03 · densidade</span>
+      <h2>Quinze contra seis</h2>
+      <p>
+        Mesma altura de tela, mesma fonte de 16&nbsp;px na descrição. O ganho não vem de apertar
+        tipografia — vem de três remoções: o ícone de categoria em círculo, que sozinho impõe
+        o piso de 56&nbsp;px; o card, com seu padding e sua margem; e a faixa de alerta permanente.
+      </p>
+    </div>
+
+    <div class="par">
+      <div class="painel">
+        <div class="painel-topo">
+          <div><strong>Mavia</strong> <span class="muted" style="font-size:13px">· linha de 36 px</span></div>
+          <div class="contador" style="color:var(--petroleo)">14</div>
+        </div>
+        <div class="clip">
+          <div class="cab-m">seg 15 set</div>
+          <div class="lin-m"><span class="quad" style="background:var(--d3)"></span>Mercado Extra<span class="parc">3/5</span><span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>316,40</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d1)"></span>Uber<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>24,90</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d4)"></span>Academia<span class="valor valor--previsto" style="margin-left:auto"><span class="sinal">−</span>149,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d2)"></span>Padaria Real<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>38,20</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d6)"></span>Netflix<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>55,90</span></div>
+          <div class="cab-m">ter 16 set</div>
+          <div class="lin-m"><span class="quad" style="background:var(--d5)"></span>Salário<span class="valor valor--receita" style="margin-left:auto"><span class="sinal">+</span>7.200,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d1)"></span>Posto Shell<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>210,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d3)"></span>Feira<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>92,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d4)"></span>Farmácia<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>88,70</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d2)"></span>Livraria<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>64,00</span></div>
+          <div class="cab-m">qua 17 set</div>
+          <div class="lin-m"><span class="quad" style="background:var(--d3)"></span>Mercado Extra<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>112,30</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d1)"></span>Estacionamento<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>18,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d6)"></span>Spotify<span class="valor valor--previsto" style="margin-left:auto"><span class="sinal">−</span>21,90</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d5)"></span>Freela<span class="valor valor--receita" style="margin-left:auto"><span class="sinal">+</span>1.400,00</span></div>
+          <div class="lin-m"><span class="quad" style="background:var(--d4)"></span>Dentista<span class="valor valor--previsto" style="margin-left:auto"><span class="sinal">−</span>350,00</span></div>
+        </div>
+      </div>
+
+      <div class="painel">
+        <div class="painel-topo">
+          <div><strong>Organizze</strong> <span class="muted" style="font-size:13px">· linha de 56 px</span></div>
+          <div class="contador" style="color:var(--ink-4)">8</div>
+        </div>
+        <div class="clip">
+          <div class="cab-o">15/09/26</div>
+          <div class="lin-o"><span class="bola" style="background:var(--d3)"></span>Mercado Extra<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>316,40</span></div>
+          <div class="lin-o"><span class="bola" style="background:var(--d1)"></span>Uber<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>24,90</span></div>
+          <div class="lin-o"><span class="bola" style="background:var(--d4)"></span>Academia<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>149,00</span></div>
+          <div class="cab-o">16/09/26</div>
+          <div class="lin-o"><span class="bola" style="background:var(--d2)"></span>Padaria Real<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>38,20</span></div>
+          <div class="lin-o"><span class="bola" style="background:var(--d6)"></span>Netflix<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>55,90</span></div>
+          <div class="lin-o"><span class="bola" style="background:var(--d5)"></span>Salário<span class="valor valor--receita" style="margin-left:auto"><span class="sinal">+</span>7.200,00</span></div>
+          <div class="cab-o">17/09/26</div>
+          <div class="lin-o"><span class="bola" style="background:var(--d1)"></span>Posto Shell<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>210,00</span></div>
+          <div class="lin-o"><span class="bola" style="background:var(--d3)"></span>Feira<span class="valor valor--despesa" style="margin-left:auto"><span class="sinal">−</span>92,00</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nota">
+      Acima, os dois com a mesma caixa de 504&nbsp;px, para isolar o efeito da linha.
+      Contando o cromo real de cada produto num viewport de 900&nbsp;px — barra de navegação,
+      cabeçalho, filtros, rodapé e, no Organizze, o padding do card e a faixa de alerta —
+      a conta fica <strong>15 contra 6</strong>.
+      Com seis linhas por tela, comparar a segunda quinzena com a primeira exige rolar e memorizar.
+      Com quinze, meio mês cabe de uma vez. <strong>Densidade aqui não é estética; é a diferença
+      entre comparar e lembrar.</strong>
+    </div>
+  </section>
+
+  <!-- ══════════ 4. PALETA ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">04 · cor</span>
+      <h2>Petróleo sobre papel quente</h2>
+      <p>
+        Nem roxo, nem índigo, nem o verde do Organizze. Os neutros têm matiz ~45° e croma mínimo —
+        papel de jornal financeiro, não terminal. O escuro é projetado: reduz o croma dos neutros,
+        porque marrom escuro fica lamacento em tela, e abre a distância entre superfícies,
+        porque no escuro a elevação depende dela, não da sombra.
+      </p>
+    </div>
+
+    <div>
+      <span class="eyebrow">marca · navegação, ação e identidade. nunca dado.</span>
+      <div class="swatches" style="margin-top:12px">
+        <div class="sw"><div class="sw-cor" style="background:var(--petroleo)"></div>
+          <div class="sw-meta"><span class="sw-nome">Petróleo</span><span class="sw-hex">#0B4F5F</span><span class="sw-ct">8.69 : 1 sobre o papel</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--receita)"></div>
+          <div class="sw-meta"><span class="sw-nome">Receita</span><span class="sw-hex">#0F6B43</span><span class="sw-ct">6.23 : 1</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--despesa)"></div>
+          <div class="sw-meta"><span class="sw-nome">Despesa</span><span class="sw-hex">#A32B22</span><span class="sw-ct">6.82 : 1</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--atencao)"></div>
+          <div class="sw-meta"><span class="sw-nome">Atenção</span><span class="sw-hex">#8A5A00</span><span class="sw-ct">5.63 : 1</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--ink-1)"></div>
+          <div class="sw-meta"><span class="sw-nome">Tinta</span><span class="sw-hex">#1C1A16</span><span class="sw-ct">16.51 : 1</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--surface-2);border-bottom:1px solid var(--line)"></div>
+          <div class="sw-meta"><span class="sw-nome">Papel</span><span class="sw-hex">#F4F1E8</span><span class="sw-ct">matiz ~45°</span></div></div>
+      </div>
+    </div>
+
+    <div>
+      <span class="eyebrow">dados · seis slots por entidade. nenhum aparece em botão ou navegação.</span>
+      <div class="swatches" style="margin-top:12px">
+        <div class="sw"><div class="sw-cor" style="background:var(--d1)"></div><div class="sw-meta"><span class="sw-nome">azul-aço</span><span class="sw-hex">#1B6FA8</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--d2)"></div><div class="sw-meta"><span class="sw-nome">terracota</span><span class="sw-hex">#8C4A28</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--d3)"></div><div class="sw-meta"><span class="sw-nome">verde-mar</span><span class="sw-hex">#17A177</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--d4)"></div><div class="sw-meta"><span class="sw-nome">vinho</span><span class="sw-hex">#9E2E62</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--d5)"></div><div class="sw-meta"><span class="sw-nome">mostarda</span><span class="sw-hex">#B08C10</span></div></div>
+        <div class="sw"><div class="sw-cor" style="background:var(--d6)"></div><div class="sw-meta"><span class="sw-nome">rosa</span><span class="sw-hex">#D2649A</span></div></div>
+      </div>
+    </div>
+
+    <div class="nota">
+      A separação entre marca e dado é o ponto: se a cor da identidade aparecer num gráfico,
+      o usuário vai procurar significado nela. O pior par adjacente da paleta de dados sob
+      deuteranopia mede ΔE 13.8, contra um alvo de 8 — validado por script, não por olho.
+      O ciano foi excluído do pool para não encostar na matiz da marca.
+    </div>
+
+    <div class="nota">
+      <strong>O claro é a identidade; o escuro é preferência.</strong> A Mavia se apresenta em papel
+      quente — é assim que a marca, as capturas e o primeiro contato existem. O modo escuro segue
+      especificado em <code>docs/design/direcao-visual.md</code> §2.5 como preferência do usuário,
+      projetado e não invertido: croma reduzido nos neutros, porque marrom escuro fica lamacento em
+      tela, e elevação por superfície em vez de sombra. Ele não é a cara do produto.
+    </div>
+  </section>
+
+  <!-- ══════════ 5. SINAL SEM COR ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">05 · acessibilidade</span>
+      <h2>Quatro canais, três em escala de cinza</h2>
+      <p>
+        Parte relevante dos usuários não distingue verde de vermelho. A cor entra por último,
+        como reforço — e o <code>+</code> é sempre renderizado, o que nos afasta do Organizze,
+        que só mostra o sinal negativo.
+      </p>
+    </div>
+    <table class="dados" style="max-width:720px">
+      <tr><th>canal</th><th>receita</th><th>despesa</th><th>funciona sem cor</th></tr>
+      <tr><td>glifo</td><td class="n">+</td><td class="n">−</td><td>sim</td></tr>
+      <tr><td>direção da carga</td><td>esquerda → direita</td><td>direita → esquerda</td><td>sim</td></tr>
+      <tr><td>peso <span class="muted">(realizado × previsto)</span></td><td>600 / 400</td><td>600 / 400</td><td>sim</td></tr>
+      <tr><td>cor</td><td style="color:var(--receita)">verde</td><td style="color:var(--despesa)">vermelho</td><td>não — por isso é o último</td></tr>
+    </table>
+  </section>
+
+  <!-- ══════════ 6. AS TRÊS DIREÇÕES ══════════ -->
+  <section class="stack-lg">
+    <div class="stack">
+      <span class="eyebrow">06 · a decisão</span>
+      <h2>Três direções, uma escolha</h2>
+      <p>
+        Não são variações de cor. Cada uma muda a forma como o produto pensa.
+        O time recomenda a <strong>A</strong> — mas o <code>docs/design.md</code> é explícito
+        em que a identidade do produto não é decisão de agente.
+      </p>
+    </div>
+
+    <div class="dirs">
+      <div class="dir rec">
+        <div class="dir-letra">A</div>
+        <span class="selo">escolhida · 1 set 2026</span>
+        <h3>Papel e trilho</h3>
+        <p style="font-size:14px">
+          O que está desenhado acima. Papel quente, Petróleo, densidade de 36&nbsp;px,
+          tabela sem card, e o realizado × previsto virando forma sob cada número.
+          A organização do Organizze com o peso de um jornal financeiro.
+        </p>
+        <div class="trilho" style="--carga:62%;--marca:81%"></div>
+        <p class="risco">
+          <strong>Risco:</strong> o menor dos três. A aposta está concentrada no trilho —
+          se ele não “ler” para o usuário, sobra uma tabela muito bem-feita e nada mais.
+        </p>
+      </div>
+
+      <div class="dir">
+        <div class="dir-letra">B</div>
+        <span class="eyebrow">considerada e descartada</span>
+        <h3>Livro-razão</h3>
+        <p style="font-size:14px">
+          Um razão contábil de página inteira, e nada mais — <strong>não existe dashboard
+          como destino</strong>. Débito, crédito e saldo corrente descem numa linha contínua
+          do ano inteiro, com o saldo na margem externa como num livro impresso. Serifada de
+          imprensa econômica, figuras monoespaçadas, zero superfícies, zero ícones, 28&nbsp;px
+          por linha. Gráficos exilados em “pranchas” imprimíveis.
+        </p>
+        <p class="risco">
+          <strong>Risco:</strong> pode parecer software de contador em vez de app pessoal,
+          e o mobile fica difícil.
+        </p>
+      </div>
+
+      <div class="dir">
+        <div class="dir-letra">C</div>
+        <span class="eyebrow">considerada e descartada</span>
+        <h3>Cronologia</h3>
+        <p style="font-size:14px">
+          A superfície principal é um <strong>eixo de tempo horizontal</strong>, não uma lista.
+          “Hoje” é uma régua fixa no centro; o usuário arrasta o tempo em vez de rolar.
+          O saldo é a área sob a curva, sólida à esquerda e hachurada à direita — projeção
+          é a visão padrão. A fatura vira um segmento do eixo e deixa de precisar de tela própria.
+        </p>
+        <p class="risco">
+          <strong>Risco:</strong> a mais cara de construir, a mais difícil de tornar acessível
+          por teclado, e pode ser fascinante na demo e cansativa no uso diário.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <footer style="margin-top:44px" class="stack">
+    <p class="muted" style="font-size:13px;max-width:70ch">
+      <strong>Duas ressalvas honestas.</strong> Esta página usa as fontes do sistema:
+      as faces definidas na direção — Archivo para números e títulos, Public Sans para texto —
+      são auto-hospedadas no produto e não podem ser carregadas aqui. E os números do extrato
+      são fictícios, escolhidos para exercitar parcelamento, transferência e previsto —
+      nenhum dado real de cliente aparece nesta página.
+    </p>
+    <p class="muted" style="font-size:13px">
+      Fonte completa: <code>docs/design/direcao-visual.md</code> ·
+      normas: <code>docs/design.md</code> · decisão: <code>docs/adr/0006</code>
+    </p>
+  </footer>
+
+</div>

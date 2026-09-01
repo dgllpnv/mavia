@@ -1,6 +1,6 @@
 # ADR 0006 — Identidade visual autoral, recusa explícita à estética genérica de IA
 
-- **Status:** Aceita
+- **Status:** Aceita · **emendada em 2026-09-01** (ver Emenda 1)
 - **Data:** 2026-09-01
 
 ## Contexto
@@ -39,3 +39,36 @@ Os princípios que sustentam a decisão:
 **Adotar uma biblioteca de componentes pronta e aceitar a estética.** Muito mais rápido. Rejeitado: entrega exatamente a aparência genérica que esta decisão existe para evitar.
 
 **Deixar o design a critério de cada sessão.** Rejeitado: sem norma escrita, cada sessão reconverge ao default do modelo e a identidade nunca se acumula.
+
+---
+
+## Emenda 1 — Direção escolhida e compromisso com o claro (2026-09-01)
+
+O processo das três direções exigido pela seção 4 do `docs/design.md` foi executado. As direções
+foram desenhadas em `docs/design/direcao-visual.md` e apresentadas ao dono do produto numa página
+de comparação. Emenda registrada **antes de qualquer implementação** — não é re-litígio de decisão
+consumida.
+
+**Direção escolhida: A — "Papel e trilho".** Elemento-assinatura é o **trilho**, a régua de 2px sob
+todo número em curso que torna o par realizado × previsto uma forma em vez de seis linhas de texto.
+Neutros de papel quente (matiz ~45°), primária Petróleo `#0B4F5F`, linha de extrato de 36px,
+tabela sem card, Archivo para números e Public Sans para texto.
+
+Descartadas: **B — "Livro-razão"** (razão contábil de página inteira, sem dashboard como destino;
+risco de parecer software de contador e de inviabilizar o mobile) e **C — "Cronologia"** (eixo de
+tempo horizontal no lugar da lista; a mais cara, a mais difícil de tornar acessível por teclado).
+Ambas ficam registradas em `docs/design/direcao-visual.md` §8 como alternativas consideradas.
+
+**O claro é a identidade canônica.** Decisão do dono do produto. A Mavia se apresenta sobre papel
+quente: é o fundo claro que define a marca, o material de divulgação, as capturas de tela das lojas
+e o primeiro contato do usuário. O modo escuro **continua existindo** como preferência do usuário,
+especificado em `docs/design/direcao-visual.md` §2.5 e projetado, não invertido — mas ele não é a
+cara do produto e não governa decisão de identidade.
+
+**Consequência prática:** quando claro e escuro conflitarem numa escolha de cor, forma ou contraste,
+o claro vence. Uma cor que só funciona bem no escuro é motivo para trocar a cor, não para relaxar
+o claro.
+
+**Também confirmado nesta rodada:** a resolução da tensão entre a preferência dos clientes pelo
+Organizze e a identidade autoral. **Herdamos a arquitetura de informação, a densidade e a economia
+de campos; a linguagem visual é nossa.** Copiamos a clareza, não a pele.
