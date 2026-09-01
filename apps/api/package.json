@@ -1,0 +1,21 @@
+{
+  "name": "@mavia/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8"
+  },
+  "devDependencies": {
+    "@mavia/domain": "workspace:*",
+    "@testcontainers/postgresql": "^10",
+    "@types/node": "^22",
+    "@types/pg": "^8",
+    "vitest": "^2"
+  }
+}

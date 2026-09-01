@@ -584,9 +584,19 @@ Padrão aplicado a **toda** tabela de negócio, **incluindo `outbox`**:
 ALTER TABLE lancamentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lancamentos FORCE  ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON lancamentos
-  USING       (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK  (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING       (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK  (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
+
+> **Correção aplicada em 2026-09-01, encontrada implementando.** Este documento
+> prescrevia `current_setting('app.tenant_id', true)::uuid` sem o `nullif`.
+> Numa conexão de pool em que `app.tenant_id` já foi definido por uma
+> requisição anterior, `current_setting(..., true)` devolve **string vazia** em
+> vez de `NULL`, e `''::uuid` **lança erro** em vez de esconder linha. O
+> comportamento passava a depender de a conexão ser nova ou reaproveitada —
+> não determinístico, e visível só sob carga. O `nullif(..., '')` faz os dois
+> casos convergirem para zero linhas. Vale para **todas** as policies desta
+> seção, e o mesmo cuidado se aplica a `app.usuario_id`.
 
 **Policies das tabelas que não são tenant-scoped (A-02):**
 
@@ -594,20 +604,20 @@ CREATE POLICY tenant_isolation ON lancamentos
 -- sessoes: o material que permite personificar qualquer usuário da plataforma
 ALTER TABLE sessoes ENABLE ROW LEVEL SECURITY;  ALTER TABLE sessoes FORCE ROW LEVEL SECURITY;
 CREATE POLICY sessao_do_usuario ON sessoes
-  USING      (usuario_id = current_setting('app.usuario_id', true)::uuid)
-  WITH CHECK (usuario_id = current_setting('app.usuario_id', true)::uuid);
+  USING      (usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid)
+  WITH CHECK (usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid);
 
 -- usuarios: o próprio, e os membros dos tenants a que pertence
 CREATE POLICY usuario_proprio ON usuarios
-  USING (id = current_setting('app.usuario_id', true)::uuid
+  USING (id = nullif(current_setting('app.usuario_id', true), '')::uuid
          OR EXISTS (SELECT 1 FROM tenant_usuarios tu
                     WHERE tu.usuario_id = usuarios.id
-                      AND tu.tenant_id = current_setting('app.tenant_id', true)::uuid));
+                      AND tu.tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid));
 
 -- tenant_usuarios e tenants: pertencimento
 CREATE POLICY pertencimento ON tenant_usuarios
-  USING (usuario_id = current_setting('app.usuario_id', true)::uuid
-         OR tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid
+         OR tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
 
 `app.usuario_id` e `app.tenant_id` são definidos **juntos**, por `SET LOCAL`, no único ponto de entrada `tenancy.withTenant`. A unidade de trabalho **falha** se algum dos dois estiver ausente. Critério de aceite (S2): uma transação sem `SET LOCAL` lança erro, não retorna linhas.

@@ -2,5 +2,15 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
-onlyBuiltDependencies:
-  - esbuild
+# Dependências autorizadas a rodar script de build na instalação.
+# A chave é `allowBuilds` — no pnpm 11 ela substituiu `onlyBuiltDependencies`.
+#   esbuild ................. binário do vitest
+#   ssh2, cpu-features ...... cadeia do testcontainers (dockerode)
+#   protobufjs .............. idem
+# O binding nativo do ssh2 é opcional e falha sem toolchain de C++; o
+# testcontainers funciona com o fallback em JS.
+allowBuilds:
+  esbuild: true
+  ssh2: true
+  cpu-features: true
+  protobufjs: true
