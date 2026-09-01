@@ -83,7 +83,7 @@ Colunas: **Classe** · **Finalidade** · **Base legal** · **Gatilho de contagem
 
 | Classe | Finalidade | Base legal | Gatilho | Prazo | No vencimento |
 |---|---|---|---|---|---|
-| `usuarios.email` | Identificar e autenticar quem acessa | Execução de contrato (7º V) | Eliminação da conta, ou inatividade **[DP-5]** | Vida da conta | `apagar` — `DELETE` físico da linha em `usuarios` |
+| `usuarios.email` | Identificar e autenticar quem acessa | Execução de contrato (7º V) | Eliminação da conta, a pedido do titular | Vida da conta | `apagar` — `DELETE` físico da linha em `usuarios` |
 | `usuarios.senha_hash` | Provar que quem acessa é quem diz ser | Execução de contrato | Idem | Vida da conta | `apagar` com a linha |
 | `usuarios.nome` | Atribuir ações a pessoas no espaço compartilhado | Execução de contrato | Idem | Vida da conta | `apagar` com a linha |
 | `usuarios.mfa_segredo_cifrado` | Verificar o segundo fator | Execução de contrato + legítimo interesse (7º IX) | Desativação de MFA, ou eliminação da conta | Até o gatilho | `crypto-shred` — DEK do propósito `usuario.mfa` destruída (ADR 0018) |
@@ -109,7 +109,7 @@ Todas as classes abaixo têm a mesma finalidade-mãe — *permitir que o titular
 
 | Classe | Finalidade | Base legal | Gatilho | Prazo | No vencimento |
 |---|---|---|---|---|---|
-| `lancamentos.*` (valor, datas, conta/cartão, status) | Calcular saldo, fatura e relatório | Execução de contrato | `deleted_at` (exclusão pelo usuário) | **12 meses** após `deleted_at` **[DP-6]** | `apagar` — o soft delete é a operação de produto; a purga física é o fim do ciclo (§4.2) |
+| `lancamentos.*` (valor, datas, conta/cartão, status) | Calcular saldo, fatura e relatório | Execução de contrato | `deleted_at` (exclusão pelo usuário) | **12 meses** após `deleted_at` | `apagar` — o soft delete é a operação de produto; a purga física é o fim do ciclo (§4.2) |
 | `lancamentos.descricao`, `.observacao` | Permitir que o titular reconheça o próprio movimento | Execução de contrato | Idem | Idem | `apagar`. Campo livre — §2.3 vale integralmente |
 | `lancamentos.criado_por` | Dizer, no espaço compartilhado, quem lançou | Execução de contrato | Saída do membro, ou eliminação do titular | **90 dias** após a saída | `anonimizar` (§4.4) — o lançamento fica, a autoria some |
 | `lancamento_etiquetas` | Classificar transversalmente | Execução de contrato | Com o lançamento | Com o lançamento | `apagar` em cascata |
@@ -561,13 +561,13 @@ Nenhum membro é adicionado sem este aceite explícito, **inclusive** o convidad
 
 | # | Pergunta | Padrão vigente enquanto não houver decisão | De quem é |
 |---|---|---|---|
-| **DP-5** | Conta inativa é eliminada? Depois de quanto tempo? | **Não elimina.** Proposta: 24 meses sem acesso e sem assinatura ativa, com aviso em 23 meses. Não implementar sem decisão — eliminar a conta de um cliente que voltaria é pior que guardá-la | `product-financeiro` |
-| **DP-6** | Quanto tempo um lançamento soft-deleted sobrevive antes da purga física? | **12 meses.** É comportamento visível (define até quando um erro é reversível por suporte) e interage com o "desfazer importação" de 7 dias | `product-financeiro` + `validador-financeiro` |
-| **DP-7** | O valor de **N**, a retenção de backup | Não definido. Esta política exige **N ≤ 90** e que N seja declarado na política de privacidade | `sre-devops-vps` (com veto deste papel se N > 90) |
-| **DP-8** | Treinar modelo com dado de cliente | **Proibido** até haver decisão, base legal e opt-out (§9.4) | `product-financeiro` + este papel |
-| **DP-9** | O destino dos dados já sincronizados após revogação | §10.3 é a **proposta**; a decisão é conjunta e vira ADR | `especialista-open-finance` + este papel |
+| **DP-5** ✅ | Conta inativa é eliminada? | **NÃO ELIMINA.** **Decidido pelo dono do produto em 2026-09-01.** O produto guarda até o titular pedir. Finanças pessoais é uso intermitente — some por meses e volta na virada do ano. Nenhum job de eliminação por inatividade é implementado. |
+| **DP-6** ✅ | Quanto tempo um lançamento excluído sobrevive antes da purga física? | **12 meses.** **Decidido pelo dono do produto em 2026-09-01.** Define até quando o suporte reverte um erro do usuário, e cobre o caso de descobrir na declaração anual que apagou algo do ano anterior. |
+| **DP-7** ✅ | O valor de **N**, a retenção de backup | **N = 30 dias.** **Decidido pelo dono do produto em 2026-09-01.** Cobre a janela real de recuperação de desastre e de erro humano descoberto tarde, e mantém curta a janela em que dado eliminado ainda existe em backup. Deve constar na política de privacidade. |
+| **DP-8** ✅ | Treinar modelo com dado de cliente | **PROIBIDO.** **Decidido pelo dono do produto em 2026-09-01.** Decisão firme, não adiamento. A categorização opera por regra do usuário e histórico do próprio espaço. Reverter exige finalidade declarada, base legal própria e opt-out visível, numa decisão nova. |
+| **DP-9** ✅ | O destino dos dados já sincronizados após revogação | **PERMANECEM, e param de atualizar.** **Decidido pelo dono do produto em 2026-09-01.** Credencial e DEK são destruídas na mesma transação da revogação e a sincronização cessa; os lançamentos já importados continuam, porque passaram a ser o histórico financeiro do próprio usuário. Apagá-los porque ele desconectou o banco destruiria o produto dele sem pedido. |
 | **DP-10** | `BankSyncProvider.revogar()` na interface do ADR 0003 | Exigido por §10.2, mas alterar o ADR 0003 não é ato deste papel | `arquiteto-solucao` + `especialista-open-finance`, via ADR nova |
-| **DP-11** | Se `inteligencia/*` é local ou de terceiro | **Bloqueado** — a rota não sobe (§9.1) | `engenheiro-dados-ia` + `product-financeiro`, via ADR |
+| **DP-11** ✅ | Se `inteligencia/*` é local ou de terceiro | **LOCAL, sem terceiro.** **Decidido pelo dono do produto em 2026-09-01.** Regra do usuário e histórico do espaço, ambos determinísticos e explicáveis, sem custo por lançamento e sem transferência de dado pessoal. A rota é desbloqueada nesses termos. Adotar terceiro exige ADR nova. |
 
 ---
 

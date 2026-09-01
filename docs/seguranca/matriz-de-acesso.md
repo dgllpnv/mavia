@@ -140,7 +140,7 @@ Legenda: `✓` permitido · `✗` negado · `⊙` permitido apenas sobre o próp
 | `tenant` | `comecar_do_zero` | ✓ | ✗ | ✗ |
 | `membro` | `ler` (nome, papel, avatar) | ✓ | ✓ | ✓ |
 | `membro` | `ler_contato` (e-mail) | ✓ | ✗ | ✗ |
-| `membro` | `convidar` | ✓ | ✗ **[DP-2]** | ✗ |
+| `membro` | `convidar` | ✓ | ✗ | ✗ |
 | `membro` | `alterar_papel` | ✓ (nunca o próprio — R-4) | ✗ | ✗ |
 | `membro` | `remover` | ✓ | ⊙ (só a si mesmo: "sair do espaço") | ⊙ |
 | `preferencia` | `ler` · `editar` | ⊙ | ⊙ | ⊙ |
@@ -160,7 +160,7 @@ Legenda: `✓` permitido · `✗` negado · `⊙` permitido apenas sobre o próp
 | `exportacao` | `criar` (escopo parcial) | ✓ | ✓ | ✗ |
 | `exportacao` | `criar` (escopo "tudo") | ✓ | ✓ | ✗ |
 | `exportacao` | `baixar` | ⊙ (só a que o próprio pediu) | ⊙ | ✗ |
-| `chave_api` · `app_conectado` | `ler` · `criar` · `revogar` | ✓ | ✗ **[DP-3]** | ✗ |
+| `chave_api` · `app_conectado` | `ler` · `criar` · `revogar` | ✓ | ✗ | ✗ |
 | `saude` · `metricas` | `ler` | — (nenhum papel de produto; ver §7) | | |
 
 `ip_hash` e `user_agent_hash` **nunca** saem em resposta de `atividade`, para nenhum papel. Existem para investigação de incidente, não para exibição — A-26.
@@ -172,9 +172,9 @@ Os valores acima são o **padrão seguro proposto**, escolhido para que a matriz
 | # | Pergunta | Padrão proposto | O que muda se a decisão for outra |
 |---|---|---|---|
 | **DP-1** ✅ | Um `membro` pode conectar o próprio banco ao espaço da família? | **SIM — decidido pelo dono do produto em 2026-09-01.** `conexao.criar` é permitida a `proprietario` e `membro`; `visualizador` continua fora. |
-| **DP-2** | Um `membro` pode convidar outras pessoas? | Não | Se sim: convite por `membro` deve exigir aprovação do `proprietario`, ou o espaço cresce sem que o titular do contrato saiba |
-| **DP-3** | Um `membro` pode criar chave de API / autorizar app de IA sobre o espaço? | Não | Se sim: cada chave herda o papel do criador e precisa de teto próprio; o `proprietario` precisa de tela para ver e revogar chaves de terceiros |
-| **DP-4** | Um `membro` pode excluir lançamento criado por outro membro? | Sim (o dado é do espaço, não do autor) | Se não: toda rota de escrita sobre `lancamento` ganha `dono-autor` como condição, e o produto precisa explicar por que uma correção óbvia é bloqueada |
+| **DP-2** ✅ | Um `membro` pode convidar outras pessoas? | **NÃO.** **Decidido pelo dono do produto em 2026-09-01.** Convidar é exclusivo de `proprietario`: quem paga a assinatura controla quem entra, e sem isso o espaço cresce sem o titular do contrato saber. |
+| **DP-3** ✅ | Um `membro` pode criar chave de API ou autorizar app de IA? | **NÃO.** **Decidido pelo dono do produto em 2026-09-01.** Chave de API é acesso programático persistente a todas as finanças do espaço; concentrá-la no `proprietario` evita ter de construir uma tela de auditoria de chaves de terceiros só para ampliar a superfície de risco. |
+| **DP-4** ✅ | Um `membro` pode excluir lançamento criado por outro membro? | **SIM.** **Decidido pelo dono do produto em 2026-09-01.** O dado é do espaço, não do autor. A exclusão é soft delete e fica no log de atividades com autor e horário — reversível e rastreável, não destrutiva. Nenhuma rota de `lancamento` ganha condição de autoria. |
 
 **DP-4 é o mais consequente.** O padrão proposto — dado financeiro pertence ao `Tenant`, não ao `Usuario` que digitou — é o que sustenta o saldo compartilhado e é o que o texto de aceite de `docs/compliance/retencao-e-eliminacao.md` §10.6 comunica ao convidado. Trocá-lo depois de existirem espaços com histórico é caro.
 
@@ -397,7 +397,7 @@ Estas rotas não existem em `sistema.md` §4.1 e a superfície inteira estava de
 
 | Rota | Papéis | Verificação além de sessão + tenant | Reaut. | RL | Achado |
 |---|---|---|:--:|---|---|
-| `GET /oauth/autorizar` | P **[DP-3]** | OAuth 2.1: `authorization_code` + **PKCE S256 obrigatório**; sem grant implícito, sem `password` grant; `redirect_uri` registrada e comparada por **igualdade exata**; `state` obrigatório. Autorização é **por tenant**, escolhido pelo usuário — nunca por usuário através de todos os seus tenants | sim | `RL-AUTH` | A-40 |
+| `GET /oauth/autorizar` | P | OAuth 2.1: `authorization_code` + **PKCE S256 obrigatório**; sem grant implícito, sem `password` grant; `redirect_uri` registrada e comparada por **igualdade exata**; `state` obrigatório. Autorização é **por tenant**, escolhido pelo usuário — nunca por usuário através de todos os seus tenants | sim | `RL-AUTH` | A-40 |
 | `POST /oauth/token` | cliente registrado | Cliente registrado manualmente e revisado; sem *dynamic client registration* | — | `RL-AUTH` | A-40 |
 | `GET /apps-conectados` | P | Lista autorizações do tenant: cliente, escopos, concedido em, expira em, último uso | — | `RL-LEITURA` | A-40 |
 | `DELETE /apps-conectados/:id` | P | Revogação com efeito **≤ 60 s** — tokens são opacos e verificados contra o banco/Redis a cada requisição, nunca JWT auto-contido de longa duração | — | `RL-ESCRITA` | A-40 |
@@ -505,7 +505,7 @@ A chave de cursor é um segredo de aplicação comum, não da hierarquia do ADR 
 
 - **A ordem de implementação.** Isto é a matriz, não o cronograma. As rotas de §3.16 são do épico 12.
 - ~~**DP-1**~~ — **resolvida em 2026-09-01:** `membro` pode conectar banco.
-- **DP-2 a DP-4** (§2.5) — do `product-financeiro`.
+- ~~**DP-2 a DP-4**~~ — **resolvidas em 2026-09-01.** Convidar e criar chave: só `proprietario`. Excluir lançamento de outro membro: permitido.
 - **Se o destino de `inteligencia/*` é local ou terceiro** — de `engenheiro-dados-ia` + `especialista-lgpd-compliance`, via ADR (B-11). Enquanto não houver ADR, a rota fica bloqueada, não permissiva.
 - **A credencial de `/metricas`** e a topologia de rede que a isola — de `sre-devops-vps` (A-04, A-07).
 - **O destino dos dados já sincronizados após revogação** — ADR conjunta com `especialista-open-finance` (B-16). A matriz declara quem pode revogar; não declara o que acontece com o histórico.

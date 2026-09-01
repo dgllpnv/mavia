@@ -1,6 +1,6 @@
 # ADR 0018 — Envelope encryption das credenciais de `Conexao`
 
-- **Status:** Aceita, com uma escolha de implementação declarada como pendente de decisão humana (D3.3)
+- **Status:** Aceita. **D3.3 resolvida em 2026-09-01: opção B — guardião local com KEK selada.**
 - **Data:** 2026-09-01
 - **Autor:** `especialista-seguranca-appsec`
 - **Substitui:** nada. **Complementa:** regra 19 do `CLAUDE.md`, ADR 0003, ADR 0004
@@ -96,7 +96,18 @@ Cinco propriedades, cada uma verificável:
 4. **Todo desembrulho é registrado** com `proposito`, `tenant_id`, `recurso_id`, `kek_versao` e horário, num log do próprio guardião, fora do Postgres. É o insumo do art. 48 quando o incidente é neste ativo.
 5. **`reenvelopar` existe para que a DEK nunca precise transitar** durante a rotação. A rotação de KEK não expõe DEK à aplicação.
 
-#### D3.3 De onde o guardião obtém a KEK — a escolha pendente
+#### D3.3 De onde o guardião obtém a KEK — **RESOLVIDA: opção B**
+
+> **Decisão do dono do produto, 2026-09-01: opção B — guardião local com KEK selada.** Custo zero e
+> fecha o vetor A-32 integralmente, o que o appsec já registrava como suficiente desde o primeiro dia.
+>
+> **A consequência operacional é assumida:** todo reboot da VPS exige desselamento manual, e enquanto
+> o guardião não estiver desselado a sincronização bancária não funciona — o restante do produto sim.
+> Isso precisa aparecer no runbook do `sre-devops-vps` e num alerta, porque a falha é silenciosa do
+> ponto de vista do usuário: os lançamentos simplesmente param de chegar.
+>
+> Migrar para a opção A quando houver orçamento continua sendo o caminho recomendado, e não exige
+> ADR nova — o contrato do guardião é o mesmo nas duas.
 
 Duas implementações satisfazem D3.1 e D3.2. **A escolha entre elas é do dono do produto com `sre-devops-vps`, porque é uma decisão de custo e de operação, não de segurança** — as duas fecham o caminho A-32.
 

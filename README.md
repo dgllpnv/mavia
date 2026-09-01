@@ -32,6 +32,7 @@ Encontrar isso em documento custou uma rodada de correção. Encontrar em produ�
 | `docs/compliance/retencao-e-eliminacao.md` | 55 classes de dado pessoal com prazo, base legal e ação |
 | `docs/validacao/` | Os laudos dos gates de risco, com os contraexemplos |
 | `docs/pesquisa/` | Teardown do concorrente |
+| `docs/decisoes-do-produto.md` | Índice das escolhas do dono do produto, com data e onde está a justificativa |
 | `docs/pipeline.md` · `docs/team.md` | Como o trabalho flui e quem decide o quê |
 
 ---
