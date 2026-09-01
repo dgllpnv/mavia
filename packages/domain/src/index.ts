@@ -25,3 +25,19 @@ export {
 } from './money.js'
 
 export { ratear, type ErroDeRateio } from './ratear.js'
+
+export {
+  competencia,
+  competenciaDe,
+  competenciaSeguinte,
+  contem,
+  dataCivilDe,
+  formatarDataCivil,
+  inicioDoDiaCivil,
+  janelaDaCompetencia,
+  FUSO_PADRAO,
+  type Competencia,
+  type DataCivil,
+  type ErroDeCompetencia,
+  type Janela,
+} from './tempo.js'
