@@ -238,9 +238,11 @@ reembolso = max(0, valor_pago − meses_iniciados × preco_mensal_do_plano)
 - **Devolve o desconto que não foi ganho.** Quem usou 3 meses do Negócio anual recebe `69000 − 3 × 6900 = R$ 483,00` e terá pago exatamente a tarifa mensal cheia pelo que usou. Sem isso, o desconto anual vira opção grátis: assina anual, cancela no mês 2, e paga barato pelo uso mensal.
 - **Nunca cobra a mais.** O `max(0, …)` garante que o pior caso é reembolso zero, jamais uma cobrança de saída.
 
-`meses_iniciados` conta pela convenção do domínio: mês `k` começa em `periodo_inicio + k meses`, com o dia fixado em `min(dia, ultimo_dia_do_mes)` — a mesma regra de `Recorrencia`, sem arrastar o ajuste. Contagem em `America/Sao_Paulo`, janela semiaberta.
+`meses_iniciados` conta pela **Ancoragem de dia do mês** do `CONTEXT.md` — o termo que o `arquiteto-dominio-financeiro` promoveu justamente porque a regra estava reescrita em quatro lugares: o mês `k` começa em `periodo_inicio + k meses`, com o dia sempre calculado a partir do **dia âncora original** e **sem arrastar o ajuste**. Contagem em `America/Sao_Paulo`, janela semiaberta. A `Assinatura` é a quinta entidade a usá-la, e a razão de o termo existir é exatamente esta: que a quinta não divirja das quatro.
 
 O reembolso é executado **na Stripe**, com `Idempotency-Key` derivada de `cobranca:${stripe_invoice_id}:reembolso`. Reembolsar duas vezes é tão grave quanto cobrar duas vezes, e o mecanismo é o mesmo.
+
+**E o valor devolvido é persistido em `Cobranca.valor_reembolsado`** (§9.1). Com o anual, reembolso parcial é caminho comum e não exceção: sem persistir, a Mavia saberia *que* devolveu e não *quanto* — e a resposta passaria a viver só do lado da Stripe, contra a §10.1.
 
 ### 6.4 Renovação anual e reajuste de preço
 
@@ -345,10 +347,32 @@ Vocabulário do `CONTEXT.md`. Colunas comuns de toda tabela de negócio conforme
 > - `teste_termina_em` é fixado na criação e **imutável**. Prorrogar é uma operação nomeada, auditada, nunca um `UPDATE` solto.
 > - **Nenhuma coluna de PAN, CVV, nome impresso no cartão ou validade completa.** Veto permanente (`retencao-e-eliminacao.md` §2.2). `metodo_ultimos4` e `metodo_marca` existem para o titular reconhecer o próprio cartão; `metodo_expira_em` existe para o aviso de 15 dias antes do vencimento, que evita a falha de pagamento.
 > - `estado` só é escrito pelo processador de eventos (§10.3) ou pelo job do 8º dia. Nenhuma rota de produto o escreve direto.
-> - `intervalo = 'anual' ⟹ periodo_fim = periodo_inicio + 12 meses`, com o dia fixado em `min(dia, ultimo_dia_do_mes)` e sem arrastar o ajuste — a mesma regra de `Recorrencia`.
+> - `intervalo = 'anual'` implica `periodo_fim = periodo_inicio + 12 meses`, pela **Ancoragem de dia do mês** (`CONTEXT.md`).
 > - O preço contratado é o do par `(plano_codigo, intervalo, plano_versao)` e **não muda dentro de um período já pago** (§6.4).
 
-**`Cobranca`** — uma por fatura da Stripe. `stripe_invoice_id` (único), `valor` (`Money`), `estado` (`paga | falhou | reembolsada`), `emitida_em`, `paga_em`, `periodo_inicio`, `periodo_fim`, `intervalo`, `documento_fiscal_id` (**reservado e nulo** — não emitimos nota hoje, §11.4.1). **Sobrevive à eliminação do espaço** por obrigação fiscal (§11.5).
+**`Cobranca`** — uma por fatura da Stripe. `stripe_invoice_id` (único), `valor` (`Money`), **`estado`** (`paga | falhou | anulada`), **`valor_reembolsado`** (`Money`, zero por padrão), `emitida_em`, `paga_em`, `periodo_inicio`, `periodo_fim`, `intervalo`, `documento_fiscal_id` (**reservado e nulo** — não emitimos nota hoje, §11.4.1). **Sobrevive à eliminação do espaço** por obrigação fiscal (§11.5).
+
+#### O reembolso é um segundo eixo, e é **derivado** — nunca um valor do enum
+
+O `arquiteto-dominio-financeiro` apontou a lacuna certa: `paga | falhou | reembolsada` não distingue reembolso integral de parcial, e a fórmula do §6.3 produz parciais o tempo todo — com o anual (DP-19), quem cancela no quinto mês recebe de volta a parte não usada, e isso deixa de ser exceção para virar caminho comum. Sem resolver, **quanto** devolvemos existiria só na Stripe, o que contradiz a §10.1 deste documento.
+
+**Resolução: `reembolsada` sai do enum.** O enum descreve **o que aconteceu com a cobrança**; o reembolso descreve **quanto voltou**. São eixos independentes:
+
+| Eixo | Como existe | Valores |
+|---|---|---|
+| `estado` | **Persistido** | `paga` · `falhou` · `anulada` |
+| `reembolso` | **Derivado** de `valor_reembolsado` e `valor`, **nunca coluna** | `nenhum` (`= 0`) · `parcial` (`0 < r < valor`) · `integral` (`r = valor`) |
+
+É o mesmo mecanismo que o projeto já usa três vezes, e pela mesma razão: `Status de lançamento` derivado de `settled_at`, `Planejamento.natureza` derivada do sinal, `Objetivo.estado` derivado de `concluido_em`. Enum ao lado do número que ele descreve é **estado inválido representável** — `estado = 'reembolsada'` com `valor_reembolsado = 0` seria escrevível, e alguém escreveria.
+
+`anulada` entra porque é real: a Stripe anula fatura na proração de troca de plano, e sem esse valor uma fatura anulada ficaria para sempre como `falhou` — errado num registro que é fiscal.
+
+> **Invariantes**
+> - `0 <= valor_reembolsado <= valor`, na mesma moeda. *(declarada pelo `arquiteto-dominio-financeiro`)*
+> - **`valor_reembolsado > 0` implica `estado = 'paga'`.** Não se devolve o que nunca entrou. É exatamente a invariante que o enum único não conseguia enunciar.
+> - `valor` é imutável depois de emitida. `valor_reembolsado` **é projeção da releitura na Stripe** (§10.4), nunca incrementado por delta do payload de um evento. Um reembolso que falha no provedor simplesmente não aparece — e é isso que mantém a §10.1 verdadeira também para o reembolso, e não só para a cobrança.
+> - A UI mostra os dois eixos juntos e nunca só um: *"Paga · R$ 690,00 · reembolsada em parte (R$ 483,00)"*. "Reembolsada" sozinha não é informação — é metade dela.
+> - Quando a emissão fiscal existir (§11.4.1), `valor_reembolsado > 0` exigirá nota de cancelamento ou substitutiva. Registrado agora para que a decisão futura não descubra o caso tarde.
 
 **`EventoDeCobranca`** — o livro de idempotência do webhook. `id` = `event.id` da Stripe (**chave primária** — é o mecanismo inteiro), `tipo`, `recebido_em`, `processado_em`, `tentativas`, `resultado`, `evento_criado_em`.
 
@@ -371,7 +395,7 @@ Termos novos para `CONTEXT.md`: **`Assinatura`**, **`Plano`**, **`Intervalo`** (
 Três decisões de nome, para o `arquiteto-dominio-financeiro`:
 
 1. **`Cota`, nunca `Limite`.** `Limite` é termo proibido pelo `CONTEXT.md`, aposentado em favor de `Planejamento`. Cota de plano e teto de gasto não podem dividir palavra.
-2. **Colisão `Plano` × `Planejamento`.** O `Planejamento` já usa o campo derivado **`dentro_do_plano`**, e "plano" passa a significar duas coisas no mesmo produto — exatamente a ambiguidade que matou `effective_at`. Proposta: renomear o campo derivado para **`dentro_do_planejado`**. É o mais barato dos dois lados a mudar, e nenhum dos dois existe em código ainda. `tenants.plano` (`sistema.md` §3.1) passa a referenciar `Plano.codigo`.
+2. **Colisão `Plano` × `Planejamento` — resolvida.** O `Planejamento` usava o campo derivado `dentro_do_plano`, e "plano" passaria a significar duas coisas no mesmo produto — a ambiguidade que matou `effective_at`. O `arquiteto-dominio-financeiro` renomeou **`dentro_do_plano` para `dentro_do_planejado`** e, junto, **`no_limite` para `no_planejado`**, que tinha o mesmo problema diante de `Cota`. `tenants.plano` passa a referenciar `Plano.codigo`.
 3. **`Cobranca`, nunca "fatura".** `Fatura` é o ciclo do `Cartao` e não empresta o nome para mais nada. A fatura da Stripe é `Cobranca` em todo lugar — código, API e UI.
 
 Termos proibidos a acrescentar à tabela do `CONTEXT.md`:
@@ -380,7 +404,9 @@ Termos proibidos a acrescentar à tabela do `CONTEXT.md`:
 |---|---|---|
 | `Limite` do plano | `Cota` | `Limite` está aposentado em favor de `Planejamento`; reusá-lo colide com teto de gasto |
 | "fatura da assinatura" | `Cobranca` | `Fatura` é o ciclo do cartão do usuário. Dois significados para a palavra que carrega o erro clássico da categoria |
-| `dentro_do_plano` | `dentro_do_planejado` | Com `Plano` comercial no modelo, "plano" passa a ter dois donos |
+| `dentro_do_plano` | `dentro_do_planejado` | Com `Plano` comercial no modelo, "plano" passa a ter dois donos. Renomeado |
+| `no_limite` | `no_planejado` | Mesmo problema diante de `Cota`: "limite" passaria a ter dois donos. Renomeado |
+| `estado = 'reembolsada'` | `estado` + `valor_reembolsado`, derivando `nenhum` / `parcial` / `integral` | Enum ao lado do número que ele descreve é estado inválido representável |
 | `trial` | `teste` | Um idioma por conceito |
 | `subscription.status` da Stripe como estado do produto | `Assinatura.estado` | Fonte de verdade única (§10.1). O estado deles descreve dinheiro; o nosso descreve direito de uso |
 | número de cartão em qualquer coluna | — | Veto permanente. Não existe campo, em nenhuma tabela, em nenhum épico |
@@ -422,7 +448,7 @@ Assinamos o mínimo. Cada evento a mais é uma superfície a mais a testar.
 | `customer.subscription.created` · `.updated` · `.deleted` | Portador do estado: `status`, `cancel_at_period_end`, `current_period_end`, e o `price` → `plano_codigo` |
 | `invoice.paid` | Estende o período e grava a `Cobranca` |
 | `invoice.payment_failed` | Entra em `em_atraso` e dispara a régua de avisos |
-| `charge.refunded` | Marca a `Cobranca` como `reembolsada`. Existe porque um reembolso feito à mão no painel da Stripe também precisa chegar até nós — sem ele, o nosso registro diverge do dinheiro |
+| `charge.refunded` | **Reprojeta `Cobranca.valor_reembolsado`** pela releitura, e com ele o eixo derivado `reembolso`. Existe porque um reembolso feito à mão no painel da Stripe também precisa chegar até nós — sem ele, o nosso registro diverge do dinheiro, e num reembolso parcial nem saberíamos de quanto |
 
 **Ignorados de propósito:** tudo o mais. Um evento não assinado é um caminho de código que não existe.
 
@@ -612,6 +638,9 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 | P12h | Reajuste de preço anunciado a menos de 30 dias da renovação: a renovação sai **no preço antigo** | S2 |
 | P12i | Upgrade mensal → anual no meio do mês gera crédito de proração e **nenhuma cobrança retroativa** (asserção sobre o dublê) | S2 |
 | P12j | Reembolsar a mesma `Cobranca` duas vezes produz **um** reembolso na Stripe (mesma `Idempotency-Key`) | S2 |
+| P12k | `reembolso` é **derivado**: não existe coluna com esse nome no schema, e um teste percorre a tabela para provar. Com `valor = 69000` e `valor_reembolsado = 48300`, a derivação dá `parcial`; com `69000`, `integral`; com `0`, `nenhum` | S1 + S2 |
+| P12l | Gravar `valor_reembolsado > 0` numa `Cobranca` com `estado <> 'paga'` é **rejeitado** pelo banco, não por `if` na aplicação | S2 |
+| P12m | Após um reembolso parcial, `Cobranca.valor_reembolsado` é igual ao que a Stripe reporta na releitura, e não à soma dos deltas dos eventos recebidos — provado entregando o mesmo evento duas vezes e um evento fora de ordem | S2 |
 
 ### Stripe
 
@@ -687,7 +716,7 @@ Onde a decisão não é minha. Cada uma tem padrão, e o padrão vale enquanto n
 | **DP-20** 🔺 | Reembolso além do prazo legal | O arrependimento de **7 dias** do CDC art. 49 é **obrigação**, não escolha. A escolha é ser mais generoso: proponho **reembolso integral da primeira cobrança em até 30 dias, sem perguntar o motivo**. Com o anual aprovado, isso deixou de ser gentileza: é o que torna R$ 690 adiantados uma compra sem medo |
 | **DP-21** 🔺 | Janela de graça em `em_atraso` | **14 dias**, alinhados à retentativa da Stripe, iguais para mensal e anual (§6.1) |
 | **DP-22** 🔺 | Anunciar preço na lista de espera da conexão bancária | **Sim, com compromisso de 12 meses ao preço anunciado** — ou não anunciar nada (§1.3) |
-| **DP-23** 🔺 | Confirmar o desconto anual | **`anual = 10 × mensal`** — dois meses grátis, ≈16,7% (§2.4). O dono decidiu *que* haverá anual; *quanto* de desconto ainda é dele |
+| **DP-27** 🔺 | Confirmar o desconto anual | **`anual = 10 × mensal`** — dois meses grátis, ≈16,7% (§2.4). O dono decidiu *que* haverá anual; *quanto* de desconto ainda é dele |
 
 ---
 

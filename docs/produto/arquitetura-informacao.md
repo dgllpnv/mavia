@@ -430,7 +430,7 @@ Esta tela está no inventário agora, antes de existir, para que Importação e 
 | **Dados** | Contas · Categorias · Etiquetas · Recorrências |
 | **Origem dos dados** | Importação · Conexões · Apps conectados (MCP/OAuth) · Chaves de API |
 | **Espaço** | Preferências · Alertas · Membros e papéis · Atividades |
-| **Conta** | Plano e cobrança · Segurança (senha, 2FA, sessões, biometria) · Dados e privacidade |
+| **Conta** | Plano e cobrança (§2.12b, só `proprietario`) · Segurança (senha, 2FA, sessões, biometria) · Dados e privacidade |
 
 **Preferências:** ordenação dos lançamentos (crescente/decrescente) · período de navegação padrão (diário/semanal/mensal) · exibir saldo no dia · ocultar valores por padrão ao abrir · moeda e formato · fuso (fixo `America/Sao_Paulo`, exibido) · **Começar do zero** (apaga lançamentos, preserva contas/cartões/categorias/etiquetas, com confirmação por digitação).
 
@@ -441,6 +441,48 @@ Esta tela está no inventário agora, antes de existir, para que Importação e 
 **Dados e privacidade:** exportar tudo (LGPD, portabilidade) · excluir o espaço por completo com prazo e consequências · política de retenção. Existe por obrigação legal, não por escolha de produto.
 
 **Não tem:** temas customizáveis além de claro/escuro/sistema; idioma além de pt-BR no MVP; webhooks no MVP.
+
+---
+
+### 2.12b Plano e cobrança, página de preços e checkout (épico 11)
+
+Spec completo em `docs/produto/spec-planos-e-assinatura.md`. Aqui fica o que é arquitetura de informação: quais telas existem, o que há em cada uma, e o que deliberadamente não há.
+
+**Três telas, e só uma delas mora atrás de login.**
+
+#### Página de preços (pública)
+
+**Propósito:** em uma tela, quanto custa e o que muda entre os níveis — sem que ninguém precise adivinhar o que não está escrito.
+
+**Blocos:**
+
+1. **Alternador mensal / anual**, no topo, com o desconto dito em palavras (*"dois meses grátis"*), não só em percentual. O estado escolhido vale para os três cartões ao mesmo tempo.
+2. **Três cartões** — `Pessoal` · `Família` · `Negócio` —, cada um com preço, as cotas de pessoas, espaços e anexos, e o botão de assinar. **Os três são compráveis** (DP-17).
+3. **Linha da conexão bancária**, dentro do comparativo, com `0 / 3 / 10` e a marca `em desenvolvimento` — e **fora** da lista do que o plano entrega hoje. É a única menção permitida dentro do cartão.
+4. **O que nenhum plano limita** — bloco próprio, e não rodapé: lançamentos, contas, cartões, categorias, relatórios, importação de arquivo, **histórico** e **exportação**. Declarar a ausência de limite é argumento de venda, e é verificável.
+5. **"Se você parar de pagar"** — uma frase, em destaque: *o espaço fica somente leitura, nada é apagado, e a exportação continua funcionando.* Está aqui, e não só nos termos, porque é a dúvida que trava a assinatura.
+6. **Lista de espera da conexão bancária** — seção separada, depois dos cartões, **nunca dentro de um deles**: e-mail, banco desejado, faixa de disposição a pagar, e o texto de consentimento do §11.6 do spec. É o insumo da revisão trimestral do ADR 0003.
+
+**Não tem:** nível bloqueado ou acinzentado (§1.1 do spec: porta trancada é propaganda do concorrente); tabela comparativa lado a lado com o Organizze; contador regressivo, "vagas limitadas" ou qualquer urgência inventada; preço riscado que nunca foi praticado; plano "sob consulta".
+
+#### Checkout
+
+**Propósito:** cobrar sem susto. É a tela onde cada campo custa conversão, e por isso só existe o que precisa existir.
+
+**Blocos:** resumo do que está sendo comprado (plano, intervalo, valor e **data da próxima cobrança**) · **CPF ou CNPJ**, um campo, com a razão escrita ao lado · botão que leva ao pagamento hospedado pela Stripe.
+
+- **O dado do cartão nunca aparece numa tela nossa.** Não há campo de número, de CVV ou de validade em lugar nenhum do produto.
+- **Não tem:** cupom no MVP; upsell de plano superior no meio do fluxo; caixa pré-marcada de coisa nenhuma; pedido de endereço.
+
+#### Configurações › Plano e cobrança (só `proprietario`)
+
+**Blocos:** plano e intervalo atuais, com as cotas e **o quanto de cada uma está em uso** · estado da assinatura e, se `teste`, `em_atraso` ou `cancelada`, **a data exata** do que vem a seguir · cartão em uso (marca e últimos 4) · histórico de `Cobranca` com valor, data, estado e **o valor reembolsado** quando houver · ações: mudar de plano, trocar de intervalo, atualizar cartão, cancelar, **"já paguei"**.
+
+**Estados:** `teste` (contador com data absoluta desde o primeiro dia) · `em_atraso` (faixa com a data limite e o botão de atualizar cartão — e **o produto inteiro continua funcionando**) · `cancelada` (data em que vira leitura, e o desfazer sem atrito) · `expirada` (banner permanente e botão de reativar) · **acima de uma cota** (faixa nomeando a cota, a contagem e as duas saídas).
+
+**Para quem não é `proprietario`:** a tela **não existe**. O que existe é a faixa de estado quando ela explica um botão recusado, dizendo *"o proprietário deste espaço precisa reativar a assinatura"* — sem preço, sem cartão, sem documento.
+
+**Cancelar e excluir são telas diferentes, com textos diferentes**, e a exclusão **nunca** é oferecida como passo do cancelamento. A confusão entre as duas produz os dois erros opostos: quem achou que apagou tudo e não apagou, e quem achou que só cancelou e perdeu o histórico.
 
 ---
 
@@ -615,7 +657,8 @@ Verificáveis por quem não participou desta conversa. Cada critério é uma afi
 | Relatórios | 9 | ❌ | Dashboard cobre a pergunta básica no MVP |
 | Seletor de base temporal do cartão | 9 | ❌ | Mas o **dado** é obrigatório no épico 3 |
 | Membros e papéis | 10 | ❌ | — |
-| Plano e cobrança | 11 | ❌ | — |
+| Página de preços · Checkout · Plano e cobrança | 11 | ❌ | §2.12b. Depende **de forma dura** do épico 10: os níveis `Família` e `Negócio` vendem pessoas e espaços |
+| Lista de espera da conexão bancária | 11 | ❌ | Seção da página de preços. É o insumo da revisão trimestral do ADR 0003 |
 | Conexões | 12 | ❌ | Lugar reservado na IA desde já |
 | Apps conectados / Chaves de API | pós-12 | ❌ | — |
 
