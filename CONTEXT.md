@@ -80,7 +80,24 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 
 **Usuario** — Pessoa autenticada. Pertence a um ou mais Tenants com um Papel.
 
-**Papel** — `proprietario` (tudo, inclusive billing), `membro` (lança e consulta), `visualizador` (só leitura). Base do compartilhamento familiar.
+**Papel** — `proprietario` (tudo, inclusive billing), `membro` (lança e consulta), `visualizador` (só leitura). Base do compartilhamento familiar. **Papel concede permissão; `Plano` concede capacidade.** São eixos independentes: um `visualizador` num plano `Negocio` continua sem poder lançar.
+
+**Plano** — **Termo comercial.** O que o Tenant assina e paga: `Pessoal`, `Familia`, `Negocio`. Concede `Cota`s. Vive no eixo de cobrança da Mavia.
+
+**O que `Plano` não é:** não é `Planejamento`. Não tem competência, não tem natureza, não tem categoria, e **não entra em nenhum agregado financeiro do Tenant** — nem saldo, nem relatório, nem realizado. A mensalidade é receita da Mavia; se o Usuario quiser vê-la como despesa dele, ele lança um `Lancamento` como faria com qualquer assinatura, e esse lançamento não sabe que um `Plano` existe.
+
+**Cota** — Teto de **recurso** que um `Plano` concede: pessoas, espaços, armazenamento, conexões bancárias. Contagem de coisas, nunca `Money`.
+
+O nome foi escolhido para não ser `Limite`, e **confirmo a escolha**. Ela deixa a raiz `limite` com exatamente um significado em todo o código: **`Cartao.limite`**, o limite de crédito — que é `Money` e é do banco, não nosso. `Limite` já estava proibido como entidade de orçamento, em favor de `Planejamento`; se voltasse como teto de assinatura, teríamos três sentidos para uma palavra em três camadas diferentes do sistema.
+
+> **A fronteira que importa: `Cota` bloqueia, `Planejamento` avisa.**
+>
+> **Invariantes**
+> - Cruzar uma `Cota` **recusa a ação**. Convidar a décima pessoa num plano de nove falha; não é aviso.
+> - Cruzar um `Planejamento` **emite evento e não impede nada**. Estourar o teto de Alimentação nunca bloqueia um lançamento — o dinheiro do Usuario é dele.
+> - Um `Planejamento` que bloqueia é bug de domínio. Uma `Cota` que apenas avisa é falha de cobrança.
+> - `Cota` é apurada em contagem inteira de recursos. Não usa `Money`, não usa `competencia`, não tem natureza, não tem `consumo_bp`.
+> - Rebaixar de `Plano` com recursos acima da nova `Cota` **não apaga dado financeiro**. O excedente fica somente-leitura até o Usuario resolver; soft delete e retenção continuam valendo.
 
 **Origem** — Procedência do dado de uma `Conta` ou de um `Cartao`: `manual` (o Usuario mantém) ou `conectado` (um adapter do `BankSyncProvider` mantém). **Não é uma classe de conta** — é de onde vêm os lançamentos. Uma conta `conectado` não aceita edição destrutiva de lançamentos importados; ver `Conciliacao`.
 
@@ -213,21 +230,21 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 
 **Apuração do realizado** — O realizado de um Planejamento é a soma dos Lancamentos que, na competência, pertencem ao seu escopo e cuja **`Categoria.natureza` é igual à `natureza` do Planejamento**. Um teto agrega despesa; um piso agrega receita. Nunca a soma líquida.
 
-> Isto é o que faz o teto **global** funcionar. Sem partição por natureza, receita anula despesa e o teto global é impossível de estourar para qualquer usuário com superávit: R$ 10.000 gastos sob teto de R$ 3.000, com R$ 20.000 de salário, dariam `+1.000.000 >= −300.000` — dentro do plano. E a partição é por **natureza da Categoria**, não pelo sinal do lançamento: um estorno de salário é negativo e é receita, e não pode consumir teto de despesa.
+> Isto é o que faz o teto **global** funcionar. Sem partição por natureza, receita anula despesa e o teto global é impossível de estourar para qualquer usuário com superávit: R$ 10.000 gastos sob teto de R$ 3.000, com R$ 20.000 de salário, dariam `+1.000.000 >= −300.000` — dentro do planejado. E a partição é por **natureza da Categoria**, não pelo sinal do lançamento: um estorno de salário é negativo e é receita, e não pode consumir teto de despesa.
 
 **Precedência hierárquica** — Três níveis: **global → categoria-raiz → subcategoria**. Um Planejamento superior agrega o realizado de tudo abaixo; um inferior é um sub-teto legítimo, e o mesmo lançamento conta nos dois. Para não haver contagem dupla, o **total planejado** soma, em cada caminho, apenas o Planejamento de **nível mais alto** que existir. A regra é enunciada **duas vezes, uma por natureza**: há um total planejado de despesa e um de receita, e eles nunca se somam.
 
 **Consumo** — `consumo_bp = razaoEmBp(realizado, valor)`, inteiro com sinal, truncado em direção a zero. `atingiu(pct) ⟺ consumo_bp >= pct * 100`.
 
-> Uma única divisão, uma única comparação, nenhum `if` sobre natureza — e é aqui que a versão anterior errava. Multiplicar os dois lados por `valor` para evitar a divisão **inverte a desigualdade quando `valor` é negativo**: com teto de R$ 500 e R$ 300 gastos, `−30000 × 100 >= 80 × −50000` é verdadeiro e o alerta de 80% dispara a 60% de consumo. O `if` abolido do `dentro_do_plano` tinha voltado, invertido, dentro do cálculo percentual.
+> Uma única divisão, uma única comparação, nenhum `if` sobre natureza — e é aqui que a versão anterior errava. Multiplicar os dois lados por `valor` para evitar a divisão **inverte a desigualdade quando `valor` é negativo**: com teto de R$ 500 e R$ 300 gastos, `−30000 × 100 >= 80 × −50000` é verdadeiro e o alerta de 80% dispara a 60% de consumo. O `if` abolido do `dentro_do_planejado` tinha voltado, invertido, dentro do cálculo percentual.
 >
 > A exibição usa **o mesmo `consumo_bp`**, dividido por 100. Com realizado de −R$ 399,99 sob teto de R$ 500, o truncamento dá 7999 bp: a tela mostra 79,99% e o alerta de 80% não dispara. Formatar por arredondamento a partir de outro número faria a tela anunciar 80,00% sem alerta, ou disparar um centavo antes do limiar.
 
 > **Invariantes**
-> - `dentro_do_plano ⟺ realizado >= valor`, com o sinal do domínio, para teto e piso igualmente. Sem nenhum `if` sobre natureza.
+> - `dentro_do_planejado ⟺ realizado >= valor`, com o sinal do domínio, para teto e piso igualmente. Sem nenhum `if` sobre natureza.
 > - `consumo_bp` **pode ser negativo**: um mês cujo único lançamento na categoria é um estorno tem realizado de sinal oposto ao do teto. Barra negativa é exibida como 0% e o número real no detalhe. Nenhum limiar positivo é cruzado por um consumo negativo.
 > - `atingiu` é avaliado em aritmética inteira sobre `consumo_bp`, jamais sobre o percentual formatado.
-> - Gastar exatamente o teto é `dentro_do_plano` **e** `consumo_bp = 10000`. O estado exibido é **`no_limite`**, derivado — nem verde nem estourado. Sem esse terceiro rótulo a tela mostra verde e o sino mostra alerta para o mesmo objeto no mesmo instante.
+> - Gastar exatamente o teto é `dentro_do_planejado` **e** `consumo_bp = 10000`. O estado exibido é **`no_planejado`**, derivado — nem verde nem estourado. Sem esse terceiro rótulo a tela mostra verde e o sino mostra alerta para o mesmo objeto no mesmo instante.
 > - Com `categoria_id` preenchido, `sinal(valor)` concorda com `Categoria.natureza`: despesa ⟹ negativo, receita ⟹ positivo.
 > - Com `categoria_id` nulo não há Categoria contra a qual conferir: o sinal **define** a natureza do escopo em vez de ser conferido por ela.
 > - `valor ≠ 0` — o que também garante que `razaoEmBp` nunca divide por zero.
@@ -330,7 +347,13 @@ Não use — geram ambiguidade e bugs reais:
 | `delete` | `deleted_at` | Dado financeiro não some |
 | "arquivar" como sinônimo de excluir | `arquivada_em` ≠ `deleted_at` | Arquivar tira do seletor; excluir tira do sistema |
 | "marcadores" | `Etiqueta` / `Tag` | Dois nomes para a mesma coisa — a inconsistência real do Organizze |
-| `Limite` como entidade | `Planejamento` | Teto e piso mensais são o mesmo mecanismo; duas entidades duplicam CRUD, alerta e cópia |
+| `Limite` como entidade | `Planejamento` (orçamento) · `Cota` (assinatura) | Teto e piso mensais são o mesmo mecanismo; e `limite` fica reservado a `Cartao.limite`, seu único sentido restante |
+| `Plano` para orçamento | `Planejamento` | `Plano` é o que o cliente assina. Um `if (plano)` num caminho financeiro é ambíguo entre cobrança e orçamento |
+| `dentro_do_plano` | `dentro_do_planejado` | Lê-se como "dentro da assinatura"; confunde guarda de cobrança com verificação de orçamento |
+| `no_limite` como estado de `Planejamento` | `no_planejado` | Reintroduz a raiz `limite` no orçamento, de onde ela foi removida |
+| `Plano.limites` | `Plano.cotas` | Mesma colisão, um nível abaixo |
+| `Cota` medida em `Money` | contagem de recursos | Cota conta pessoas e conexões; teto de dinheiro é `Planejamento` |
+| `Plano` ou `Cota` em relatório financeiro | — | Mensalidade é receita da Mavia, não movimento do Tenant |
 | `Meta` | `Planejamento` (piso mensal) · `Objetivo` (acúmulo com prazo) | Um nome para dois conceitos de horizonte diferente. A ambiguidade quase apagou o acúmulo do modelo — foi preciso um veto para recuperá-lo |
 | `objetivo.progresso` como coluna | soma derivada (saldo − `saldo_base`, ou Σ Aportes) | Progresso é saldo; saldo é derivado (ADR 0005) |
 | `saldo_base` recalculado | `saldo_base` armazenado, com reajuste só por retroativo anterior | Lançamento retroativo faria o progresso mudar sozinho |

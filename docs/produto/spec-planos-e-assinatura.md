@@ -58,29 +58,52 @@ Modelar os três planos **desde já**, mesmo que a decisão 🔺 do §2.4 acabe 
 
 ## 2. Os três planos
 
-Preços em reais, **impostos incluídos** (CDC art. 6º III: o preço à vista total é o que se anuncia). Cobrança **mensal**, em `BRL`, sempre como `Money` em centavos.
+Preços em reais, **impostos incluídos** (CDC art. 6º III: o preço à vista total é o que se anuncia). Cobrança **mensal ou anual** (DP-19), em `BRL`, sempre como `Money` em centavos.
 
 | | **Mavia Pessoal** | **Mavia Família** | **Mavia Negócio** |
 |---|---|---|---|
 | Preço/mês | **R$ 35** | **R$ 45** | **R$ 69** |
+| Preço/ano — *dois meses grátis* | **R$ 350** | **R$ 450** | **R$ 690** |
 | Pessoas no espaço | **1** | **5** | **10** |
 | Espaços em que é proprietário | **1** | **1** | **3** |
 | Anexos por espaço | **2 GB** | **10 GB** | **30 GB** |
 | Conexões bancárias *(épico 12)* | 0 | **3** | **10** |
 | Todo o resto | ilimitado (§4) | ilimitado (§4) | ilimitado (§4) |
 
-**Nomes** 🔺 — decisão do dono do produto; é marketing, não mecânica. Padrão proposto acima. Descartados: *Conectado/Conectado Plus* (o nome promete o agregador e é vocabulário do concorrente); *Básico/Pro/Premium* (não dizem para quem é, e "Básico" ensina o cliente a se sentir mal). A mecânica deste documento não muda com o nome — só o `codigo` do catálogo.
+**Nomes — decidido (DP-18):** `Pessoal` · `Família` · `Negócio`. Descartados: *Conectado/Conectado Plus* (o nome promete o agregador e é vocabulário do concorrente); *Básico/Pro/Premium* (não dizem para quem é, e "Básico" ensina o cliente a se sentir mal).
+
+**Os três à venda desde o lançamento — decidido (DP-17).** Diferenciados por pessoas e espaços (§1.2). `disponivel_para_compra = true` nos três. O booleano permanece no catálogo porque é o mecanismo que permitiria fechar um nível sem migração de dado.
 
 **Preços** — mantidos exatamente nos três pontos do Organizze, conforme DP-13. Registro a desvantagem sem enfeite: enquanto a conexão não existir, **a comparação direta nos níveis 2 e 3 é desfavorável** — mesmo preço, entrega diferente. Não há como evitá-la, só como escolher o que se compara. Por isso a página de preços compara Mavia com Mavia, e nunca constrói a tabela lado a lado com o concorrente.
 
 **A linha da conexão bancária aparece na tabela desde já, com valor 0/3/10 e a marca `em desenvolvimento`** — e **fora** da lista do que o plano entrega hoje. É a única menção permitida dentro do cartão de plano. Ela existe para que o cliente que assina hoje saiba, por escrito, qual cota terá quando a função chegar, e para que ninguém possa dizer que descobriu depois.
 
-### 2.4 🔺 Decisão do dono: vender os três, ou só o Pessoal
+### 2.4 O desconto anual: dez pelo preço de doze
 
-- **Padrão proposto (recomendado):** os três à venda desde o lançamento, diferenciados por pessoas e espaços (§1.2).
-- **Alternativa (proposta original do coordenador):** só o Pessoal à venda; Família e Negócio modelados, marcados `disponivel_para_compra = false`, e a página mostra um nível só.
+**Desconto proposto: `anual = 10 × mensal`** — "dois meses grátis", ≈16,7%.
 
-O código é o mesmo nos dois casos: um booleano no catálogo. A consequência não é: a alternativa garante receita de um plano só e adia o gatilho do ADR 0003.
+Por que 10× e não um percentual: (a) é a forma mais legível de anunciar um desconto em português — "pague 10, use 12" não precisa de conta; (b) produz preços redondos nos três níveis (R$ 350, R$ 450, R$ 690), sem centavo quebrado em nenhuma tela; (c) é discreto o bastante para não estabelecer expectativa de desconto maior no futuro, e essa expectativa é difícil de desfazer.
+
+**Regras de dinheiro, não negociáveis:**
+
+- O preço anual é uma `Money` **própria no catálogo**, declarada em centavos. **Nunca é obtido multiplicando o mensal em tempo de execução** — preço derivado por aritmética é preço que diverge entre a vitrine, a Stripe e o reembolso.
+- "≈ R$ 29,17/mês" e equivalentes são **texto de vitrine**, arredondados só para exibição, e **jamais entram em cálculo** de cobrança, proração ou reembolso. Nenhuma divisão acontece no caminho do dinheiro (§6.3).
+
+### 2.5 O que a decisão do anual custa — registrado
+
+A decisão é do dono (DP-19) e é contra a minha recomendação. Registro o que ela traz, e o que dela sobrevive à correção:
+
+**O meu argumento mais forte caiu, e o coordenador está certo sobre isso.** Eu objetei que o anual vende doze meses de uma promessa. Com `Família` e `Negócio` renomeados e vendendo pessoas e espaços — coisas que existem hoje —, o anual vende doze meses **do que já funciona**. A objeção era contra o nome, não contra o intervalo, e o nome foi corrigido.
+
+**O que sobrevive, e vira requisito neste documento:**
+
+| Consequência | Onde é tratada |
+|---|---|
+| Proração na troca de plano dentro do período | §6.2 |
+| Reembolso parcial — sem ele, o anual é uma armadilha para um produto sem histórico de retenção no mês 2 | §6.3 |
+| Renovação anual é a cobrança-surpresa clássica: R$ 690 caindo num cartão doze meses depois, de um produto que a pessoa esqueceu que assinou | §6.4, avisos obrigatórios em D-30 e D-7 |
+| Reajuste de preço com anual pago | §6.4 |
+| Estorno (chargeback) de valor alto é muito mais danoso à nossa conta na Stripe do que um de R$ 35 | §13 |
 
 ---
 
@@ -170,7 +193,7 @@ Cinco estados. Uma `Assinatura` por `Tenant`.
 | **`teste`** | Tudo, nas cotas do nível **Família** | Contador honesto desde o primeiro dia: *"Seu teste vai até 08/09. Não pedimos cartão e não cobramos nada."* | **7 dias**, contados do `criado_em` do Tenant. Sem prorrogação automática |
 | **`ativa`** | Tudo, nas cotas do plano | Nada sobre cobrança fora de Configurações → Plano e cobrança | Enquanto pagar |
 | **`em_atraso`** | **Tudo continua funcionando — leitura e escrita** | Faixa clara, com a data limite exata e o botão de atualizar o cartão. Repetida em e-mail nos dias 1, 3, 7 e 12 | **14 dias**, alinhados à janela de retentativa da Stripe. Depois → `expirada` |
-| **`cancelada`** | **Tudo continua funcionando até o fim do período já pago** | A data exata em que vira leitura, e o que acontece com os dados (texto do §6.2). Botão de desfazer o cancelamento, sem atrito | Até `periodo_fim`. O cliente pagou por ele |
+| **`cancelada`** | **Tudo continua funcionando até o fim do período já pago** | A data exata em que vira leitura, e o que acontece com os dados (texto do §6.5). Botão de desfazer o cancelamento, sem atrito | Até `periodo_fim`. O cliente pagou por ele |
 | **`expirada`** | **Leitura completa. Exportação completa.** Escrita bloqueada com `402` e explicação no ponto do clique | Banner permanente, botão de reativar, histórico intacto na tela | **Indefinidamente. Nunca apagamos** (DP-5) |
 
 **Por que `em_atraso` não degrada nada.** Bloquear o produto no instante em que um cartão falha é a forma mais comum de perder um cliente que queria ficar — e a maioria das falhas é cartão vencido ou limite momentâneo, não desistência. Catorze dias de produto inteiro nos custam quase nada e salvam a assinatura.
@@ -179,12 +202,59 @@ Cinco estados. Uma `Assinatura` por `Tenant`.
 
 **Membros num espaço `expirada`** veem a mesma leitura, e a faixa diz *"o proprietário deste espaço precisa reativar a assinatura"* — nunca dado de cobrança, que é exclusivo do `proprietario` (`matriz-de-acesso.md` §2.3).
 
-### 6.1 Upgrade e downgrade
+### 6.1 O intervalo não muda a máquina de estados
 
-- **Upgrade:** imediato, com rateio (proração) da Stripe. As cotas novas valem no mesmo instante.
-- **Downgrade:** **agendado para o fim do período pago**. Nunca no meio, nunca com devolução parcial: o cliente pagou por aquele mês e continua com ele inteiro.
+Mensal e anual usam **os mesmos cinco estados**, a mesma janela semiaberta `[periodo_inicio, periodo_fim)` e a mesma janela de graça de 14 dias. Muda só a duração do período e o `stripe_price_id`. Nenhum estado novo, nenhum ramo novo — a diferença é um campo, `Assinatura.intervalo`.
 
-### 6.2 O que acontece com os dados de quem cancela
+A graça de 14 dias vale igualmente para o anual, e ali ela importa mais: uma cobrança de R$ 690 falha por limite de cartão com muito mais frequência que uma de R$ 69, e quase sempre por motivo que o titular resolve em um dia.
+
+### 6.2 Upgrade, downgrade e troca de intervalo
+
+| Movimento | Quando vale | Dinheiro |
+|---|---|---|
+| **Upgrade de plano** (Pessoal → Família, mesmo intervalo) | Imediato. As cotas novas valem no mesmo instante | Proração da Stripe: a parte não usada do período vira **crédito**. Nunca cobrança retroativa |
+| **Mensal → anual** | Imediato | O que resta do mês vira crédito no anual |
+| **Downgrade de plano** | **No fim do período pago.** Nunca no meio | Sem devolução: o cliente comprou aquele período inteiro (mas ver §6.3 — cancelar é outro caminho, e esse tem reembolso) |
+| **Anual → mensal** | No fim do período anual | Idem |
+
+**A resolução de excesso do §8.1 vale igual, com horizonte de doze meses no anual.** O lembrete de sete dias antes da data efetiva passa a ser o único aviso que a pessoa vai lembrar — por isso ele nomeia o excesso item a item, não em número agregado.
+
+### 6.3 Reembolso — a fórmula, e por que ela não divide
+
+Três camadas, da mais forte para a mais fraca:
+
+1. **Arrependimento — 7 dias, integral, sem pergunta.** CDC art. 49. É **obrigação legal**, não política comercial, e vale igualmente para mensal e anual.
+2. **Primeira cobrança, até 30 dias — integral** (🔺 DP-20, pendente; padrão proposto). Custa pouco e remove o medo de assinar o anual.
+3. **Cancelamento depois disso — proporcional aos meses não iniciados**, a qualquer momento, sem perguntar o motivo:
+
+```
+reembolso = max(0, valor_pago − meses_iniciados × preco_mensal_do_plano)
+```
+
+**Por que esta fórmula e não "valor pago ÷ 12 × meses restantes".** Três razões, e as três importam:
+
+- **Não há divisão.** Uma subtração e uma multiplicação em centavos, e nenhum arredondamento a declarar — a regra 3 do `CLAUDE.md` não é acionada e `ratear` não entra no caminho do dinheiro. A alternativa exigiria dividir o preço anual por 12, que não é exato em nenhum dos três planos.
+- **Devolve o desconto que não foi ganho.** Quem usou 3 meses do Negócio anual recebe `69000 − 3 × 6900 = R$ 483,00` e terá pago exatamente a tarifa mensal cheia pelo que usou. Sem isso, o desconto anual vira opção grátis: assina anual, cancela no mês 2, e paga barato pelo uso mensal.
+- **Nunca cobra a mais.** O `max(0, …)` garante que o pior caso é reembolso zero, jamais uma cobrança de saída.
+
+`meses_iniciados` conta pela convenção do domínio: mês `k` começa em `periodo_inicio + k meses`, com o dia fixado em `min(dia, ultimo_dia_do_mes)` — a mesma regra de `Recorrencia`, sem arrastar o ajuste. Contagem em `America/Sao_Paulo`, janela semiaberta.
+
+O reembolso é executado **na Stripe**, com `Idempotency-Key` derivada de `cobranca:${stripe_invoice_id}:reembolso`. Reembolsar duas vezes é tão grave quanto cobrar duas vezes, e o mecanismo é o mesmo.
+
+### 6.4 Renovação anual e reajuste de preço
+
+**Renovação nunca é surpresa.** Dois avisos obrigatórios antes de toda renovação anual, por e-mail e no app:
+
+- **D-30** e **D-7**, cada um com: a data exata da cobrança, o **valor exato**, o cartão que será usado (marca e últimos 4) e um link de cancelamento que funciona em um clique, sem passar por tela de retenção.
+- Se qualquer um dos dois falhar em ser enviado, a renovação **é adiada**, não executada às cegas. Cobrar R$ 690 de alguém que não foi avisado é o caminho mais curto para um estorno, e estorno de valor alto é o dano do §13.
+
+**Reajuste de preço.** `Assinatura` guarda `plano_versao` e o preço contratado.
+
+- Quem pagou anual **mantém o preço contratado pelo período inteiro**. Um reajuste anunciado no mês 4 não toca a cobrança já feita.
+- O preço novo só vale **na renovação**, e o aviso de D-30 passa a trazer as duas linhas: preço anterior, preço novo, data da cobrança. Nunca só o valor final.
+- Se o reajuste for anunciado a menos de 30 dias da renovação, ele **pula um ciclo**: renova no preço antigo e o novo vale no seguinte. Regra simples que torna impossível o caso ruim.
+
+### 6.5 O que acontece com os dados de quem cancela
 
 Texto normativo, exibido no diálogo de cancelamento **antes** da confirmação:
 
@@ -512,7 +582,7 @@ Onde o cliente desiste, se irrita ou pede reembolso — em ordem de gravidade.
 | **Cobrança duplicada** | Assinar, retentativa de webhook | Reivindicação por `event.id`, releitura em vez de aplicação de payload, `Idempotency-Key` determinística, proteção de toque duplo (§10.4) |
 | **Cartão vencido derruba a sincronização bancária** — "meu banco parou e eu não sabia" | `em_atraso` → conexões pausadas | Aviso 15 dias antes do vencimento do cartão; 14 dias de produto inteiro em atraso; avisos em D0/D15/D25 antes de revogar (§8.3) |
 | **Downgrade que destrói um espaço familiar** | Mudança de plano | Recusa no ato para pessoas e espaços; pausa reversível e determinística para conexões; nunca remoção automática de gente (§8) |
-| **Cancelar entendido como apagar (ou o contrário)** | Cancelamento | Duas telas, dois textos, e o texto normativo do §6.2. A eliminação nunca é oferecida como passo do cancelamento |
+| **Cancelar entendido como apagar (ou o contrário)** | Cancelamento | Duas telas, dois textos, e o texto normativo do §6.5. A eliminação nunca é oferecida como passo do cancelamento |
 | **Abuso do teste sem cartão** | Cadastro | Um teste por usuário + teto de criação de tenants. Troca deliberada: conversão vale mais que o abuso. Métrica vigiada (§7) |
 | **Sensação de refém** — "se eu parar de pagar, perco meu histórico" | Decisão de assinar | `expirada` é leitura completa e permanente; exportação funciona sempre; e isso é dito **na página de preços**, porque é diferencial real |
 | **Preço reajustado sem aviso** | Renovação | Versão de plano congelada na assinatura; migração exige comunicação explícita (§9.1) |

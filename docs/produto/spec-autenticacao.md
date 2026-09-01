@@ -6,7 +6,7 @@
 - **Decisão do dono do produto que ele materializa:** **DP-12 — entrada por Google *e também* por e-mail e senha. Os dois caminhos, não um só.**
 - **Fecha:** a lacuna registrada no fim de `apps/api/test/rls.test.ts` (`mavia_app` sem `INSERT` em `tenants`, `usuarios` e `tenant_usuarios` — o cadastro não funciona hoje)
 - **Insumos:** `CLAUDE.md` (§2, regras 16–20) · `CONTEXT.md` (Tenant, Usuario, Papel) · `docs/arquitetura/sistema.md` §3.1, §3.9, §4.0–4.2 · `docs/seguranca/matriz-de-acesso.md` §1, §3.1, §4, §5 · `docs/compliance/retencao-e-eliminacao.md` §3.1, §5.2, §6 · ADR 0004 · ADR 0018 · `apps/api/migrations/0001_fundacao.sql`
-- **Documentos que este spec obriga a emendar:** `docs/seguranca/matriz-de-acesso.md` (§3.1, §4, §5.1) · `docs/compliance/retencao-e-eliminacao.md` (§3.1, §6.1) · `docs/decisoes-do-produto.md` (DP-16 a DP-19)
+- **Documentos que este spec obriga a emendar:** `docs/seguranca/matriz-de-acesso.md` (§3.1, §4, §5.1) · `docs/compliance/retencao-e-eliminacao.md` (§3.1, §6.1) · `docs/decisoes-do-produto.md` (DP-23 a DP-26)
 
 > Este documento existe porque a entrada na plataforma era a única superfície do produto sem spec, e é ao mesmo tempo (a) a porta de todo o resto, (b) o lugar onde o cadastro está literalmente quebrado, e (c) o único fluxo em que o produto recebe dado pessoal de um terceiro (Google). As três coisas se resolvem juntas ou não se resolvem.
 
@@ -162,7 +162,7 @@ C5 é o oposto: quem está no teclado controla a caixa **hoje** e não controlav
 
 **Suporte não vincula, não desvincula, não transfere e não recupera conta.** Não há exceção, não há formulário, não há "prova de identidade por documento" — inclusive porque a Mavia não coleta documento (retenção §2.2) e passaria a coletá-lo justamente para operar o vetor de ataque.
 
-Consequência honesta, que precisa estar na tela: **quem perder o acesso à Conta Google usada para entrar, e não tiver senha nem MFA na Mavia, perde o espaço.** É por isso que a tela de sucesso do cadastro por Google oferece, uma vez e de forma visível, *"defina também uma senha"*. A consequência é do dono do produto assumir — **DP-18**.
+Consequência honesta, que precisa estar na tela: **quem perder o acesso à Conta Google usada para entrar, e não tiver senha nem MFA na Mavia, perde o espaço.** É por isso que a tela de sucesso do cadastro por Google oferece, uma vez e de forma visível, *"defina também uma senha"*. A consequência é do dono do produto assumir — **DP-25**.
 
 ---
 
@@ -283,7 +283,7 @@ Três saídas, e a escolha importa:
 
 **Detecção de reuso.** Apresentar um refresh já consumido significa que existem duas cópias do mesmo token no mundo. Efeito: **revoga a `familia_id` inteira** (todas as sessões descendentes do mesmo login), grava em `auditoria` com `classe = 'seguranca'` e notifica o titular. É o que `sistema.md` §3.1 já previa com `familia_id`; aqui ele ganha o gatilho.
 
-**Vidas propostas** (números são **DP-17**, do dono do produto; o piso de segurança é a rotação e o teto absoluto existirem):
+**Vidas propostas** (números são **DP-24**, do dono do produto; o piso de segurança é a rotação e o teto absoluto existirem):
 
 | Plataforma | Deslizante | Teto absoluto | Razão |
 |---|---|---|---|
@@ -325,7 +325,7 @@ Obrigatório para todos seria a decisão mais segura e é a errada para um produ
 | **M-4** | Login com MFA usa **sessão parcial**: o access token só é emitido depois de `POST /auth/mfa/verificar`. A sessão parcial vale 5 min, não serve para nenhuma outra rota e não cria linha em `sessoes` |
 | **M-5** | Conta que entra **só** pelo Google também pode ativar MFA da Mavia — e deve, se quiser M-3. O MFA da Mavia é independente do MFA do Google: quem comprometer a Conta Google não passa por ele |
 
-MFA obrigatório para todo `proprietario` é decisão do dono do produto — **DP-16**. Enquanto não houver decisão, vale M-1 a M-5.
+MFA obrigatório para todo `proprietario` é decisão do dono do produto — **DP-23**. Enquanto não houver decisão, vale M-1 a M-5.
 
 ### 5.2 Parâmetros
 
@@ -980,6 +980,25 @@ GRANT EXECUTE ON FUNCTION auth.criar_tenant(UUID, TEXT)                      TO 
 -- Esta ausência é o ponto da migration e é verificada por teste (AB-40).
 ```
 
+### 6.6a O SQL das §6.4–6.6 foi executado, não apenas escrito
+
+Contra PostgreSQL 17 real, num banco descartável, aplicando `0001_fundacao.sql` e as três migrations em sequência sob um papel com `BYPASSRLS` — reproduzindo a condição de produção. O que a execução provou, e o que ela **corrigiu**:
+
+| Verificação | Resultado |
+|---|---|
+| As três migrations aplicam limpas sobre a 0001 | ✅ |
+| As nove funções: `prosecdef = true`, `proowner = mavia_auth`, `proconfig` com `search_path`, `PUBLIC` sem `EXECUTE`; `mavia_auth` com `rolbypassrls = false`, `rolcanlogin = false` | ✅ (`AB-41`) |
+| `mavia_app` inserindo em `tenants`, `usuarios`, `tenant_usuarios` | ✅ `permission denied` nas três (`AB-40`) |
+| `registrar_pendente` → `confirmar_cadastro` | ✅ um usuário, um tenant, um `proprietario`, numa transação |
+| `emitir_recuperacao` para conta federada sem senha | ✅ devolve `false` e **não grava linha** (`AB-32`, D5) |
+| `registrar_pendente` para e-mail já existente | ✅ `false`, nenhum pendente vivo |
+| Quarta chamada a `criar_tenant` no mesmo dia | ✅ `TETO_DIARIO_DE_TENANTS` (`AB-39`) |
+| `resolver_sessao` com hash aleatório | ✅ zero linhas (`AB-42`) |
+| **Membro escrevendo `senha_hash` de outro membro do mesmo tenant** | ✅ `UPDATE 0` — e o mesmo membro **enxerga** a linha (`SELECT` devolve 1), que é exatamente a assimetria que a policy restritiva existe para criar (`AB-51`, `AT-18`) |
+| Membro alterando a própria coluna `email` | ✅ `permission denied for table usuarios` (grant por coluna) |
+
+**Um defeito real foi encontrado assim, e está corrigido acima:** `ALTER FUNCTION … OWNER TO mavia_auth` falhava com `permission denied for schema auth`, porque o Postgres exige que o novo dono tenha `CREATE` no esquema. Escrito e nunca executado, o remédio óbvio teria sido remover a transferência de propriedade — e as nove funções passariam a rodar com o `BYPASSRLS` de `mavia_migrate`, anulando em silêncio a garantia inteira do ADR 0004. A correção é `ALTER SCHEMA auth OWNER TO mavia_auth`.
+
 ### 6.7 O que o cadastro cria, e o que ele não cria
 
 O primeiro tenant nasce com `nome` proposto pelo produto (o primeiro nome da pessoa, editável), `moeda_base = 'BRL'` e `timezone = 'America/Sao_Paulo'` (o `CHECK` de 0001 não admite outro valor hoje). **O cadastro não cria conta, cartão nem categoria** — isso é o Onboarding (`arquitetura-informacao.md` §2.15), que já existe e é a próxima tela. As categorias de sistema (`Sem categoria` por natureza, `Ajuste de saldo`) são semeadas na mesma transação do tenant, porque `CONTEXT.md` as declara destino obrigatório e um tenant sem elas tem um estado inválido representável.
@@ -1178,10 +1197,10 @@ Onde a escolha é do dono do produto, ela está aqui e **não** foi tomada por m
 
 | # | Pergunta | Padrão proposto (vigente até haver decisão) | O que muda se a decisão for outra |
 |---|---|---|---|
-| **DP-16** | MFA é **obrigatório** para todo `proprietario`? | **Não.** Opcional, com step-up nas quatorze operações, e **obrigatório** em `POST /conexoes` e `POST /chaves-api` (M-3) | Obrigatório para todos protege mais e cobra atrito no momento mais frágil da adoção. Se a resposta mudar, muda `M-1` e nasce uma tela de inscrição forçada no Onboarding |
-| **DP-17** | Vidas de sessão: web 14/30 dias, mobile 60/180 dias | Os números de §4.3 | São conforto × exposição, não segurança pura. O piso técnico (rotação, família, teto absoluto) não é negociável; os números são |
-| **DP-18** | **Não existe canal humano de recuperação.** Quem perde a Conta Google e não tem senha nem MFA na Mavia perde o espaço | Confirmar a posição, e aceitar o custo de suporte e de churn que ela traz | Criar o canal significa construir o vetor de engenharia social mais barato de um produto financeiro, e provavelmente coletar documento — que hoje a §2.2 da retenção proíbe |
-| **DP-19** | Quantos tenants um plano permite | Os tetos da matriz (3/dia, 10 ativos) valem para todos | É decisão de **planos** (DP-13), e o teto por plano precisa nascer em `auth.criar_tenant`, não num `if` de aplicação |
+| **DP-23** | MFA é **obrigatório** para todo `proprietario`? | **Não.** Opcional, com step-up nas quatorze operações, e **obrigatório** em `POST /conexoes` e `POST /chaves-api` (M-3) | Obrigatório para todos protege mais e cobra atrito no momento mais frágil da adoção. Se a resposta mudar, muda `M-1` e nasce uma tela de inscrição forçada no Onboarding |
+| **DP-24** | Vidas de sessão: web 14/30 dias, mobile 60/180 dias | Os números de §4.3 | São conforto × exposição, não segurança pura. O piso técnico (rotação, família, teto absoluto) não é negociável; os números são |
+| **DP-25** | **Não existe canal humano de recuperação.** Quem perde a Conta Google e não tem senha nem MFA na Mavia perde o espaço | Confirmar a posição, e aceitar o custo de suporte e de churn que ela traz | Criar o canal significa construir o vetor de engenharia social mais barato de um produto financeiro, e provavelmente coletar documento — que hoje a §2.2 da retenção proíbe |
+| **DP-26** | Quantos tenants um plano permite | Os tetos da matriz (3/dia, 10 ativos) valem para todos | É decisão de **planos** (DP-13), e o teto por plano precisa nascer em `auth.criar_tenant`, não num `if` de aplicação |
 
 Também **não** decido aqui, por serem de outros papéis:
 

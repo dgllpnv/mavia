@@ -1,5 +1,13 @@
 # Auditoria financeira do spec — gate de risco
 
+> **Nota de leitura, acrescentada em 2026-09-01.** Este laudo é registro
+> histórico e **não** foi reescrito. Dois identificadores citados aqui foram
+> renomeados depois dele, ao surgir o termo comercial `Plano`:
+> `dentro_do_plano` virou **`dentro_do_planejado`**, e o estado `no_limite`
+> virou **`no_planejado`**. As conclusões e os contraexemplos seguem válidos —
+> apenas os nomes mudaram. Ver `CONTEXT.md` e a emenda do ADR 0008.
+
+
 - **Data:** 2026-09-01
 - **Auditor:** `validador-financeiro`
 - **Escopo:** `CLAUDE.md` §2 · `CONTEXT.md` · ADRs 0005, 0007, 0008, 0009 · `docs/arquitetura/sistema.md` · `docs/produto/arquitetura-informacao.md` · `docs/pesquisa/organizze-teardown.md` §8

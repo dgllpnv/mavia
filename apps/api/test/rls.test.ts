@@ -195,4 +195,12 @@ describe('migrations', () => {
  *
  * Até lá, quem cria tenant é um caminho privilegiado, como o seed destes
  * testes.
+ *
+ * DESENHADA em 2026-09-01: `docs/produto/spec-autenticacao.md` §6 resolve a
+ * lacuna — `mavia_app` continua sem INSERT em `tenants`, e o cadastro passa por
+ * funções SECURITY DEFINER estreitas de um papel `mavia_auth` sem BYPASSRLS,
+ * com os tetos dentro do banco. As migrations 0002–0004 estão escritas no spec
+ * e foram executadas contra Postgres real; falta implementá-las. Quando
+ * entrarem, os casos AB-39 a AB-42, AB-50 e AB-51 do spec vêm para este
+ * arquivo e este bloco de comentário é apagado.
  */

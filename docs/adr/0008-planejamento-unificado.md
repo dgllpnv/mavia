@@ -4,7 +4,10 @@
 - **Data:** 2026-09-01
 - **Emendas:**
   - 2026-09-01 — escopo global admitido (ver *Hierarquia de escopos*); a redação original o havia deixado em aberto por um receio de contagem dupla que a regra de precedência já resolvia.
-  - 2026-09-01 — após a auditoria financeira do spec (bloqueios B13, B14, B15, B16): definidos o tipo e o arredondamento de `consumo`, corrigida a inversão do limiar de alerta, particionado o realizado global por natureza, e fixada a identidade do Planejamento para que a cópia seja idempotente com escopo global. Ambas as emendas antes de qualquer implementação.
+  - 2026-09-01 — após a auditoria financeira do spec (bloqueios B13, B14, B15, B16): definidos o tipo e o arredondamento de `consumo`, corrigida a inversão do limiar de alerta, particionado o realizado global por natureza, e fixada a identidade do Planejamento para que a cópia seja idempotente com escopo global.
+  - 2026-09-01 — colisão de vocabulário com o termo comercial `Plano` (`Pessoal` · `Familia` · `Negocio`). Renomeados `dentro_do_plano` → **`dentro_do_planejado`** e o estado `no_limite` → **`no_planejado`**. Todas as emendas antes de qualquer implementação.
+
+> **Nota de vocabulário.** `Planejamento` é o orçamento do Usuario; `Plano` é a assinatura que ele paga; `Cota` é o teto de recursos que o `Plano` concede. `dentro_do_plano` era ambíguo entre os dois primeiros de um jeito perigoso: um `if (dentro_do_plano)` num caminho de escrita lê-se igualmente como guarda de cobrança e como verificação de orçamento — e os dois têm comportamentos opostos, porque **`Cota` bloqueia e `Planejamento` nunca bloqueia**. O estado `no_limite` foi renomeado pelo mesmo motivo: deixa a raiz `limite` com um sentido só em todo o sistema, `Cartao.limite`.
 
 ## Contexto
 
@@ -49,7 +52,7 @@ Não existe coluna `natureza`. `valor` negativo é **teto** de despesa; `valor` 
 A consequência é a razão desta decisão existir:
 
 ```
-dentro_do_plano  ⟺  realizado >= valor
+dentro_do_planejado  ⟺  realizado >= valor
 ```
 
 Uma comparação, sem nenhum `if` sobre natureza:
@@ -77,9 +80,9 @@ E, pior, a mesma forma **para** de alertar exatamente quando o teto é atingido.
 
 **A exibição usa o mesmo `consumo_bp`, dividido por 100.** Com realizado de −R$ 399,99 sob teto de R$ 500,00, o consumo verdadeiro é 79,998%; truncado, 7999 bp. A tela mostra 79,99% e o alerta de 80% não dispara — coerentes porque são o mesmo número. Formatar por arredondamento a partir de outro cálculo faria a tela anunciar 80,00% sem alerta, ou o alerta disparar um centavo antes do limiar. Trunca-se, nunca se arredonda, justamente para não anunciar um limiar que não foi cruzado.
 
-**`consumo_bp` pode ser negativo**, e a redação anterior do glossário afirmava o contrário. Um mês cujo único lançamento na categoria é um estorno de R$ 80,00 sob um teto de R$ 500,00 dá `8000 / (−50000)` = −1600 bp = −16%. `dentro_do_plano` continua verdadeiro e correto; a barra recebe um número negativo, exibido como 0% com o valor real no detalhe. Nenhum limiar positivo é cruzado por consumo negativo, então nenhum alerta espúrio nasce daí.
+**`consumo_bp` pode ser negativo**, e a redação anterior do glossário afirmava o contrário. Um mês cujo único lançamento na categoria é um estorno de R$ 80,00 sob um teto de R$ 500,00 dá `8000 / (−50000)` = −1600 bp = −16%. `dentro_do_planejado` continua verdadeiro e correto; a barra recebe um número negativo, exibido como 0% com o valor real no detalhe. Nenhum limiar positivo é cruzado por consumo negativo, então nenhum alerta espúrio nasce daí.
 
-**Gastar exatamente o teto** é `dentro_do_plano` **e** `consumo_bp = 10000`, que cruza o limiar padrão de 100. Não é contradição, são duas perguntas — mas a tela mostraria verde e o sino mostraria alerta para o mesmo objeto. O estado exibido nesse ponto é um terceiro rótulo derivado, **`no_limite`**, nem dentro nem estourado.
+**Gastar exatamente o teto** é `dentro_do_planejado` **e** `consumo_bp = 10000`, que cruza o limiar padrão de 100. Não é contradição, são duas perguntas — mas a tela mostraria verde e o sino mostraria alerta para o mesmo objeto. O estado exibido nesse ponto é um terceiro rótulo derivado, **`no_planejado`**, nem dentro nem estourado.
 
 `natureza` (`teto` | `piso`) continua no glossário como propriedade **derivada** do sinal, para rotular tela. Nunca persistida: um enum e um sinal podem se contradizer, e estado inválido representável é exatamente o que não fazemos.
 
@@ -113,7 +116,7 @@ Este foi o furo da primeira emenda. Ela disse que o sinal define a abrangência 
 
 ```
 despesas −1.000.000 · salário +2.000.000
-realizado = +1.000.000 >= −300.000  →  dentro do plano, com R$ 10.000 gastos sob teto de R$ 3.000
+realizado = +1.000.000 >= −300.000  →  dentro do planejado, com R$ 10.000 gastos sob teto de R$ 3.000
 ```
 
 A regra correta: **o realizado de um Planejamento soma os Lancamentos cuja `Categoria.natureza` é igual à natureza do Planejamento.** Um teto agrega despesa; um piso agrega receita.
@@ -151,11 +154,11 @@ Uma tela **Planejamento**, item de primeiro nível, com tetos e pisos lado a lad
 
 Escritas para virar teste direto:
 
-1. `dentro_do_plano ⟺ realizado >= valor`, para teto e piso, sem ramificação por natureza. *(property-based)*
+1. `dentro_do_planejado ⟺ realizado >= valor`, para teto e piso, sem ramificação por natureza. *(property-based)*
 2. `consumo_bp = razaoEmBp(realizado, valor)`, inteiro com sinal, truncado em direção a zero. **Pode ser negativo** — a redação anterior, "positivo em ambos os casos", era falsa e o glossário a repetia como incondicional.
 2b. `atingiu(pct) ⟺ consumo_bp >= pct × 100`, em aritmética inteira sobre `consumo_bp`, jamais sobre o percentual formatado e **jamais** multiplicando por `valor`. *(regressão do contraexemplo Q: teto de R$ 500, gasto de R$ 300, o alerta de 80% não dispara)*
 2c. O percentual exibido é `consumo_bp / 100`, truncado. O número mostrado e o número que dispara o alerta são o mesmo. *(regressão do contraexemplo R)*
-2d. `consumo_bp = 10000` exatamente ⟹ estado `no_limite`, nem `dentro` nem `estourado`.
+2d. `consumo_bp = 10000` exatamente ⟹ estado `no_planejado`, nem `dentro` nem `estourado`.
 3. `valor ≠ 0`. Planejamento de zero é ausência de planejamento — que se expressa apagando o registro.
 4. Com `categoria_id` preenchido, `sinal(valor)` concorda com `Categoria.natureza`: despesa ⟹ negativo, receita ⟹ positivo. Discordância é rejeição na construção, não warning. Com `categoria_id` nulo não há o que conferir — o sinal define o escopo.
 5. `valor.moeda` = moeda base do Tenant.
@@ -164,7 +167,7 @@ Escritas para virar teste direto:
 7. `competencia` tem `dia = 1`.
 8. Nenhuma `Transferencia` e nenhuma Categoria não analítica entram em nenhum realizado.
 8b. O realizado de um Planejamento soma apenas Lancamentos cuja `Categoria.natureza` iguala a natureza do Planejamento. **Nunca a soma líquida.** *(regressão dos contraexemplos T, U e V)*
-8c. Com um teto global de R$ 3.000, R$ 10.000 de despesa e R$ 20.000 de receita no mês, o teto está **estourado**. *(o caso que a redação anterior dava como dentro do plano)*
+8c. Com um teto global de R$ 3.000, R$ 10.000 de despesa e R$ 20.000 de receita no mês, o teto está **estourado**. *(o caso que a redação anterior dava como dentro do planejado)*
 9. O realizado de cartão usa `data_parcela` e é **invariante** à preferência de base temporal do Tenant.
 10. `copiar` é idempotente: `copiar(a,b); copiar(a,b)` = `copiar(a,b)`, **com e sem Planejamento global na origem**. A segunda execução não lança, não cria e não aborta. *(regressão do contraexemplo W)*
 11. `copiar` nunca altera um Planejamento pré-existente no destino.
@@ -196,8 +199,8 @@ Escritas para virar teste direto:
 - **Ajuste de saldo de −R$ 300.** Não consome teto nenhum, não entra em relatório de gasto.
 - **Alerta a 60% de consumo.** Teto de R$ 500, R$ 300 gastos, limiar de 80% → **não dispara**. É o contraexemplo Q e é a regressão mais importante desta emenda.
 - **Um centavo no limiar.** Teto de R$ 500, realizado de −R$ 399,99 → `consumo_bp = 7999`, tela mostra 79,99%, alerta de 80% não dispara. Em −R$ 400,00 → 8000 bp, dispara.
-- **Consumo negativo.** Teto de R$ 500 cuja única movimentação do mês é um estorno de +R$ 80 → −1600 bp. `dentro_do_plano` verdadeiro, barra exibida como 0%, nenhum alerta.
-- **Gasto exatamente igual ao teto.** `consumo_bp = 10000`, estado `no_limite`.
+- **Consumo negativo.** Teto de R$ 500 cuja única movimentação do mês é um estorno de +R$ 80 → −1600 bp. `dentro_do_planejado` verdadeiro, barra exibida como 0%, nenhum alerta.
+- **Gasto exatamente igual ao teto.** `consumo_bp = 10000`, estado `no_planejado`.
 
 ## Consequências
 
