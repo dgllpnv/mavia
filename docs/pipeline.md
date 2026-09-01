@@ -136,7 +136,7 @@ Ao receber os achados, use `superpowers:receiving-code-review`: verifique cada u
 | A cada ticket | typecheck, testes do escopo, `/code-review` |
 | A cada épico | Gate de risco, validação financeira completa, ADR se houve decisão durável |
 | A cada 4–6 épicos | `/improve-codebase-architecture`; revisão de `CONTEXT.md`; restauração de backup testada de verdade |
-| Trimestral | Reavaliar custo do agregador de Open Finance contra a receita (ver ADR 0003) |
+| Trimestral | Reavaliar custo do agregador de Open Finance contra a receita (ver ADR 0003), **com a lista de espera da conexão bancária como insumo** — quantas pessoas, quais bancos, que faixa de disposição a pagar (`spec-planos-e-assinatura.md` §1.3). Sem ela a revisão compara custo contra nada. Conferir junto a conversão do checkout e o volume de reembolso proporcional do anual (ADR 0020) |
 
 ---
 
@@ -151,10 +151,16 @@ Ordenado por dependência e por risco: o que sustenta tudo vem primeiro.
 5. **Mobile MVP** — Expo, offline-first, lançamento rápido, biometria, push
 6. **Importação** — `BankSyncProvider` + adapters OFX/CSV, deduplicação, conciliação
 7. **Inteligência** — categorização automática, OCR de recibo, regras do usuário
-8. **Planejamento** — Limites, Metas, alertas, Recorrencia
+8. **Planejamento** — `Planejamento` (teto e piso por categoria), `Objetivo` de acúmulo, alertas, `Recorrencia`
 9. **Relatórios** — gráficos, comparação de períodos, exportação
 10. **Compartilhamento** — múltiplos usuários por Tenant, papéis
-11. **Billing** — planos, assinatura, limites por plano
+11. **Billing** — planos, assinatura, **cotas** por plano
 12. **Open Finance** — adapter de agregador, Conexao, Consentimento, sincronização periódica
 
 Épico 12 depende do 6: quando o `BankSyncProvider` já existir, plugar um agregador é adicionar um adapter — não uma reescrita. É esse o ponto do ADR 0003.
+
+**Épico 11 depende do 10, e a dependência é dura — não é só ordem.** Os planos `Família` e `Negócio` são diferenciados por **pessoas no espaço** e **número de espaços** (`docs/produto/spec-planos-e-assinatura.md` §1.2). Sem o épico 10, os dois níveis superiores não têm o que vender: as cotas `pessoas` e `espacos` existiriam sem a funcionalidade que elas medem, e restaria cobrar pela conexão bancária — que é o épico 12 e ainda não existe. **Começar o 11 antes de o 10 estar em produção produz três planos que são o mesmo plano com três preços.**
+
+**E o épico 12 não depende do 11 apenas por ordem: depende da receita que o 11 gera.** O gatilho do ADR 0003 é a receita cobrir o custo do agregador com margem. Manter os níveis superiores fechados até o 12 existir seria circular — e é exatamente por isso que eles vendem, desde o 11, o que o 10 entregou (DP-17).
+
+A checagem de cota atravessa o produto inteiro: **toda rota de criação de recurso com cota nasce com a verificação no servidor** (ADR 0020, §3 do spec), e a lista do que **nunca** é limitado (§4) é normativa. Introduzir uma cota nova exige revisar aquele documento, não só acrescentar um campo.

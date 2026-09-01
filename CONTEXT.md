@@ -44,6 +44,15 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 > - Nenhuma comparação de janela usa `DATE`. `DATE` não representa instante, e a coerção `DATE → TIMESTAMPTZ` depende do fuso da sessão que escreve.
 > - Dois períodos comparados entre si usam a mesma regra de fronteira e a mesma `BaseTemporal` nos dois lados. Comparação com fronteiras ou bases distintas produz variação inventada.
 
+**Ancoragem de dia do mês** — Regra única para avançar uma data mês a mês quando o dia âncora não existe no mês de destino: `min(dia_ancora, ultimo_dia_do_mes)`, **sempre calculado a partir do dia âncora original**, nunca do mês anterior. O ajuste **não é arrastado**: âncora 31 produz 31/jan, 28/fev, **31**/mar.
+
+Quatro entidades a usam e nenhuma pode divergir: `Cartao` (`closing_day`, `due_day`), `GrupoDeParcelamento` (as N parcelas), `Recorrencia` (`dia_do_mes`) e `Assinatura` (o período anual e a contagem de `meses_iniciados` do reembolso). Está nomeada aqui porque estava sendo reescrita em cada uma — e uma regra reescrita quatro vezes diverge na quinta.
+
+> **Invariantes**
+> - Nunca pula um mês por falta do dia. Pular faz a competência perder o evento.
+> - Nunca transborda para o mês seguinte. Transbordar dá duas ocorrências ao mês seguinte.
+> - Aplicada em `America/Sao_Paulo`, antes de qualquer conversão para instante.
+
 **Data civil** — Campo que nomeia um **dia**, não um instante: `Fatura.data_fechamento`, `Fatura.data_vencimento`, `Objetivo.prazo`, `Planejamento.competencia`. Sempre interpretado em `America/Sao_Paulo`. Nomeado com prefixo `data_`/`prazo`/`competencia` justamente para não ser confundido com instante e coagido por engano — os instantes são `posted_at`, `settled_at`, `periodo_inicio`, `periodo_fim`.
 
 **posted_at** — Instante. Competência do `Lancamento`: quando o fato econômico aconteceu. É o campo que decide em qual `Fatura` uma compra de cartão cai e em qual competência ela aparece no relatório. Imutável depois de criado.
@@ -80,24 +89,7 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 
 **Usuario** — Pessoa autenticada. Pertence a um ou mais Tenants com um Papel.
 
-**Papel** — `proprietario` (tudo, inclusive billing), `membro` (lança e consulta), `visualizador` (só leitura). Base do compartilhamento familiar. **Papel concede permissão; `Plano` concede capacidade.** São eixos independentes: um `visualizador` num plano `Negocio` continua sem poder lançar.
-
-**Plano** — **Termo comercial.** O que o Tenant assina e paga: `Pessoal`, `Familia`, `Negocio`. Concede `Cota`s. Vive no eixo de cobrança da Mavia.
-
-**O que `Plano` não é:** não é `Planejamento`. Não tem competência, não tem natureza, não tem categoria, e **não entra em nenhum agregado financeiro do Tenant** — nem saldo, nem relatório, nem realizado. A mensalidade é receita da Mavia; se o Usuario quiser vê-la como despesa dele, ele lança um `Lancamento` como faria com qualquer assinatura, e esse lançamento não sabe que um `Plano` existe.
-
-**Cota** — Teto de **recurso** que um `Plano` concede: pessoas, espaços, armazenamento, conexões bancárias. Contagem de coisas, nunca `Money`.
-
-O nome foi escolhido para não ser `Limite`, e **confirmo a escolha**. Ela deixa a raiz `limite` com exatamente um significado em todo o código: **`Cartao.limite`**, o limite de crédito — que é `Money` e é do banco, não nosso. `Limite` já estava proibido como entidade de orçamento, em favor de `Planejamento`; se voltasse como teto de assinatura, teríamos três sentidos para uma palavra em três camadas diferentes do sistema.
-
-> **A fronteira que importa: `Cota` bloqueia, `Planejamento` avisa.**
->
-> **Invariantes**
-> - Cruzar uma `Cota` **recusa a ação**. Convidar a décima pessoa num plano de nove falha; não é aviso.
-> - Cruzar um `Planejamento` **emite evento e não impede nada**. Estourar o teto de Alimentação nunca bloqueia um lançamento — o dinheiro do Usuario é dele.
-> - Um `Planejamento` que bloqueia é bug de domínio. Uma `Cota` que apenas avisa é falha de cobrança.
-> - `Cota` é apurada em contagem inteira de recursos. Não usa `Money`, não usa `competencia`, não tem natureza, não tem `consumo_bp`.
-> - Rebaixar de `Plano` com recursos acima da nova `Cota` **não apaga dado financeiro**. O excedente fica somente-leitura até o Usuario resolver; soft delete e retenção continuam valendo.
+**Papel** — `proprietario` (tudo, inclusive billing), `membro` (lança e consulta), `visualizador` (só leitura). Base do compartilhamento familiar. **Papel concede permissão; `Plano` concede capacidade.** São eixos independentes: um `visualizador` num plano `Negocio` continua sem poder lançar. `Plano`, `Cota` e `Assinatura` vivem na seção **Assinatura e cobrança**.
 
 **Origem** — Procedência do dado de uma `Conta` ou de um `Cartao`: `manual` (o Usuario mantém) ou `conectado` (um adapter do `BankSyncProvider` mantém). **Não é uma classe de conta** — é de onde vêm os lançamentos. Uma conta `conectado` não aceita edição destrutiva de lançamentos importados; ver `Conciliacao`.
 
@@ -306,6 +298,106 @@ O nome foi escolhido para não ser `Limite`, e **confirmo a escolha**. Ela deixa
 
 ---
 
+## Assinatura e cobrança
+
+Este eixo trata do dinheiro **da Mavia**. Ele nunca se mistura ao dinheiro **do Tenant** — a fronteira está escrita em `Cobranca`, e é a mais importante desta seção.
+
+**Plano** — **Termo comercial.** O que o Tenant assina e paga: `Pessoal`, `Familia`, `Negocio`. Concede `Cota`s. **Item de catálogo, em código, nunca em tabela.** Chave: `(codigo, intervalo)`. Tem `preco` (`Money`), `cotas`, `versao` e `disponivel_para_compra`.
+
+**O que `Plano` não é:** não é `Planejamento`. Não tem competência, não tem natureza, não tem categoria, e **não entra em nenhum agregado financeiro do Tenant**.
+
+> **Invariantes**
+> - `cotas` dependem **só** de `codigo`. O `Intervalo` muda preço e duração do período, jamais o que o plano libera — um plano anual com cotas diferentes seria um quarto plano com outro nome.
+> - `preco` é **declarado, nunca derivado** de outro preço. O anual não é o mensal vezes dez.
+> - Mudança de preço cria `versao` nova. Quem já assinou mantém o preço da versão contratada até migração explícita e comunicada.
+
+**Intervalo** — `mensal` ou `anual`. Muda preço e duração do período; não muda cotas, nem estados, nem a máquina de ciclo de vida.
+
+> **Invariantes**
+> - `anual ⟹ periodo_fim = periodo_inicio + 12 meses`, pela **Ancoragem de dia do mês**.
+> - Trocar de Intervalo nunca altera `Cota` alguma.
+
+**Cota** — Teto de **recurso** que um `Plano` concede: pessoas, espaços, armazenamento, conexões bancárias. Contagem inteira de coisas, nunca `Money`.
+
+O nome foi escolhido para não ser `Limite`, e **confirmo a escolha**. Ela deixa a raiz `limite` com exatamente um significado em todo o código: **`Cartao.limite`**, o limite de crédito — que é `Money` e é do banco, não nosso. `Limite` já estava aposentado como entidade de orçamento, em favor de `Planejamento`; se voltasse como teto de assinatura, teríamos três sentidos para uma palavra em três camadas do sistema.
+
+> **A fronteira que importa: `Cota` bloqueia, `Planejamento` avisa.**
+>
+> **Invariantes**
+> - Cruzar uma `Cota` **recusa a ação** daquele tipo de recurso, e só dele: criar lançamento continua funcionando enquanto um convite é recusado.
+> - Cruzar um `Planejamento` **emite evento e não impede nada**. Estourar o teto de Alimentação nunca bloqueia um lançamento — o dinheiro do Usuario é dele.
+> - Um `Planejamento` que bloqueia é bug de domínio. Uma `Cota` que apenas avisa é falha de cobrança.
+> - `Cota` é contagem inteira. Não usa `Money`, não usa `competencia`, não tem natureza, não tem `consumo_bp`.
+> - **Acima da cota é estado tolerado**, alcançável só por rebaixamento: nada é apagado, nada é escondido, **nada vira somente-leitura**. Bloqueia-se apenas a criação daquele tipo até a contagem voltar.
+
+**Assinatura** — O vínculo entre um `Tenant` e um `Plano`, com estado e ciclo de vida. Uma por Tenant, sempre.
+
+**Estado de assinatura** — `teste` (7 dias, sem cartão), `ativa`, `em_atraso` (14 dias, escrita continua funcionando), `cancelada` (funciona até o fim do período pago), `expirada` (leitura e exportação completas, escrita bloqueada).
+
+> **A invariante que governa tudo o mais: o estado da `Assinatura` não é gatilho de retenção de nenhuma classe de dado.**
+>
+> **Invariantes**
+> - `expirada` mantém **leitura completa e exportação completa, indefinidamente**. Nenhum dado é apagado, encurtado ou escondido por falta de pagamento. Esconder o passado de quem parou de pagar é sequestro de dado com outro nome.
+> - Nenhum `Plano` encurta histórico. Retenção é função de base legal e de pedido do titular, **nunca** de estado comercial.
+> - Exportação, eliminação de dados, exclusão do espaço e revogação de conexão funcionam em **todos** os estados. São direitos do art. 18 da LGPD — nunca atrás de pagamento, nunca com atrito adicional.
+> - Exatamente uma Assinatura por Tenant. O espaço nasce com ela, em `teste`.
+> - `estado = teste ⟹` não existe assinatura no provedor de pagamento.
+> - `teste_termina_em` é fixado na criação e **imutável**. Prorrogar é operação nomeada e auditada, nunca um `UPDATE` solto.
+> - `estado` só é escrito pelo processador de `EventoDeCobranca` ou pelo job de fim de teste. Nenhuma rota de produto o escreve.
+> - `[periodo_inicio, periodo_fim)`, semiaberta, pela convenção única de `Janela`.
+> - **Nenhuma coluna de PAN, CVV, nome impresso ou validade completa do cartão.** Veto permanente. Os últimos quatro dígitos e a bandeira existem para o titular reconhecer o próprio cartão.
+
+**Cobranca** — O evento monetário da assinatura: uma por fatura do provedor. Tem `valor` (`Money`), estado, período e as datas de emissão e pagamento.
+
+**Nunca se chama "fatura".** `Fatura` é o ciclo do `Cartao` do Usuario e não empresta o nome — são as duas coisas que mais se parecem e menos se confundem impunemente.
+
+> **A fronteira `Cobranca` × `Lancamento`.** As duas carregam `Money` e as duas descrevem a mesma mensalidade no mundo. São entidades diferentes porque são **dinheiros diferentes**: `Cobranca` é receita da Mavia contra o Tenant; `Lancamento` é movimento no razão do Usuario.
+>
+> Se o Usuario quiser acompanhar a mensalidade da Mavia como despesa dele, ele **lança um `Lancamento` comum** — à mão, ou por importação do extrato ou da fatura do cartão. Esse Lancamento é uma despesa ordinária, com Categoria, e **não sabe que existe uma `Cobranca`**. Os dois coexistem e não se referenciam.
+>
+> **Invariantes**
+> - `Cobranca` nunca entra em `Saldo`, `Saldo geral`, `Realizado`, `Projetado`, relatório, `Planejamento` ou `Objetivo`. Não existe agregado do Tenant que a inclua.
+> - **Nenhuma `Cobranca` cria, altera ou exclui `Lancamento`.** *(teste de arquitetura, como em `Objetivo`)* Criá-lo automaticamente seria a Mavia escrevendo no razão do Usuario — e erraria a conta sempre que ele pagasse por um cartão que não acompanha aqui.
+> - Não existe `lancamento.cobranca_id` nem `cobranca.lancamento_id`. O vínculo ausente é deliberado: é ele que impediria a tentação anterior.
+> - Os dois **podem divergir** — o Usuario pode não lançar, ou lançar valor diferente. É correto: o extrato dele é dele.
+> - A convenção de sinal do ADR 0005 **não se aplica**: `valor` é o montante cobrado, positivo. Sinal governa movimento no razão do Tenant, e `Cobranca` não é um.
+> - `valor` é imutável depois de emitida.
+> - O valor devolvido é persistido em `valor_reembolsado` (`Money`, zero por padrão), com `0 <= valor_reembolsado <= valor`. 🔺 **Lacuna a fechar com o `product-financeiro`:** os três estados `paga | falhou | reembolsada` não distinguem reembolso integral de parcial, e a fórmula de reembolso proporcional produz parciais. Sem o campo, o valor devolvido existe só no provedor.
+> - **Sobrevive à eliminação do espaço** por obrigação fiscal. É o único lugar, com `DadosFiscais`, onde dado do titular sobrevive — e por isso precisa estar escrito em português claro na tela de privacidade, não só nos termos. Retenções diferentes para o mesmo fato do mundo são a prova de que `Cobranca` e `Lancamento` são entidades distintas.
+
+**DadosFiscais** — CPF ou CNPJ do assinante, com `tipo_documento` e, para CNPJ, a razão social. Tabela própria, chaveada por Tenant. Coletado **só no checkout**, com finalidade única de emissão fiscal.
+
+> **Invariantes**
+> - **Nunca é identificador.** Não serve para login, não é chave de nada, não indexa busca, não aparece em URL.
+> - **Nunca é antifraude.** Não detecta teste repetido, conta duplicada nem abuso.
+> - **Nunca é enriquecido nem consultado** em base externa. A validação é por dígito verificador, aritmética local.
+> - **Nunca sai:** não vai em log, métrica, notificação, e-mail, resposta a não-`proprietario`, nem exportação de outro membro.
+> - Só existe se houver ou tiver havido Assinatura fora de `teste`. Nenhum caminho o cria durante o teste.
+> - `tipo_documento = cnpj ⟹` razão social preenchida.
+> - Qualquer uso fora da emissão fiscal é **finalidade nova** e exige decisão própria. Não existe "aproveitando que já temos".
+
+**EventoDeCobranca** — O evento vindo do provedor de pagamento, e o livro de idempotência do webhook. O `id` do provedor **é** a chave primária: esse é o mecanismo inteiro.
+
+> **Exceção de tenancy, declarada.** O evento chega **antes** de sabermos o Tenant, então a tabela **não tem `tenant_id`** e vive fora da RLS — como `outbox_pendencias`.
+>
+> **Invariantes**
+> - A exceção só é segura porque a tabela **não contém dado pessoal**: id, tipo, horários, tentativas e resultado. Nunca o payload do provedor, nunca e-mail, nunca valor.
+> - O efeito do evento é aplicado numa **segunda transação**, com o tenant fixado, sob RLS.
+> - Reprocessar o mesmo id não produz efeito novo.
+> - Não entra na exportação do titular, e a justificativa é a ausência de dado pessoal — declarada, não presumida.
+
+**ListaDeEspera** — E-mail de quem quer ser avisado quando a conexão bancária existir. **É o único dado do sistema sobre alguém que não é cliente e não tem `Tenant`.** Base legal: consentimento.
+
+> **Invariantes**
+> - **A RLS não a protege, porque RLS é por `tenant_id` e aqui não há um.** É a terceira exceção de tenancy, e a única das três que **contém dado pessoal** — logo a justificativa das outras duas ("não tem dado pessoal") não vale aqui, e a exceção exige controle compensatório explícito: nenhuma rota autenticada de produto a expõe, e só um papel de serviço a lê.
+> - **Eliminação é `DELETE` físico, não soft delete.** A regra 17 do `CLAUDE.md` — `deleted_at`, nunca `DELETE` — governa dado **financeiro**, e este não é. Manter `deleted_at` de quem pediu para sair é manter o dado de quem revogou o consentimento.
+> - `descadastrado_em` apaga a linha **na hora**.
+> - Apagada 30 dias após o aviso, se a pessoa não virar cliente.
+> - **Uso secundário é vetado.** Nada de newsletter, nada de promoção, nenhum repasse. Uma finalidade, uma comunicação.
+> - Nunca é cruzada com `Usuario`, `Tenant` ou `DadosFiscais`.
+
+---
+
 ## Ingestão bancária
 
 **BankSyncProvider** — A interface única por onde todo dado bancário externo entra. Nenhum código de aplicação conhece o provider concreto. Ver `docs/adr/0003`.
@@ -354,6 +446,15 @@ Não use — geram ambiguidade e bugs reais:
 | `Plano.limites` | `Plano.cotas` | Mesma colisão, um nível abaixo |
 | `Cota` medida em `Money` | contagem de recursos | Cota conta pessoas e conexões; teto de dinheiro é `Planejamento` |
 | `Plano` ou `Cota` em relatório financeiro | — | Mensalidade é receita da Mavia, não movimento do Tenant |
+| `Limite` do plano | `Cota` | Aposentado em favor de `Planejamento`; reusá-lo colide com teto de gasto |
+| "fatura da assinatura" | `Cobranca` | `Fatura` é o ciclo do cartão do Usuario — a palavra que carrega o erro clássico da categoria |
+| `Cobranca` somada a `Lancamento` | dois eixos separados | Uma é receita da Mavia, o outro é o razão do Usuario |
+| `lancamento.cobranca_id` | nenhum vínculo | O vínculo ausente é o que impede a Mavia de escrever no razão do Usuario |
+| `trial` | `teste` | Um idioma por conceito |
+| `status` da assinatura no provedor como estado do produto | `Assinatura.estado` | O deles descreve dinheiro; o nosso descreve direito de uso |
+| estado da assinatura como gatilho de retenção | — | Assinatura expirada mantém leitura e exportação, para sempre |
+| número de cartão em qualquer coluna | — | Veto permanente, em qualquer tabela, em qualquer épico |
+| `deleted_at` em `ListaDeEspera` | `DELETE` físico | Soft delete de quem revogou consentimento é manter o dado |
 | `Meta` | `Planejamento` (piso mensal) · `Objetivo` (acúmulo com prazo) | Um nome para dois conceitos de horizonte diferente. A ambiguidade quase apagou o acúmulo do modelo — foi preciso um veto para recuperá-lo |
 | `objetivo.progresso` como coluna | soma derivada (saldo − `saldo_base`, ou Σ Aportes) | Progresso é saldo; saldo é derivado (ADR 0005) |
 | `saldo_base` recalculado | `saldo_base` armazenado, com reajuste só por retroativo anterior | Lançamento retroativo faria o progresso mudar sozinho |

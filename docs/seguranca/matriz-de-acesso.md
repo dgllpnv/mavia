@@ -149,7 +149,9 @@ Legenda: `✓` permitido · `✗` negado · `⊙` permitido apenas sobre o próp
 | `sessao` | `ler` · `revogar` | ⊙ | ⊙ | ⊙ |
 | `billing` | `ler` · `editar` | ✓ | ✗ | ✗ |
 
-`billing` é o segundo exemplo que `sistema.md` §2.3 promete testar ("`membro` não muda billing"). As rotas do épico 11 nascem já cobertas por esta linha.
+`billing` é o segundo exemplo que `sistema.md` §2.3 promete testar ("`membro` não muda billing"). As rotas do épico 11 nascem já cobertas por esta linha, detalhadas em §3.17.
+
+**O plano e as cotas, porém, são visíveis a todos** — já pela linha `tenant · ler (nome, plano, timezone)` acima. É deliberado: um `membro` que esbarra numa cota precisa entender **por que** o botão recusou, e a mensagem nomeia a cota e a contagem (§5 do spec de planos). O que ele nunca vê é preço pago, meio de pagamento e documento fiscal.
 
 ### 2.4 Registro, exportação e observabilidade
 
@@ -405,7 +407,31 @@ Estas rotas não existem em `sistema.md` §4.1 e a superfície inteira estava de
 | `POST /chaves-api` | P | Formato `mavia_sk_<32 bytes base62>` com prefixo varrível em repositórios públicos; exibida **uma única vez**; armazenada como SHA-256. Escopo e **expiração obrigatórios** (máx. 365 dias, padrão 90) — chave sem prazo não é criável | sim | `RL-CARA` | A-40 |
 | `DELETE /chaves-api/:id` | P | Efeito ≤ 60 s | — | `RL-ESCRITA` | A-40 |
 
-### 3.17 `saude` e `metricas` — fora da superfície de produto
+### 3.17 `billing` — assinatura, cobrança e o webhook (épico 11)
+
+A linha `billing` da §2.3 (`ler` · `editar` — só `proprietario`) já cobre as rotas de produto. O que faltava era a rota que **não tem sessão**.
+
+| Rota | Papéis | Verificação além de sessão + tenant | Reaut. | RL | Achado |
+|---|---|---|:--:|---|---|
+| `GET /assinatura` | P | Nunca devolve `documento` nem dado de outro membro. `metodo_ultimos4` e `metodo_marca` só para `P` | — | `RL-LEITURA` | ADR 0020 |
+| `GET /planos` | P M V **anon** | Catálogo público, em código (ADR 0020 D3). Nenhum dado de tenant na resposta | — | `RL-LEITURA` | — |
+| `POST /assinatura/checkout` | P | Cria a sessão na Stripe com `Idempotency-Key` determinística. **Recusa se houver excesso de cota** no plano pedido (§8.1 do spec) | — | `RL-CARA` | ADR 0020 D1 |
+| `POST /assinatura/portal` | P | Devolve URL de sessão do portal da Stripe, de uso único e curta | — | `RL-CARA` | — |
+| `POST /assinatura/reembolso` | P | Aplica a fórmula do §6.3 do spec; `Idempotency-Key` por `stripe_invoice_id` | **✓** | `RL-CARA` | ADR 0020 D1 |
+| `POST /assinatura/reconferir` | P | O botão "já paguei": força releitura na Stripe. Existe porque webhook cai | — | `RL-CARA` | — |
+| `PUT /dados-fiscais` | P | Um campo, validação por dígito verificador, **sem nenhuma chamada de rede**. Nunca aceito durante o estado `teste` | — | `RL-ESCRITA` | ADR 0020 D4 |
+| **`POST /webhooks/stripe`** | **`publica-assinada`** | **Nenhuma sessão, nenhum tenant no contexto.** Verificação HMAC sobre o **corpo cru**, antes de qualquer parse, tolerância ≤ 5 min. Corpo inválido → `400`, zero escritas. A resposta **nunca revela** se um `Customer` existe, e é idêntica em conteúdo e tempo nos dois casos. Grava o evento e devolve `2xx`; o trabalho vai para job | — | `RL-WEBHOOK` | ADR 0020 D1 |
+
+**`publica-assinada` é uma declaração, não uma ausência.** O guard global nega por padrão e uma rota sem declaração **não sobe** (`sistema.md` §4.0). O webhook não pode declarar papel — quem chama é a Stripe, sem sessão —, mas também não pode ficar fora do manifesto: sem entrada, o teste de S2 que percorre as rotas do OpenAPI a acusaria, e a correção preguiçosa seria isentá-la da verificação. Por isso o valor existe, e ele carrega uma obrigação própria: **toda rota `publica-assinada` declara qual assinatura criptográfica a autoriza e onde o segredo dela vive.** Hoje há exatamente uma.
+
+**Duas armadilhas de implementação, nomeadas para não serem redescobertas:**
+
+1. **O corpo cru precisa chegar intacto ao verificador.** O Fastify não pode consumir e reserializar o JSON desta rota — a assinatura é sobre os bytes originais. Um `body parser` global aplicado sem exceção quebra a verificação de um jeito que parece problema de chave.
+2. **Nada de trabalho lento dentro do handler.** Estourar o tempo da Stripe faz **ela retentar**, e retentativa somada a trabalho parcial é exatamente como se cobra duas vezes. Grava o evento, responde, processa em job.
+
+**`dados_fiscais.documento` entra na regra R-5** (§1): junto de `senha_hash`, `refresh_hash`, `mfa_segredo_cifrado`, `credenciais_cifradas`, `dek_cifrada`, `ip_hash`, `user_agent_hash` e `lancamentos_brutos.payload`, ele **nunca** sai em resposta de API para quem não é `proprietario`, nem na exportação de outro membro, nem em log, métrica ou notificação.
+
+### 3.18 `saude` e `metricas` — fora da superfície de produto
 
 | Rota | Papéis | Verificação | Reaut. | RL | Achado |
 |---|---|---|:--:|---|---|
@@ -418,13 +444,16 @@ Estas duas rotas não têm papel porque não pertencem ao modelo de papéis: ela
 
 ## 4. Reautenticação (step-up)
 
-**Onze operações** exigem senha ou MFA no ato, mesmo com sessão válida. O critério: a operação amplia acesso, destrói dado, ou tira dado do sistema.
+**Doze operações** exigem senha ou MFA no ato, mesmo com sessão válida. O critério: a operação amplia acesso, destrói dado, tira dado do sistema — ou tira dinheiro. A décima segunda entrou com o épico 11 (ADR 0020).
+
+> `spec-autenticacao.md` §8 reescreve “senha ou MFA” em termos de **fator**, para contas que entram só pelo Google. A linha nova segue a mesma reescrita, sem exceção.
 
 | Categoria | Operações |
 |---|---|
 | **Exportação de dados** | `POST /exportacoes` com escopo "tudo" |
 | **Exclusão** | `DELETE /auth/eu` · `DELETE /tenants/:id` · `POST /tenants/:id/comecar-do-zero` |
 | **Rotação/entrada de credencial** | `POST /auth/senha/alterar` · `POST /auth/mfa/inscrever` · `POST /auth/mfa/confirmar` · `DELETE /auth/mfa` · `POST /conexoes` · `POST /chaves-api` |
+| **Dinheiro saindo** | `POST /assinatura/reembolso` — move dinheiro para fora e não tem desfazer |
 | **Escalada de privilégio** | `PATCH /tenants/:id/membros/:usuarioId` · `DELETE /tenants/:id/membros/:usuarioId` (quando `P` remove outro) · `GET /oauth/autorizar` |
 
 **Mecanismo.** `POST /auth/reautenticar` emite um *ticket de step-up*: opaco, 5 min de validade, escopado à `(acao, recurso)` pedida, de uso único, guardado no Redis com o `sessao_id`. A rota protegida exige o header `X-Mavia-StepUp` e consome o ticket na mesma transação. Um ticket emitido para exportar não serve para promover membro — o escopo é comparado, não apenas a existência.
@@ -450,6 +479,7 @@ Contador em Redis, chave por `(usuario_id, classe)` — e por `(hash do e-mail)`
 | `RL-IA` | 60/min por `usuario_id` | `inteligencia/*` |
 | `RL-CONVITE` | 20/dia por tenant, 10 convites pendentes simultâneos | `POST /tenants/:id/convites` |
 | `RL-PROGRAMATICO` | 1/3 do teto da classe correspondente, por token/chave | qualquer requisição autenticada por OAuth ou chave de API |
+| `RL-WEBHOOK` | 600/min por IP de origem, **sem bloqueio por e-mail ou usuário** — não há nenhum dos dois. Excesso responde `429`, que a Stripe trata como retentativa | `POST /webhooks/stripe` |
 
 ### 5.2 Tetos de janela e de tamanho
 
