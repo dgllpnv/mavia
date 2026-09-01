@@ -68,6 +68,16 @@ CREATE POLICY cadastro_opera_pendentes ON cadastros_pendentes FOR ALL TO mavia_a
 CREATE POLICY cadastro_opera_recuperacoes ON recuperacoes_senha FOR ALL TO mavia_auth
   USING (true) WITH CHECK (true);
 
+-- Sem isto, as funções SECURITY DEFINER não enxergam tabela nenhuma: o dono
+-- delas é `mavia_auth`, e as concessões de tabela abaixo não valem sem USAGE
+-- no esquema que as contém.
+--
+-- Ficava mascarado porque o esquema `public` concede USAGE a PUBLIC por
+-- padrão. O bootstrap de papéis revoga esse padrão de propósito, para que a
+-- ausência de uma concessão apareça em teste e não no dia em que alguém
+-- endurecer a produção. Este GRANT é o que a revogação revelou faltar.
+GRANT USAGE ON SCHEMA public TO mavia_auth;
+
 GRANT SELECT, INSERT, UPDATE ON usuarios              TO mavia_auth;
 GRANT SELECT, INSERT         ON tenants               TO mavia_auth;
 GRANT SELECT, INSERT         ON tenant_usuarios       TO mavia_auth;

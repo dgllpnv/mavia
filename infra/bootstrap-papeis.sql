@@ -29,8 +29,26 @@ BEGIN
 END
 $$;
 
--- Precisa poder criar objeto no esquema onde as tabelas vivem.
-GRANT CREATE, USAGE ON SCHEMA public TO mavia_migrate;
+-- `mavia_migrate` precisa ser DONO do esquema que ele gerencia, não apenas ter
+-- CREATE nele.
+--
+-- O motivo é um comportamento traiçoeiro do PostgreSQL: um `GRANT` executado
+-- por quem não é dono nem tem grant option **não falha**. Ele devolve `GRANT`,
+-- com um mero `WARNING: no privileges were granted`, e a transação segue. A
+-- migration reporta sucesso, o privilégio não existe, e a aplicação perde
+-- acesso a todas as tabelas sem nenhum erro para investigar.
+--
+-- Hoje isso fica mascarado porque o esquema `public` concede `USAGE` a PUBLIC
+-- por padrão — então a aplicação funciona *apesar* de o GRANT da migration não
+-- ter efeito. A máscara cai no dia em que alguém endurecer o esquema, que é
+-- justamente uma boa prática de segurança.
+ALTER SCHEMA public OWNER TO mavia_migrate;
+
+-- E removemos a máscara agora, de propósito: sem `USAGE` para PUBLIC, todo
+-- acesso passa a depender de concessão explícita. Se uma migration futura
+-- esquecer de conceder, a falha aparece no teste em vez de aparecer no dia em
+-- que alguém endurecer a produção.
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
 
 -- E criar esquema: a migration 0004 cria o esquema `auth`, onde vivem as
 -- funções SECURITY DEFINER do cadastro. `CREATE SCHEMA` exige privilégio na
