@@ -46,10 +46,10 @@ Declarar a ausência vale tanto quanto declarar a presença: dado não coletado 
 
 | Não coletamos | Por quê |
 |---|---|
-| **CPF ou qualquer documento** | Nenhuma funcionalidade do MVP precisa. Não existe coluna no modelo de dados, e criar uma exige ADR |
+| **CPF ou CNPJ para qualquer finalidade que não seja a nota fiscal** | ⚠️ **Corrigido em 2026-09-01.** O texto anterior dizia que documento não é coletado em hipótese alguma, e isso deixou de ser verdade: `docs/produto/spec-planos-e-assinatura.md` §11.4 coleta **um** documento (CPF ou CNPJ), **no checkout**, **de quem assina**, **nunca durante o teste**, com base em **obrigação legal** (7º II) e finalidade única de emissão fiscal. Vive em tabela própria, `dados_fiscais`, enumerada na §3.6. **Fora dessa finalidade a proibição continua integral**, com quatro vetos: nunca é identificador, nunca é antifraude, nunca é enriquecido ou consultado em base externa, nunca sai em log, métrica, notificação ou resposta a quem não é `proprietario`. Qualquer outro documento — RG, CNH, título — continua sem coluna e exige ADR |
 | **Número de cartão (PAN), CVV, validade** | `Cartao` guarda nome, limite, `closing_day` e `due_day`. Não somos ambiente de pagamento e não entramos no escopo PCI-DSS. **Veto:** nenhuma coluna de PAN, em nenhuma tabela, em nenhum épico |
 | **Geolocalização** | Já recusada por decisão de produto (`arquitetura-informacao.md` §2.3) com o argumento correto: dado sensível sem retorno claro |
-| **Endereço, telefone, data de nascimento** | Não usados. Telefone entraria só com MFA por SMS, que não é a decisão (TOTP — A-17) |
+| **Endereço, telefone, data de nascimento** | Não usados. Telefone entraria só com MFA por SMS, que não é a decisão (TOTP — A-17). **Endereço continua fora inclusive na cobrança:** se a emissão fiscal futura o exigir, é decisão nova com ADR, e não coleta antecipada "por precaução" |
 | **Senha bancária em texto claro, em qualquer momento fora da transação de escrita** | Regra 19 + ADR 0018. Para o adapter `pluggy`, a credencial do banco **nunca chega à Mavia** (ADR 0018 §D0) |
 | **Contatos, agenda, lista de apps instalados no mobile** | Não pedimos a permissão |
 
@@ -162,10 +162,21 @@ Todas as classes abaixo têm a mesma finalidade-mãe — *permitir que o titular
 
 ### 3.6 Cobrança (épico 11, declarado agora)
 
+> Substitui, em 2026-09-01, as duas linhas genéricas anteriores. Fonte: `docs/produto/spec-planos-e-assinatura.md` §11. Provedor: **Stripe** (DP-14), que é **operadora** para o processamento que contratamos e **controladora independente** para as obrigações regulatórias dela — os dois papéis vão declarados em `subprocessadores.md` e na política de privacidade, junto da transferência internacional (art. 33).
+
 | Classe | Finalidade | Base legal | Gatilho | Prazo | No vencimento |
 |---|---|---|---|---|---|
-| Dados de assinatura e nota fiscal (nome, documento se exigido pelo fisco, valor, data) | Cumprir obrigação fiscal e tributária | **Obrigação legal** (7º II) | Emissão do documento fiscal | **5 anos** (prazo decadencial tributário) | `apagar`. Esta é a **única** classe que sobrevive à eliminação do espaço além de `consentimentos`, e a razão precisa estar escrita na política de privacidade |
-| Dados de cartão de pagamento | — | — | — | **Não coletamos.** Tokenização pelo gateway; a Mavia guarda o token do gateway e os últimos 4 dígitos, nada mais | — |
+| `assinaturas.stripe_customer_id`, `.stripe_subscription_id` | Ligar este espaço à assinatura no provedor de pagamento | Execução de contrato (7º V) | Eliminação do espaço | Vida da assinatura | `apagar` |
+| `assinaturas.metodo_ultimos4`, `.metodo_marca` | Permitir que o titular reconheça qual cartão está pagando | Execução de contrato | Troca de cartão ou cancelamento | Até o gatilho | `apagar` |
+| `assinaturas.metodo_expira_em` (mês/ano) | Avisar 15 dias antes de o cartão vencer, evitando a falha de pagamento | Legítimo interesse (7º IX), no interesse do próprio titular | Idem | Até o gatilho | `apagar` |
+| `cobrancas` (valor, datas, estado, `stripe_invoice_id`) | Provar o que foi cobrado e sustentar a escrituração fiscal | **Obrigação legal** (7º II) | `emitida_em` | **5 anos contados de 1º de janeiro do ano seguinte** (CTN art. 173 I) | `apagar`. **Sobrevive à eliminação do espaço** (§5.3) |
+| `dados_fiscais` (`documento` CPF/CNPJ, `tipo_documento`, `nome_fiscal`) | Emitir a nota fiscal do serviço contratado | **Obrigação legal** (7º II) | Vencimento da última `Cobranca` do tenant | Enquanto houver `Cobranca` dentro do prazo acima | `apagar` a linha. **Sobrevive à eliminação do espaço** (§5.3). Quatro vetos de uso secundário na §2.2 |
+| `eventos_cobranca` (`event.id`, tipo, horários, resultado) | Impedir que um evento repetido cobre ou altere duas vezes, e permitir apurar uma disputa | Legítimo interesse (7º IX) | `recebido_em` | **12 meses** | `apagar`. **Não contém dado pessoal** — nunca payload, nunca e-mail, nunca valor. É a razão de a tabela poder viver fora da RLS |
+| `lista_espera` (`email`, instituição desejada, faixa de disposição a pagar) | Avisar **uma vez** quando a conexão bancária existir | **Consentimento** (7º I), texto na §10.7 | Envio do aviso, ou descadastro | **30 dias** após o aviso · **imediato** no descadastro | `apagar`. Dado de quem **não é cliente**. Nunca usado para outra comunicação — veto |
+| Dados de cartão de pagamento (PAN, CVV, validade completa, nome impresso, endereço de cobrança) | — | — | — | **Não coletamos.** Checkout hospedado: o dado do cartão nunca transita pelo nosso servidor, e por isso não entramos no escopo PCI-DSS | — |
+| Emissão de nota fiscal | — | — | — | **Não emitimos hoje** (DP-16). Nenhuma integração fiscal, nenhum número de nota guardado. `cobrancas.documento_fiscal_id` fica reservado e nulo | — |
+
+> **Se o dono decidir definitivamente não emitir nota**, a base legal de `dados_fiscais` desaparece e a tabela é apagada por inteiro sob `mavia_retencao`, com entrada em `retencao_execucoes`. A saída está escrita para que a coleta não vire permanente por inércia.
 
 ### 3.7 Inteligência (épico 7, condicionado a §9)
 
@@ -285,14 +296,17 @@ Ambas em português claro na tela "Dados e privacidade", não enterradas nos ter
 
 ### 5.3 Eliminar o espaço — `DELETE /tenants/:id`
 
-`DELETE` físico de **todas** as tabelas com aquele `tenant_id`, na ordem de dependência; purga de todos os objetos de storage (anexos e exportações); `crypto-shred` das DEKs de todas as `conexoes`; destruição do pepper de auditoria daquele tenant no guardião de chaves; expurgo de cache e de qualquer índice derivado.
+**Primeiro, antes de apagar linha alguma:** cancelar a assinatura na Stripe e apagar lá o `Customer`. Continuar cobrando alguém cujos dados apagamos é, ao mesmo tempo, escândalo de cobrança e problema de dado — e a ordem importa, porque um erro no meio do apagamento não pode deixar uma cobrança órfã rodando. A Stripe retém o que a legislação dela exige; esse limite é conhecido e vai declarado na política de privacidade.
+
+Em seguida: `DELETE` físico de **todas** as tabelas com aquele `tenant_id`, na ordem de dependência; purga de todos os objetos de storage (anexos e exportações); `crypto-shred` das DEKs de todas as `conexoes`; destruição do pepper de auditoria daquele tenant no guardião de chaves; expurgo de cache e de qualquer índice derivado.
 
 **Sobrevive apenas:**
 
 | O que | Por quê | Como fica |
 |---|---|---|
 | `consentimentos` | Ônus da prova do controlador (art. 8º §2º) | 5 anos, com `usuario_id` anonimizado e `escopo` reduzido a instituição + data + versão do texto |
-| Documentos fiscais (§3.6) | Obrigação legal tributária | 5 anos, fora do banco operacional |
+| `cobrancas` (§3.6) | Obrigação legal tributária | 5 anos, contados de 1º de janeiro do ano seguinte à cobrança |
+| `dados_fiscais` (§3.6) | O documento é elemento necessário da nota fiscal das cobranças que sobrevivem | Com as `cobrancas`. **É o único lugar onde o documento do titular sobrevive à eliminação**, e isso precisa estar em português claro na tela "Dados e privacidade" |
 | `eliminacoes_journal` | Impedir que uma restauração ressuscite o espaço | Só `(tenant_id, tipo, concluido_em)`, sem conteúdo |
 | `retencao_execucoes` | Accountability (art. 37) | Contagens, sem dado pessoal |
 
@@ -331,7 +345,9 @@ Está em `arquitetura-informacao.md` §2.12 sem definição do que apaga. A defi
 
 ### 6.1 Entidades exportadas
 
-`tenant` (nome, timezone, plano) · `membros` (nome, papel, `aceito_em` — e-mail apenas para `proprietario`) · `contas` · `cartoes` · `categorias` · `etiquetas` · `lancamentos` · `lancamento_etiquetas` · **`transferencias`** · **`parcelamentos`** (com `data_compra`) · **`faturas`** · **`recorrencias`** · **`planejamentos`** · **`objetivos`** · **`aportes`** · **`conexoes`** (metadados, nunca a credencial) · **`consentimentos`** · **`sincronizacoes`** · **`lancamentos_brutos`** (campos normalizados, nunca o `payload`) · **`conciliacao_sugestoes`** · **`regras_categorizacao`** · **`anexos`** (metadados **e** os binários) · **`notificacoes`** · **`preferencias`** · **`atividades`** · `chaves_api` e `apps_conectados` (metadados, nunca o segredo).
+`tenant` (nome, timezone, plano) · `membros` (nome, papel, `aceito_em` — e-mail apenas para `proprietario`) · `contas` · `cartoes` · `categorias` · `etiquetas` · `lancamentos` · `lancamento_etiquetas` · **`transferencias`** · **`parcelamentos`** (com `data_compra`) · **`faturas`** · **`recorrencias`** · **`planejamentos`** · **`objetivos`** · **`aportes`** · **`conexoes`** (metadados, nunca a credencial) · **`consentimentos`** · **`sincronizacoes`** · **`lancamentos_brutos`** (campos normalizados, nunca o `payload`) · **`conciliacao_sugestoes`** · **`regras_categorizacao`** · **`anexos`** (metadados **e** os binários) · **`notificacoes`** · **`preferencias`** · **`atividades`** · `chaves_api` e `apps_conectados` (metadados, nunca o segredo) · **`assinatura`** · **`cobrancas`**.
+
+`assinatura` e `cobrancas` entram por força do teste da §6.4 — tabela de negócio fora dos dois fluxos quebra o build. `eventos_cobranca` fica de fora com justificativa declarada: não contém dado pessoal. `dados_fiscais` sai **apenas na exportação pedida pelo `proprietario`**; para os demais membros, é filtrado pela regra 1 da §6.3, como o e-mail alheio.
 
 As em negrito são as que o gate encontrou **ausentes dos dois fluxos** (B-02). `saldo_snapshots` fica de fora com justificativa declarada: é derivado e recalculável.
 

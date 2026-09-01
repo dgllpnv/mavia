@@ -48,11 +48,21 @@ A solução usa a ordem dos épicos: compartilhamento (10) vem **antes** de bill
 
 Daí os nomes `Pessoal`, `Família` e `Negócio`: eles nomeiam o que o plano entrega, continuam verdadeiros antes e depois do épico 12, e não prometem o que ainda não existe. Pré-venda com desconto foi recusada — reembolso diferido, art. 35 do CDC e risco de estorno em massa.
 
-## Nota fiscal — o que fica pendente
+## Nota fiscal, e a coleta de documento — resolvido
 
-Não haverá emissão automática no lançamento. A intenção é, no futuro, integrar diretamente com a prefeitura de **Salvador, na Bahia**.
+Não haverá emissão automática no lançamento. Nenhuma integração fiscal entra no épico 11. A intenção futura é emitir por conta própria, junto à prefeitura de **Salvador, na Bahia** — e o que estará vigente lá é verificação para *aquele* momento, com a contabilidade, não agora.
 
-A consequência de engenharia, levantada e ainda em análise: **se o CPF/CNPJ não for coletado no checkout, emitir a nota depois exige pedir o documento a clientes que já assinaram** — caro, constrangedor e de baixa taxa de resposta. Essa decisão precisa sair antes do épico 11, não depois.
+**Mas o CPF ou CNPJ passa a ser coletado no checkout desde a primeira venda.** O `product-financeiro` recomendou coletar, e a recomendação foi adotada. O argumento não é sobre qual lado é mais nobre, e sim sobre **qual erro tem volta**:
+
+| Coletar e não precisar | Não coletar e precisar |
+|---|---|
+| Apaga-se uma tabela, registra-se o descarte, acabou. Reversível num deploy | Pedir documento a quem já é cliente: baixa resposta, contato constrangedor, e **quem cancelou antes é inalcançável para sempre** |
+
+> Coletar agora custa um campo; coletar depois custa a base inteira, e nunca fecha em 100%.
+
+A assimetria decide. Em contrapartida, o documento vem com quatro vetos escritos: nunca é identificador, nunca é antifraude, nunca é enriquecido em base externa, nunca sai em log ou resposta a quem não é `proprietario`. E a política de retenção foi **corrigida por escrito** — ela prometia não coletar documento algum, e um documento normativo que promete o que o produto não cumpre torna todo o resto suspeito.
+
+Se a emissão for definitivamente abandonada, a base legal desaparece e a tabela é apagada por inteiro. A saída está escrita para a coleta não virar permanente por inércia.
 
 ---
 

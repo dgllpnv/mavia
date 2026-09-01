@@ -5,7 +5,8 @@
 - **Status:** proposto. Os pontos marcados 🔺 são decisão do dono do produto, com padrão declarado.
 - **Decisões de origem:** **DP-13** (espelhar os três níveis do Organizze) · **DP-14** (Stripe) · **DP-15** (teste de 7 dias, sem cartão), em `docs/decisoes-do-produto.md`
 - **Insumos:** `CONTEXT.md` · `CLAUDE.md` §2 · `docs/pesquisa/organizze-teardown.md` · `docs/pipeline.md` (épicos 11 e 12) · `docs/adr/0003-banksyncprovider.md` · `docs/adr/0018-envelope-encryption.md` · `docs/adr/0019-revogacao-no-banksyncprovider.md` · `docs/produto/arquitetura-informacao.md` §2.12 · `docs/compliance/retencao-e-eliminacao.md` · `docs/seguranca/matriz-de-acesso.md` §2.3 · `docs/arquitetura/sistema.md` §3, §4, §5
-- **Exige alteração em:** `CONTEXT.md` (§9 deste documento) · `docs/compliance/retencao-e-eliminacao.md` §2.2, §3.6, §5.3, §6.1 (§10 deste documento)
+- **Decisões de 2026-09-01 já incorporadas:** DP-16 (sem nota fiscal automática) · DP-17 (vender os três) · DP-18 (nomes) · DP-19 (mensal **e** anual)
+- **Exige alteração em:** `CONTEXT.md`, pelo `arquiteto-dominio-financeiro` (§9.2) · `docs/compliance/retencao-e-eliminacao.md` §2.2, §3.6, §5.3, §6.1 e §11 — **feitas junto com este documento** (§15)
 
 Referência de mercado (teardown, seção de Plano não coberta na navegação; valores informados pelo dono do produto): Organizze **Manual R$ 35**, **Conectado R$ 45** com até 3 contas conectadas, **Conectado Plus R$ 69** com até 10 contas e suporte a PJ, teste de 7 dias.
 
@@ -329,11 +330,13 @@ Vocabulário do `CONTEXT.md`. Colunas comuns de toda tabela de negócio conforme
 
 ### 9.1 Entidades
 
-**`Plano`** — item de catálogo, **em código**, não em tabela. `codigo` (`pessoal | familia | negocio`), `nome`, `preco` (`Money`), `stripe_price_id`, `cotas`, `disponivel_para_compra`, `versao`, `ordem`.
+**`Plano`** — item de catálogo, **em código**, não em tabela. Chave: **`(codigo, intervalo)`** — `codigo` ∈ `pessoal | familia | negocio`, `intervalo` ∈ `mensal | anual`. Campos: `nome`, `preco` (`Money`, declarada, **nunca derivada** — §2.4), `stripe_price_id`, `cotas`, `disponivel_para_compra`, `versao`, `ordem`.
+
+> As `cotas` dependem só do `codigo`; o `intervalo` muda preço e duração do período, jamais o que o plano libera. Um plano anual que desse cotas diferentes do mensal seria um quarto plano com outro nome.
 
 > **Versionamento de preço.** Mudança de preço cria `versao` nova. `Assinatura` guarda `plano_versao` e **mantém o preço da versão que contratou** até uma migração explícita e comunicada. Reajustar silenciosamente quem já é cliente é o caminho mais curto para o estorno.
 
-**`Assinatura`** — uma por `Tenant`. `tenant_id` (único), `plano_codigo`, `plano_versao`, `estado` (`teste | ativa | em_atraso | cancelada | expirada`), `teste_termina_em`, `periodo_inicio`, `periodo_fim`, `cancelada_em`, `cancelamento_efetivo_em`, `stripe_customer_id`, `stripe_subscription_id`, `metodo_ultimos4`, `metodo_marca`, `metodo_expira_em` (mês/ano), `ultimo_evento_em`, `ultimo_evento_id`.
+**`Assinatura`** — uma por `Tenant`. `tenant_id` (único), `plano_codigo`, **`intervalo`** (`mensal | anual`), `plano_versao`, `estado` (`teste | ativa | em_atraso | cancelada | expirada`), `teste_termina_em`, `periodo_inicio`, `periodo_fim`, `cancelada_em`, `cancelamento_efetivo_em`, `stripe_customer_id`, `stripe_subscription_id`, `metodo_ultimos4`, `metodo_marca`, `metodo_expira_em` (mês/ano), `ultimo_evento_em`, `ultimo_evento_id`.
 
 > **Invariantes**
 > - Exatamente uma `Assinatura` por `Tenant`, sempre. O espaço nasce com ela, no estado `teste`.
@@ -342,18 +345,28 @@ Vocabulário do `CONTEXT.md`. Colunas comuns de toda tabela de negócio conforme
 > - `teste_termina_em` é fixado na criação e **imutável**. Prorrogar é uma operação nomeada, auditada, nunca um `UPDATE` solto.
 > - **Nenhuma coluna de PAN, CVV, nome impresso no cartão ou validade completa.** Veto permanente (`retencao-e-eliminacao.md` §2.2). `metodo_ultimos4` e `metodo_marca` existem para o titular reconhecer o próprio cartão; `metodo_expira_em` existe para o aviso de 15 dias antes do vencimento, que evita a falha de pagamento.
 > - `estado` só é escrito pelo processador de eventos (§10.3) ou pelo job do 8º dia. Nenhuma rota de produto o escreve direto.
+> - `intervalo = 'anual' ⟹ periodo_fim = periodo_inicio + 12 meses`, com o dia fixado em `min(dia, ultimo_dia_do_mes)` e sem arrastar o ajuste — a mesma regra de `Recorrencia`.
+> - O preço contratado é o do par `(plano_codigo, intervalo, plano_versao)` e **não muda dentro de um período já pago** (§6.4).
 
-**`Cobranca`** — uma por fatura da Stripe. `stripe_invoice_id` (único), `valor` (`Money`), `estado` (`paga | falhou | reembolsada`), `emitida_em`, `paga_em`, `periodo_inicio`, `periodo_fim`, `documento_fiscal_id`. **Sobrevive à eliminação do espaço** por obrigação fiscal (§11.5).
+**`Cobranca`** — uma por fatura da Stripe. `stripe_invoice_id` (único), `valor` (`Money`), `estado` (`paga | falhou | reembolsada`), `emitida_em`, `paga_em`, `periodo_inicio`, `periodo_fim`, `intervalo`, `documento_fiscal_id` (**reservado e nulo** — não emitimos nota hoje, §11.4.1). **Sobrevive à eliminação do espaço** por obrigação fiscal (§11.5).
 
 **`EventoDeCobranca`** — o livro de idempotência do webhook. `id` = `event.id` da Stripe (**chave primária** — é o mecanismo inteiro), `tipo`, `recebido_em`, `processado_em`, `tentativas`, `resultado`, `evento_criado_em`.
 
 > **Exceção de tenancy, declarada.** O evento chega **antes** de sabermos o tenant. Por isso `eventos_cobranca` **não tem `tenant_id`** e vive fora da RLS, como `outbox_pendencias` e a view `tenants_ativos` (`sistema.md` §3). Para que a exceção seja segura, a tabela **não contém dado pessoal**: só id, tipo, horários e resultado — nunca o payload da Stripe, nunca e-mail, nunca valor. O efeito do evento é aplicado numa segunda transação, com `SET LOCAL app.tenant_id`, sob RLS. *Uma exceção escrita é auditável; uma exceção implícita não é.*
 
+**`DadosFiscais`** — `tenant_id` (PK), `documento`, `tipo_documento` (`cpf | cnpj`), `nome_fiscal` (só para CNPJ), `criado_em`, `atualizado_em`. Tabela **própria**, nunca colunas em `usuarios` ou `assinaturas` (§11.4.3). Escrita só no checkout; leitura só por `proprietario`. Fora da allowlist de toda resposta que não seja a tela de cobrança, junto dos sete campos da regra R-5 da matriz de acesso.
+
+> **Invariantes**
+> - Só existe se houver ou tiver havido `Assinatura` fora do estado `teste`. Nenhum caminho a cria durante o teste.
+> - `tipo_documento = 'cnpj' ⟹ nome_fiscal IS NOT NULL`.
+> - `documento` valida por dígito verificador, **sem nenhuma consulta externa**.
+> - Nunca é chave de nada, nunca indexa busca, nunca aparece em URL (§11.4.4).
+
 **`ListaDeEspera`** (§1.3) — `email`, `instituicao_desejada`, `faixa_disposicao`, `consentimento_versao`, `criado_em`, `avisado_em`, `descadastrado_em`. Sem `tenant_id`: é gente que ainda não é cliente. Base legal **consentimento** (§11.6).
 
 ### 9.2 O que entra no glossário — e uma colisão a resolver antes
 
-Termos novos para `CONTEXT.md`: **`Assinatura`**, **`Plano`**, **`Cota`**, **`Cobranca`**, **`EventoDeCobranca`**, **`ListaDeEspera`**, e os cinco valores de `estado`.
+Termos novos para `CONTEXT.md`: **`Assinatura`**, **`Plano`**, **`Intervalo`** (`mensal | anual`), **`Cota`**, **`Cobranca`**, **`DadosFiscais`**, **`EventoDeCobranca`**, **`ListaDeEspera`**, e os cinco valores de `estado`.
 
 Três decisões de nome, para o `arquiteto-dominio-financeiro`:
 
@@ -388,6 +401,7 @@ Por que precisa ser de um lado só: se os dois lados escrevem, um webhook fora d
 |---|---|
 | Dado de cartão (PAN, CVV, validade). **Nunca tocamos** — Checkout hospedado, e por isso não entramos no escopo PCI-DSS | `Assinatura.estado` e `plano_codigo`: o que este espaço pode fazer agora |
 | Meios de pagamento, 3DS/SCA, antifraude | As `Cota`s e sua verificação (código, S1) |
+| A proração aritmética na troca de plano | A **fórmula de reembolso** do §6.3, que é nossa e não usa divisão |
 | Retentativa de cobrança e calendário de cobrança | Os prazos de graça, o teste de 7 dias e a máquina de estados |
 | Fatura hospedada, recibo, portal do cliente (trocar cartão, cancelar) | O texto de tudo que o cliente lê dentro do produto |
 | O registro autoritativo do que foi cobrado, quando e se deu certo | O registro autoritativo do que o cliente pode ver e escrever |
@@ -408,6 +422,7 @@ Assinamos o mínimo. Cada evento a mais é uma superfície a mais a testar.
 | `customer.subscription.created` · `.updated` · `.deleted` | Portador do estado: `status`, `cancel_at_period_end`, `current_period_end`, e o `price` → `plano_codigo` |
 | `invoice.paid` | Estende o período e grava a `Cobranca` |
 | `invoice.payment_failed` | Entra em `em_atraso` e dispara a régua de avisos |
+| `charge.refunded` | Marca a `Cobranca` como `reembolsada`. Existe porque um reembolso feito à mão no painel da Stripe também precisa chegar até nós — sem ele, o nosso registro diverge do dinheiro |
 
 **Ignorados de propósito:** tudo o mais. Um evento não assinado é um caminho de código que não existe.
 
@@ -420,7 +435,7 @@ Assinamos o mínimo. Cada evento a mais é uma superfície a mais a testar.
 3. **Ordem irrelevante por construção:** o processador **não aplica o payload do evento**. Ele **relê a assinatura na API da Stripe** e projeta o estado corrente. Um evento atrasado que chega depois busca o objeto atual e escreve a mesma coisa. Segunda camada: `ultimo_evento_em` guarda o `created` do evento, e um evento mais antigo que o último aplicado não regride o estado.
 4. **Resposta `2xx` assim que o evento está gravado**, com o trabalho num job. Trabalho lento dentro do handler estoura o tempo da Stripe, que retenta — e retentativa somada a trabalho parcial é exatamente como se cobra duas vezes.
 
-**Saída (nossas chamadas).** Toda chamada mutante leva `Idempotency-Key` **determinística e derivada do domínio** — `assinatura:${tenant_id}:${acao}:${plano_versao}` —, **nunca** um UUID novo por tentativa: uma chave aleatória por tentativa não impede nada, e é o defeito clássico. O botão "Assinar" segue a mesma regra do critério F8: toque duplo cria **uma** assinatura.
+**Saída (nossas chamadas).** Toda chamada mutante leva `Idempotency-Key` **determinística e derivada do domínio** — `assinatura:${tenant_id}:${acao}:${plano_codigo}:${intervalo}:${plano_versao}` para criação e troca, `cobranca:${stripe_invoice_id}:reembolso` para reembolso —, **nunca** um UUID novo por tentativa: uma chave aleatória por tentativa não impede nada, e é o defeito clássico. O `intervalo` entra na chave porque assinar mensal e depois anual no mesmo minuto são duas intenções distintas e a chave não pode colapsá-las. O botão "Assinar" segue a mesma regra do critério F8: toque duplo cria **uma** assinatura, e **reembolsar duas vezes é tão grave quanto cobrar duas vezes**.
 
 **A rota do webhook é pública e assinada.** Ela é exceção declarada ao guard "nega por padrão" (`sistema.md` §4.0): declarada no manifesto como `publica-assinada`, para continuar aparecendo no teste que percorre as rotas. Com limite de taxa próprio, e sem revelar em nenhuma resposta se um `Customer` existe.
 
@@ -440,8 +455,8 @@ Assinamos o mínimo. Cada evento a mais é uma superfície a mais a testar.
 | `assinaturas.stripe_customer_id`, `stripe_subscription_id` | Ligar este espaço à assinatura no provedor de pagamento | Execução de contrato (7º V) | Nosso banco | Vida da assinatura | `apagar` com o espaço |
 | `assinaturas.metodo_ultimos4`, `metodo_marca` | Permitir que o titular reconheça qual cartão está pagando | Execução de contrato | Nosso banco | Até a troca de cartão ou o cancelamento | `apagar` |
 | `assinaturas.metodo_expira_em` | Avisar 15 dias antes de o cartão vencer, evitando a falha de pagamento | Legítimo interesse (7º IX) — interesse do próprio titular em não perder o serviço | Nosso banco | Idem | `apagar` |
-| `cobrancas` (valor, datas, estado, `stripe_invoice_id`) | Provar o que foi cobrado e sustentar a escrituração fiscal | **Obrigação legal** (7º II) | Nosso banco | **5 anos** do documento fiscal | `apagar` |
-| `documento` do pagador (CPF/CNPJ) e demais campos exigidos pela NFS-e | Emitir a nota fiscal de serviço | **Obrigação legal** (7º II) | Ver **DP-16** | **5 anos** | `apagar` |
+| `cobrancas` (valor, datas, estado, `stripe_invoice_id`) | Provar o que foi cobrado e sustentar a escrituração fiscal | **Obrigação legal** (7º II) | Nosso banco | **5 anos** de 1º/jan do ano seguinte à cobrança (CTN art. 173 I) | `apagar` |
+| `dados_fiscais.documento` (CPF ou CNPJ) e `nome_fiscal` | Emitir a nota fiscal do serviço contratado | **Obrigação legal** (7º II) | Nosso banco, tabela própria | Enquanto houver `Cobranca` do tenant dentro do prazo acima | `apagar` a linha. Quatro vetos de uso secundário em §11.4.4 |
 | `eventos_cobranca` | Garantir que um evento repetido não cobre nem altere duas vezes, e permitir apurar uma disputa | Legítimo interesse (7º IX) | Nosso banco, **sem dado pessoal** | **12 meses** | `apagar` |
 | `lista_espera.email` | Avisar uma única vez quando a conexão bancária existir | **Consentimento** (7º I) | Nosso banco | Até o aviso + 30 dias, ou descadastro imediato | `apagar` |
 | E-mail e nome enviados à Stripe | Emitir recibo e permitir que o titular gerencie o próprio pagamento | Execução de contrato | **Stripe** (§11.3) | Retenção da Stripe, declarada na política | — |
@@ -467,21 +482,66 @@ Requisitos bloqueantes, antes da primeira cobrança real:
 3. **Política de privacidade** nomeando a Stripe, a transferência internacional e a retenção fiscal de 5 anos, em português claro, na tela "Dados e privacidade" — não enterrado nos termos.
 4. **Nenhum dado financeiro do espaço** no payload, conforme §11.2.
 
-### 11.4 🔺 DP-16 — a nota fiscal força um dado que juramos não coletar
+### 11.4 DP-16 — nota fiscal, e a decisão sobre CPF/CNPJ
 
-Esta é a descoberta mais dura deste spec, e ela é bloqueante para o lançamento.
+#### 11.4.1 O que o dono decidiu
 
-`retencao-e-eliminacao.md` §2.2 declara: *"CPF ou qualquer documento — não existe coluna no modelo de dados, e criar uma exige ADR."* Mas **vender serviço no Brasil obriga a emitir NFS-e municipal**, e a NFS-e exige o documento do tomador — em vários municípios, também o endereço. A Stripe não emite NFS-e. Não há caminho em que ninguém colete.
+**Sem emissão automática de nota fiscal no lançamento.** Nenhuma integração fiscal entra no épico 11: o produto não emite NFS-e, não chama provedor fiscal, não guarda número de nota. `Cobranca.documento_fiscal_id` fica declarado e **nulo**, reservado.
 
-Três saídas, e a escolha é do dono do produto:
+**Desenho futuro, registrado como comentário e não como implementação:** a intenção do dono é emitir **por conta própria, junto à prefeitura de Salvador (BA)**. Quando isso for feito, três coisas precisam ser verificadas *naquele momento*, com a contabilidade, e não agora: qual sistema municipal está vigente (o padrão nacional de NFS-e vem absorvendo os municipais, e Salvador pode já estar migrada quando a hora chegar), quais campos do tomador são exigidos, e se o endereço entra. **Nada disso é decidido aqui, e nenhuma linha de código de emissão nasce agora.**
 
-| Saída | O que implica |
+Uma frase que não é minha para resolver, e que registro por dever: a obrigação de emitir nasce com a prestação do serviço, não com a decisão de automatizá-la. O intervalo entre a primeira venda e a primeira nota é assunto do dono com a contabilidade dele. **O que é meu é garantir que o dado necessário exista quando a hora chegar — e essa é exatamente a pergunta do §11.4.2.**
+
+#### 11.4.2 A pergunta: coletar CPF/CNPJ no checkout mesmo sem emitir?
+
+**Recomendo coletar. Um campo, obrigatório, no checkout.**
+
+O argumento não é sobre qual lado é mais nobre — os dois são reais. É sobre **qual erro tem volta**:
+
+| Se coletarmos e não precisarmos | Se não coletarmos e precisarmos |
 |---|---|
-| **(a) Provedor fiscal como operador** (NFE.io, eNotas ou equivalente) — *recomendada* | O documento é coletado **na tela de assinatura** e enviado ao provedor fiscal. Guardamos só o `documento_fiscal_id` e o mínimo para reemitir. Exige contrato de operador (art. 39) e entrada em `subprocessadores.md`. É a que menos amplia a nossa superfície |
-| **(b) Emitir por conta própria** | Coluna `documento` em `assinaturas` (não em `usuarios`), coletada só na assinatura, base **obrigação legal**, retenção 5 anos, fora de log, fora de métrica, fora de qualquer finalidade secundária. **Exige ADR emendando a §2.2** |
-| **(c) Contabilidade emite manualmente** | Sem coluna nova no MVP, com custo operacional por cliente e sem escala. Viável só nos primeiros meses |
+| Apagamos uma coluna e uma tabela, executamos o descarte, gravamos em `retencao_execucoes` e acabou. **Custo baixo e reversível em um deploy.** | Temos de pedir documento a quem já é cliente. Baixa taxa de resposta, contato constrangedor ("preciso do seu CPF para uma nota de um serviço que você já pagou"), e **quem cancelou antes do pedido é inalcançável para sempre** — vendas que nunca poderão ser documentadas direito. **Custo alto, crescente com a base, e irreversível.** |
 
-**Padrão enquanto não houver decisão:** (a). E, em qualquer das três, três regras não negociam: o documento é coletado **só de quem assina**, **só no momento de assinar**, e **nunca durante o teste**; não aparece em exportação para outros membros; e a política de privacidade diz, em uma frase, por que ele existe.
+Assimetria decide. O atrito de um campo num checkout brasileiro — onde CPF é esperado, não estranhado — é o preço mais barato disponível para eliminar um retrabalho que só piora com o tempo.
+
+**As duas consequências, escritas:**
+
+**Consequência 1 — o que assumimos ao coletar.** Passamos a guardar um identificador nacional único, que é o dado de correlação por excelência: ele liga a pessoa a qualquer outra base do país. Isso muda o perfil de risco de um vazamento nosso, e por isso vem com os vetos do §11.4.4 e com a exigência de que a §2.2 da política de retenção seja **corrigida por escrito**, e não fique se contradizendo. Um documento normativo que promete não coletar o que o produto coleta é pior do que não ter documento: ele torna todo o resto suspeito.
+
+**Consequência 2 — o que evitamos.** A dívida fiscal retroativa. A partir da primeira venda, cada mês sem o documento é um mês de cobranças que, quando a emissão começar, exigirão uma campanha de coleta com resposta parcial. Coletar agora custa um campo; coletar depois custa a base inteira, e nunca fecha em 100%.
+
+#### 11.4.3 Como fica, exatamente
+
+| Item | Decisão |
+|---|---|
+| **Obrigatório ou opcional** | **Obrigatório**, um campo só ("CPF ou CNPJ"), tipo inferido pelo comprimento. Opcional seria o pior dos mundos: o custo de LGPD por inteiro e metade do benefício, porque a metade não preenchida é exatamente a campanha retroativa que queríamos evitar |
+| **Quando** | **Só no checkout**, só de quem assina. **Nunca durante o teste** — sete dias de produto inteiro sem pedir documento continuam verdadeiros (§11.2) |
+| **Onde** | Tabela própria, **`dados_fiscais`** (`tenant_id` PK, `documento`, `tipo_documento`, `nome_fiscal`), nunca em `usuarios` nem em `assinaturas`. Separar permite allowlist de resposta trivial, restrição por coluna, e apagamento em bloco se a decisão mudar |
+| **Nome** | `nome_fiscal` só é pedido quando o documento é **CNPJ** (razão social). Para CPF, o nome que já temos serve |
+| **Endereço** | **Não coletamos.** A promessa da §2.2 sobre endereço permanece intacta. Se a emissão o exigir, é decisão nova com ADR — não se antecipa coleta "por precaução" |
+| **Validação** | Dígito verificador, que é aritmética local. **Nunca consulta à Receita Federal, Serpro ou qualquer enriquecimento** — isso seria transferência a terceiro e coleta de dado que não pedimos |
+| **Base legal** | **Obrigação legal** (art. 7º II). A obrigação de emitir nasce com a venda; o documento do tomador é elemento necessário dela. A execução diferida não apaga a obrigação — e se o dono decidir **nunca** emitir, a base desaparece e **o dado é apagado junto** (§11.4.5) |
+| **Retenção** | **5 anos contados de 1º de janeiro do ano seguinte ao da `Cobranca`** — o prazo decadencial do CTN art. 173 I, e não um "5 anos" solto sem gatilho. `dados_fiscais` é apagada quando não houver nenhuma `Cobranca` do tenant dentro do prazo |
+
+#### 11.4.4 Os quatro vetos que tornam a coleta defensável
+
+O que a ANPD ataca não é a coleta de CPF para obrigação fiscal — é o CPF virando identificador de uso geral. Portanto, e isso é normativo:
+
+1. **Nunca é identificador.** Não serve para login, não é chave, não aparece em URL, não indexa nada.
+2. **Nunca é antifraude.** Não é usado para detectar teste repetido, conta duplicada ou abuso (§7). A guarda de abuso continua sendo "um teste por usuário", e nada mais.
+3. **Nunca é enriquecido nem consultado** em base externa, pública ou paga.
+4. **Nunca sai:** não vai em log, métrica, notificação, push, e-mail, resposta de API para não-`proprietario`, nem exportação de outro membro. Entra na mesma lista de campos proibidos em resposta da regra R-5 da matriz de acesso.
+
+Qualquer uso fora da emissão fiscal é **finalidade nova** e exige decisão própria. Não há "aproveitando que já temos".
+
+#### 11.4.5 A saída, se a decisão mudar
+
+Se o dono decidir definitivamente não emitir nota: `dados_fiscais` é apagada por inteiro — `DELETE` físico da tabela sob o papel `mavia_retencao` —, a entrada some da política de retenção, e a §2.2 volta ao texto original. Uma entrada em `retencao_execucoes` prova que aconteceu. **Esta saída existe por escrito justamente para que a coleta não vire permanente por inércia.**
+
+#### 11.4.6 Texto no checkout
+
+> **CPF ou CNPJ**
+> Precisamos dele para emitir a nota fiscal do seu pagamento. Usamos **só para isso** — nunca para identificar você, nunca para consultar seus dados em outro lugar, e nunca compartilhamos.
 
 ### 11.5 Efeito nos fluxos de exportação e eliminação
 
@@ -492,7 +552,7 @@ Três saídas, e a escolha é do dono do produto:
 1. **Cancelar a assinatura na Stripe imediatamente** — antes de qualquer apagamento. Continuar cobrando alguém cujos dados apagamos é, ao mesmo tempo, escândalo de cobrança e problema de dado.
 2. **Apagar o `Customer` na Stripe.** Ela retém o que a lei dela exige; isso é limite conhecido e vai declarado na política.
 3. **`assinaturas`** e **`eventos_cobranca`** daquele tenant: apagados.
-4. **`cobrancas` e os documentos fiscais sobrevivem 5 anos**, por obrigação legal. Isso já está previsto na §3.6, e este documento nomeia as tabelas. **É o único lugar onde nome e documento do titular sobrevivem à eliminação** — e por isso precisa estar escrito em português claro na tela "Dados e privacidade", não só nos termos. Uma promessa de eliminação com exceção não declarada é uma promessa falsa.
+4. **`cobrancas` e `dados_fiscais` sobrevivem 5 anos**, por obrigação legal. Isso já está previsto na §3.6, e este documento nomeia as tabelas. **É o único lugar onde nome e documento do titular sobrevivem à eliminação** — e por isso precisa estar escrito em português claro na tela "Dados e privacidade", não só nos termos. Uma promessa de eliminação com exceção não declarada é uma promessa falsa.
 
 **Eliminação do titular** (`DELETE /auth/eu`). Se ele é o único `proprietario` de um espaço com assinatura ativa, vale o bloqueio que já existe (§5.2), acrescido da consequência de cobrança: *"este espaço tem assinatura ativa; cancele ou transfira a propriedade antes."* Ninguém sai deixando uma cobrança órfã rodando.
 
@@ -521,7 +581,7 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 | # | Critério | Seam |
 |---|---|---|
 | P1 | `limitesDoPlano('pessoal').pessoas === 1`, `('familia').pessoas === 5`, `('negocio').espacos === 3`. Todo preço é `Money` em `BRL`; nenhum `number` monetário no módulo `billing` | S1 |
-| P2 | Um teste falha se um `Plano` do catálogo não tiver `stripe_price_id` mapeado no ambiente, ou se um `price_id` do ambiente não estiver no catálogo | S1 + S2 |
+| P2 | Um teste falha se um par `(codigo, intervalo)` do catálogo não tiver `stripe_price_id` mapeado no ambiente, ou se um `price_id` do ambiente não estiver no catálogo. São **seis** pares: três planos × dois intervalos | S1 + S2 |
 | P3 | Com 5 pessoas no espaço e plano Família, `POST /convites` devolve `409` com código `cota_do_plano`, nomeando recurso, cota (`5`), contagem atual (`5`) e as duas saídas. **No mesmo teste**, `POST /lancamentos` devolve `201` — nenhum outro recurso degrada | S2 |
 | P4 | Convite pendente conta na cota: com 4 aceitos e 1 pendente no Família, o 6º convite é recusado | S2 |
 | P5 | Acima da cota (por rebaixamento), nenhuma linha é apagada em nenhuma tabela: contagens antes e depois idênticas para `lancamentos`, `contas`, `cartoes`, `anexos`, `tenant_usuarios` | S2 |
@@ -537,6 +597,21 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 | P10 | Nenhum caminho de código cria assinatura na Stripe sem uma sessão de checkout iniciada pelo usuário. Provado pelo dublê: zero chamadas de criação em todo o fluxo de teste | S2 |
 | P11 | Avisos de fim de teste são enviados em D-3, D-1 e D0, uma vez cada, com a data absoluta no corpo. Rodar o job duas vezes no mesmo dia envia **um** | S2 |
 | P12 | Reativar um espaço `expirada` restaura escrita e todos os membros, sem perder nenhum registro | S2 |
+
+### Anual: preço, reembolso e renovação
+
+| # | Critério | Seam |
+|---|---|---|
+| P12a | O preço anual vem **declarado** do catálogo. Um teste falha se qualquer preço anual for igual a uma multiplicação calculada em tempo de execução a partir do mensal, e afirma os três valores literais: `35000`, `45000`, `69000` centavos | S1 |
+| P12b | `reembolso(valor_pago, meses_iniciados, preco_mensal)` é property-based: o resultado **nunca é negativo**, **nunca excede `valor_pago`**, e é monótono não-crescente em `meses_iniciados`. **Nenhuma divisão** aparece na implementação | S1 |
+| P12c | Caso concreto: Negócio anual (`69000`), cancelado com 3 meses iniciados → reembolso de `48300` centavos, ao centavo | S1 |
+| P12d | Cancelamento dentro de 7 dias devolve **o valor integral**, e não o resultado da fórmula | S1 + S2 |
+| P12e | `meses_iniciados` de um período que começa em 31/01 conta 28/02 e 31/03 como meses 1 e 2, sem arrastar o ajuste | S1 |
+| P12f | Renovação anual sem os avisos de D-30 e D-7 registrados como enviados **não cobra**: o job adia e alerta o operador | S2 |
+| P12g | O aviso de D-30 contém data exata, valor exato, marca e últimos 4 do cartão, e um link de cancelamento que resolve em um passo | S2 |
+| P12h | Reajuste de preço anunciado a menos de 30 dias da renovação: a renovação sai **no preço antigo** | S2 |
+| P12i | Upgrade mensal → anual no meio do mês gera crédito de proração e **nenhuma cobrança retroativa** (asserção sobre o dublê) | S2 |
+| P12j | Reembolsar a mesma `Cobranca` duas vezes produz **um** reembolso na Stripe (mesma `Idempotency-Key`) | S2 |
 
 ### Stripe
 
@@ -567,6 +642,11 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 | P25 | `eventos_cobranca` não contém e-mail, nome, valor nem payload da Stripe. Teste sobre as colunas da tabela | S2 |
 | P26 | Um `membro` recebe `403` em toda rota de cobrança, e sua exportação não contém `metodo_ultimos4` nem documento fiscal | S2 |
 | P27 | Descadastro da lista de espera apaga a linha fisicamente e o e-mail não é mais alcançável por nenhuma consulta | S2 |
+| P28 | Nenhum caminho cria `dados_fiscais` durante o estado `teste`. Sete dias inteiros de uso, e a tabela continua vazia | S2 |
+| P29 | `documento` não aparece em nenhum log, métrica, notificação, e-mail, resposta a `membro`/`visualizador`, nem na exportação de outro membro. Teste de propriedade sobre a allowlist de resposta e sobre o serializador de log | S1 + S2 + S4 |
+| P30 | `documento` não é aceito como parâmetro de busca em nenhuma rota, e não existe índice sobre ele. Teste percorre o schema e o manifesto de rotas | S2 |
+| P31 | A validação do documento **não faz nenhuma chamada de rede**: o processo de teste roda sem rede, como em R-16 | S1 |
+| P32 | `dados_fiscais` de um tenant sem nenhuma `Cobranca` dentro do prazo do CTN é apagada pelo job de retenção; com uma `Cobranca` dentro do prazo, sobrevive | S2 |
 
 ---
 
@@ -586,7 +666,10 @@ Onde o cliente desiste, se irrita ou pede reembolso — em ordem de gravidade.
 | **Abuso do teste sem cartão** | Cadastro | Um teste por usuário + teto de criação de tenants. Troca deliberada: conversão vale mais que o abuso. Métrica vigiada (§7) |
 | **Sensação de refém** — "se eu parar de pagar, perco meu histórico" | Decisão de assinar | `expirada` é leitura completa e permanente; exportação funciona sempre; e isso é dito **na página de preços**, porque é diferencial real |
 | **Preço reajustado sem aviso** | Renovação | Versão de plano congelada na assinatura; migração exige comunicação explícita (§9.1) |
-| **Nota fiscal ausente** — cliente PJ não consegue lançar a despesa | Primeira cobrança | **Bloqueante.** DP-16 precisa estar resolvido antes da primeira venda |
+| **Nota fiscal ausente** — cliente PJ não consegue lançar a despesa e pede o cancelamento | Primeira cobrança PJ | Decidido não emitir agora (DP-16). O documento é coletado desde a primeira venda (§11.4), de modo que a emissão futura não precise de campanha retroativa. Risco residual assumido pelo dono |
+| **Atrito do campo de CPF no checkout** | Checkout | Um campo, com a razão escrita ao lado (§11.4.6). Medir a queda de conversão na etapa; se for material, é decisão nova, não ajuste silencioso |
+| **Renovação anual esquecida** — R$ 690 num cartão doze meses depois | Renovação | Avisos obrigatórios em D-30 e D-7 com valor, data e cancelamento em um clique; renovação **adiada** se o aviso falhar (§6.4) |
+| **Estorno de valor anual** — muito mais danoso à conta na Stripe que um de R$ 35 | Anual | Reembolso proporcional sem perguntar motivo (§6.3) remove o motivo de estornar; avisos de renovação removem a surpresa |
 | **Membro descobre o cartão do proprietário** | Espaço compartilhado | `billing` é exclusivo de `proprietario` (`matriz-de-acesso.md` §2.3); critério P26 |
 
 ---
@@ -597,13 +680,14 @@ Onde a decisão não é minha. Cada uma tem padrão, e o padrão vale enquanto n
 
 | # | Pergunta | Padrão proposto |
 |---|---|---|
-| **DP-16** | Quem emite a NFS-e — e, portanto, quem coleta CPF/CNPJ? | **Provedor fiscal como operador** (§11.4). **Bloqueante para a primeira venda** |
-| **DP-17** | Vender os três planos desde o lançamento, ou só o Pessoal? | **Os três**, diferenciados por pessoas e espaços (§1.2, §2.4). A alternativa é a proposta original do coordenador |
-| **DP-18** | Nomes dos planos | **Pessoal · Família · Negócio** (§2) |
-| **DP-19** | Mensal só, ou mensal e anual? | **Mensal só no lançamento.** Anual multiplica proração e reembolso, e receber 12 meses adiantados por um produto cuja função-bandeira está a trimestres de distância é exatamente a promessa que este documento recusa fazer |
-| **DP-20** | Reembolso além do prazo legal | O arrependimento de **7 dias** do CDC art. 49 é **obrigação**, não escolha. A escolha é ser mais generoso: proponho **reembolso integral da primeira cobrança em até 30 dias, sem perguntar o motivo**. Custa pouco e remove o medo de assinar |
-| **DP-21** | Janela de graça em `em_atraso` | **14 dias**, alinhados à retentativa da Stripe (§6) |
-| **DP-22** | Anunciar preço na lista de espera dos Conectados | **Sim, com compromisso de 12 meses ao preço anunciado** — ou não anunciar nada (§1.3) |
+| **DP-16** ✅ | Emitir nota fiscal automaticamente? | **Não.** Decidido em 2026-09-01. Sem integração fiscal no épico 11; intenção futura de emitir por conta própria junto à prefeitura de **Salvador (BA)**, com os campos a verificar **naquele momento** (§11.4.1). Decorrência resolvida por mim: **coletamos CPF/CNPJ no checkout mesmo assim** (§11.4.2) |
+| **DP-17** ✅ | Vender os três planos desde o lançamento, ou só o Pessoal? | **Os três**, diferenciados por pessoas e espaços. Decidido em 2026-09-01 (§1.2, §2) |
+| **DP-18** ✅ | Nomes dos planos | **Pessoal · Família · Negócio.** Decidido em 2026-09-01 (§2) |
+| **DP-19** ✅ | Mensal só, ou mensal e anual? | **Mensal e anual com desconto.** Decidido em 2026-09-01, **contra a minha recomendação**. Desconto proposto por mim: `anual = 10 × mensal` (§2.4). As consequências que apontei viraram requisito em §2.5, §6.2, §6.3 e §6.4 — o anual só é seguro **com** o reembolso proporcional e os avisos de renovação |
+| **DP-20** 🔺 | Reembolso além do prazo legal | O arrependimento de **7 dias** do CDC art. 49 é **obrigação**, não escolha. A escolha é ser mais generoso: proponho **reembolso integral da primeira cobrança em até 30 dias, sem perguntar o motivo**. Com o anual aprovado, isso deixou de ser gentileza: é o que torna R$ 690 adiantados uma compra sem medo |
+| **DP-21** 🔺 | Janela de graça em `em_atraso` | **14 dias**, alinhados à retentativa da Stripe, iguais para mensal e anual (§6.1) |
+| **DP-22** 🔺 | Anunciar preço na lista de espera da conexão bancária | **Sim, com compromisso de 12 meses ao preço anunciado** — ou não anunciar nada (§1.3) |
+| **DP-23** 🔺 | Confirmar o desconto anual | **`anual = 10 × mensal`** — dois meses grátis, ≈16,7% (§2.4). O dono decidiu *que* haverá anual; *quanto* de desconto ainda é dele |
 
 ---
 
@@ -613,10 +697,10 @@ Nenhum destes é opcional: sem eles, este spec não passa no gate de risco.
 
 | Documento | Mudança |
 |---|---|
-| `CONTEXT.md` | Acrescentar `Assinatura`, `Plano`, `Cota`, `Cobranca`, `EventoDeCobranca`, `ListaDeEspera` e os cinco estados; acrescentar as seis linhas de termos proibidos do §9.2; **renomear `dentro_do_plano` para `dentro_do_planejado`** |
-| `docs/compliance/retencao-e-eliminacao.md` | §3.6 detalhada com as classes do §11.1 (hoje tem duas linhas genéricas); §2.2 emendada conforme a saída escolhida em DP-16; §5.3 nomeando `cobrancas` como sobrevivente e acrescentando o cancelamento na Stripe; §6.1 incluindo `assinatura` e `cobrancas` |
-| `docs/compliance/subprocessadores.md` | **Criar.** Stripe e, conforme DP-16, o provedor fiscal |
-| `docs/adr/` | ADR de billing registrando: fonte de verdade de um lado só (§10.1), teste fora da Stripe (§10.2), catálogo em código (§3). E, se DP-16 for a saída (b), ADR emendando a §2.2 da política de retenção |
-| `docs/produto/arquitetura-informacao.md` | §2.12 "Plano e cobrança" ganha inventário próprio; a página de preços e a lista de espera entram como telas |
+| `CONTEXT.md` | **Com o `arquiteto-dominio-financeiro`, não por este documento.** Acrescentar `Assinatura`, `Plano`, `Intervalo`, `Cota`, `Cobranca`, `DadosFiscais`, `EventoDeCobranca`, `ListaDeEspera` e os cinco estados; acrescentar as linhas de termos proibidos do §9.2; **renomear `dentro_do_plano` para `dentro_do_planejado`** |
+| `docs/compliance/retencao-e-eliminacao.md` | ✅ **Feito neste mesmo passo**, porque a contradição não podia ficar de pé: §2.2 corrigida (o documento fiscal deixa de ser “não coletamos” e vira exceção enumerada, com os quatro vetos); §3.6 substituída pelo mapa completo do §11.1; §5.3 nomeando `cobrancas` e `dados_fiscais` como sobreviventes e acrescentando o cancelamento na Stripe; §6.1 incluindo `assinatura` e `cobrancas`; §11 com a linha DP-16 |
+| `docs/compliance/subprocessadores.md` | **Criar.** Stripe. Provedor fiscal **não entra** — não existe, por decisão de DP-16 |
+| `docs/adr/` | ADR de billing registrando: fonte de verdade de um lado só (§10.1), teste fora da Stripe (§10.2), catálogo em código (§3), e a **coleta de documento fiscal** como exceção nominada à §2.2 — esta última é exigida pelo próprio texto da §2.2 |
+| `docs/produto/arquitetura-informacao.md` | §2.12 “Plano e cobrança” ganha inventário próprio; a página de preços (com o alternador mensal/anual), o checkout e a lista de espera entram como telas |
 | `docs/seguranca/matriz-de-acesso.md` | A linha `billing` já existe e cobre as rotas. Acrescentar a rota de webhook como `publica-assinada` no manifesto |
 | `docs/pipeline.md` | Épico 11 passa a depender do 10 (compartilhamento) de forma dura, e não só por ordem: os níveis 2 e 3 vendem o espaço compartilhado |
