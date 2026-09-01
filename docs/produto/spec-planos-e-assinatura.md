@@ -5,7 +5,7 @@
 - **Status:** proposto. Os pontos marcados 🔺 são decisão do dono do produto, com padrão declarado.
 - **Decisões de origem:** **DP-13** (espelhar os três níveis do Organizze) · **DP-14** (Stripe) · **DP-15** (teste de 7 dias, sem cartão), em `docs/decisoes-do-produto.md`
 - **Insumos:** `CONTEXT.md` · `CLAUDE.md` §2 · `docs/pesquisa/organizze-teardown.md` · `docs/pipeline.md` (épicos 11 e 12) · `docs/adr/0003-banksyncprovider.md` · `docs/adr/0018-envelope-encryption.md` · `docs/adr/0019-revogacao-no-banksyncprovider.md` · `docs/produto/arquitetura-informacao.md` §2.12 · `docs/compliance/retencao-e-eliminacao.md` · `docs/seguranca/matriz-de-acesso.md` §2.3 · `docs/arquitetura/sistema.md` §3, §4, §5
-- **Decisões de 2026-09-01 já incorporadas:** DP-16 (sem nota fiscal automática) · DP-17 (vender os três) · DP-18 (nomes) · DP-19 (mensal **e** anual)
+- **Decisões de 2026-09-01 já incorporadas:** DP-16 (sem nota fiscal automática) · DP-17 (vender os três) · DP-18 (nomes) · DP-19 (mensal **e** anual) · DP-20 (reembolso integral em 30 dias) · DP-21 (graça de 14 dias) · **DP-27 (preços R$ 59 / R$ 79 / R$ 99, anual = 10 × mensal)**
 - **Exige alteração em:** `CONTEXT.md`, pelo `arquiteto-dominio-financeiro` (§9.2) · `docs/compliance/retencao-e-eliminacao.md` §2.2, §3.6, §5.3, §6.1 e §11 — **feitas junto com este documento** (§15)
 
 Referência de mercado (teardown, seção de Plano não coberta na navegação; valores informados pelo dono do produto): Organizze **Manual R$ 35**, **Conectado R$ 45** com até 3 contas conectadas, **Conectado Plus R$ 69** com até 10 contas e suporte a PJ, teste de 7 dias.
@@ -26,7 +26,7 @@ Aceito, e mantenho como regra dura, a parte que importa:
 
 E recuso a conclusão de que isso obrigue a deixar dois planos trancados. **Trancar não é necessário, e é caro em três frentes:**
 
-1. **Uma porta trancada é propaganda do concorrente.** A tabela de preços com dois níveis cinzentos diz ao visitante, no primeiro contato, exatamente o que o produto não faz — e ele já sabe onde isso existe, por R$ 45.
+1. **Uma porta trancada é propaganda do concorrente.** A tabela de preços com dois níveis cinzentos diz ao visitante, no primeiro contato, exatamente o que o produto não faz — e ele já sabe onde isso existe, mais barato. Com os preços da DP-27 esse argumento ficou **mais forte**, não menos: quem cobra acima do mercado não pode se dar ao luxo de abrir a conversa mostrando o que não entrega.
 2. **Garante receita zero nos dois níveis superiores**, que é pior do que a receita pequena que eles renderiam. E é justamente a receita que o ADR 0003 espera para destravar o épico 12.
 3. **Assume, sem necessidade, que o único eixo de diferenciação é o agregador.** Não é.
 
@@ -47,7 +47,13 @@ Quando o épico 12 chegar, a conexão bancária **entra nos níveis 2 e 3 sem au
 ### 1.3 O que faço com a lista de espera, e o que recuso
 
 - **Lista de espera: sim.** Uma seção própria da página de preços, fora dos cartões de plano, com o texto do §11.6. Ela é o instrumento que faltava ao ADR 0003: a revisão trimestral hoje compara custo do agregador contra receita *no escuro*. Uma lista com nome do banco e faixa de disposição a pagar transforma essa revisão numa conta.
-- **Preço anunciado na lista: sim, com compromisso.** Anunciar preço sem compromisso é isca; não anunciar torna o sinal inútil. Regra: *quem entra na lista antes do lançamento paga o preço anunciado por 12 meses, ou não anunciamos preço nenhum.*
+- **Preço anunciado na lista: sim, com compromisso (DP-22, decidida).** Anunciar preço sem compromisso é isca; não anunciar torna o sinal inútil.
+
+  **A DP-27 simplificou isto, e vale registrar por quê.** Não precisamos anunciar um preço *futuro*, porque o §1.2 já promete que a conexão entra em `Família` e `Negócio` **sem aumento de preço**. Logo o preço anunciado é o preço que já está na vitrine — **R$ 79 e R$ 99** —, e o compromisso se enuncia sem inventar número nenhum:
+
+  > *Quem entrar na lista antes do lançamento da conexão bancária mantém o preço vigente hoje por 12 meses contados do dia em que a função entrar no ar.*
+
+  É mais forte do que a versão anterior: um preço que a pessoa pode conferir agora vale mais que uma promessa sobre um número que ainda não existe.
 - **Pré-venda com desconto: recuso.** Receber dinheiro hoje por função de daqui a dois ou três trimestres é, em ordem: reembolso diferido, exposição ao art. 35 do CDC (serviço ofertado e não prestado) e, se o épico atrasar, um evento de estorno em massa que degrada nossa classificação de risco na Stripe e ameaça a conta de pagamentos inteira. O ganho de caixa não paga isso.
 - **Nomes "Conectado" e "Conectado Plus": recuso.** O nome promete o agregador. Além disso são o vocabulário do concorrente, e `CONTEXT.md` é severo com sinônimo importado. Proposta no §2.
 
@@ -63,19 +69,21 @@ Preços em reais, **impostos incluídos** (CDC art. 6º III: o preço à vista t
 
 | | **Mavia Pessoal** | **Mavia Família** | **Mavia Negócio** |
 |---|---|---|---|
-| Preço/mês | **R$ 35** | **R$ 45** | **R$ 69** |
-| Preço/ano — *dois meses grátis* | **R$ 350** | **R$ 450** | **R$ 690** |
-| Pessoas no espaço | **1** | **5** | **10** |
+| Preço/mês | **R$ 59** | **R$ 79** | **R$ 99** |
+| Preço/ano — *dois meses grátis* | **R$ 590** | **R$ 790** | **R$ 990** |
+| Pessoas no espaço | **2** 🔺 | **5** | **10** |
 | Espaços em que é proprietário | **1** | **1** | **3** |
-| Anexos por espaço | **2 GB** | **10 GB** | **30 GB** |
-| Conexões bancárias *(épico 12)* | 0 | **3** | **10** |
+| Anexos por espaço | **5 GB** 🔺 | **20 GB** 🔺 | **50 GB** 🔺 |
+| Conexões bancárias *(épico 12)* | 0 | **3** ⚠️ | **10** ⚠️ |
 | Todo o resto | ilimitado (§4) | ilimitado (§4) | ilimitado (§4) |
+
+🔺 **Cotas revistas por causa do preço — DP-28, confirmação do dono.** Ver §3.1. ⚠️ As cotas de conexão foram espelhadas de um concorrente cujo preço não espelhamos mais; revisão obrigatória no épico 12 (§3.2).
 
 **Nomes — decidido (DP-18):** `Pessoal` · `Família` · `Negócio`. Descartados: *Conectado/Conectado Plus* (o nome promete o agregador e é vocabulário do concorrente); *Básico/Pro/Premium* (não dizem para quem é, e "Básico" ensina o cliente a se sentir mal).
 
 **Os três à venda desde o lançamento — decidido (DP-17).** Diferenciados por pessoas e espaços (§1.2). `disponivel_para_compra = true` nos três. O booleano permanece no catálogo porque é o mecanismo que permitiria fechar um nível sem migração de dado.
 
-**Preços** — mantidos exatamente nos três pontos do Organizze, conforme DP-13. Registro a desvantagem sem enfeite: enquanto a conexão não existir, **a comparação direta nos níveis 2 e 3 é desfavorável** — mesmo preço, entrega diferente. Não há como evitá-la, só como escolher o que se compara. Por isso a página de preços compara Mavia com Mavia, e nunca constrói a tabela lado a lado com o concorrente.
+**Preços — decididos pelo dono (DP-27), e não são mais os do Organizze.** A DP-13 mandou espelhar a **estrutura** de três níveis; a DP-27 desancorou os **valores**. O que sobreviveu do espelho é a forma — três níveis, um teste de 7 dias — e nada mais. §2.6 refaz o raciocínio de posicionamento inteiro, porque preço acima do concorrente não é uma linha diferente na tabela: é outra conversa.
 
 **A linha da conexão bancária aparece na tabela desde já, com valor 0/3/10 e a marca `em desenvolvimento`** — e **fora** da lista do que o plano entrega hoje. É a única menção permitida dentro do cartão de plano. Ela existe para que o cliente que assina hoje saiba, por escrito, qual cota terá quando a função chegar, e para que ninguém possa dizer que descobriu depois.
 
@@ -83,7 +91,7 @@ Preços em reais, **impostos incluídos** (CDC art. 6º III: o preço à vista t
 
 **Desconto proposto: `anual = 10 × mensal`** — "dois meses grátis", ≈16,7%.
 
-Por que 10× e não um percentual: (a) é a forma mais legível de anunciar um desconto em português — "pague 10, use 12" não precisa de conta; (b) produz preços redondos nos três níveis (R$ 350, R$ 450, R$ 690), sem centavo quebrado em nenhuma tela; (c) é discreto o bastante para não estabelecer expectativa de desconto maior no futuro, e essa expectativa é difícil de desfazer.
+Por que 10× e não um percentual: (a) é a forma mais legível de anunciar um desconto em português — "pague 10, use 12" não precisa de conta; (b) produz preços redondos nos três níveis (R$ 590, R$ 790, R$ 990), sem centavo quebrado em nenhuma tela; (c) é discreto o bastante para não estabelecer expectativa de desconto maior no futuro, e essa expectativa é difícil de desfazer. A propriedade (b) sobreviveu à mudança de preço porque o desconto é multiplicativo e inteiro — é a vantagem de ter escolhido um múltiplo em vez de um percentual.
 
 **Regras de dinheiro, não negociáveis:**
 
@@ -102,9 +110,56 @@ A decisão é do dono (DP-19) e é contra a minha recomendação. Registro o que
 |---|---|
 | Proração na troca de plano dentro do período | §6.2 |
 | Reembolso parcial — sem ele, o anual é uma armadilha para um produto sem histórico de retenção no mês 2 | §6.3 |
-| Renovação anual é a cobrança-surpresa clássica: R$ 690 caindo num cartão doze meses depois, de um produto que a pessoa esqueceu que assinou | §6.4, avisos obrigatórios em D-30 e D-7 |
+| Renovação anual é a cobrança-surpresa clássica: **R$ 990** caindo num cartão doze meses depois, de um produto que a pessoa esqueceu que assinou | §6.4, avisos obrigatórios em D-30 e D-7 |
 | Reajuste de preço com anual pago | §6.4 |
-| Estorno (chargeback) de valor alto é muito mais danoso à nossa conta na Stripe do que um de R$ 35 | §13 |
+| Estorno (chargeback) de valor alto é muito mais danoso à nossa conta na Stripe do que um de R$ 59 — e com a DP-27 o pior caso subiu de R$ 690 para **R$ 990** | §13 |
+
+### 2.6 Preço acima do concorrente é promessa implícita — esta é a nossa
+
+Os números, sem enfeite. Entrada a **R$ 59** contra os **R$ 35** do Organizze: **69% mais caro**. Topo a **R$ 99** contra os **R$ 69** do Conectado Plus — **43% mais caro por menos função nominal**, já que o dele inclui dez contas conectadas e o nosso, hoje, nenhuma.
+
+Não é meu papel aprovar o preço. É meu papel dizer o que ele exige, e são quatro coisas.
+
+#### Primeiro: não é hoje que cobramos isso — e isso vira condição, não desculpa
+
+Billing é o **épico 11**. Na ordem do `pipeline.md`, quando a cobrança entra no ar já existem importação de arquivo (6), categorização automática (7), planejamento (8), relatórios (9) e compartilhamento (10). **O produto que custa R$ 59 não é o MVP — é o MVP mais cinco épicos.**
+
+Isso desarma metade da objeção, e por isso mesmo precisa virar regra em vez de consolo:
+
+> **Se o épico 11 vier antes dos épicos 6 a 10, o preço é indefensável e a cobrança espera.** Cobrar R$ 59 por um produto em que todo lançamento é digitado à mão não se sustenta contra um concorrente que cobra R$ 35 e importa extrato. A dependência dura que o `pipeline.md` já registra entre o 11 e o 10 vale igualmente para o 6.
+
+#### Segundo: a comparação vai acontecer, queiramos ou não
+
+O cliente-alvo **vem do Organizze** — é por isso que existe um teardown. Ele vai fazer a conta, e vai fazer todo mês, porque a diferença é recorrente. A página de preços, portanto, não finge que a diferença não existe; ela também não constrói a tabela lado a lado, que é a forma de perder num eixo escolhido pelo outro. **Comparamos Mavia com Mavia**, e deixamos a comparação externa para o que ela é: uma conta que o cliente faz sozinho, e que precisa ter uma resposta.
+
+A resposta é a seção abaixo. Se ela não convencer, o preço não se sustenta — e isso é informação, não derrota.
+
+#### Terceiro: a promessa, declarada
+
+Preço de topo cria expectativa de produto de topo. Declarar qual é a expectativa é o que impede que cada pessoa invente a sua — e que a inventada seja "então deve ter conexão bancária".
+
+| A promessa | Onde ela já vive | O que a prova |
+|---|---|---|
+| **Você entende sua fatura** — ela é um objeto com ciclo, composição e estado, não uma lista de compras filtrada. O concorrente não tem isso | `arquitetura-informacao.md` §2.5 | C1–C8; a composição fecha **ao centavo** (C5) |
+| **Nenhum número na tela pode estar errado sem aviso** | `CLAUDE.md`, e é a regra que atravessa a IA inteira | Divergência de saldo é **incidente**; `—` em vez de `0,00`; toda soma com a base declarada |
+| **Pagamento de fatura nunca vira despesa** — o erro clássico da categoria | regra 12 | C2, com teste E2E dedicado |
+| **Você não é o produto** — IA local (DP-11), proibido treinar com dado de cliente (DP-8), nenhum script de terceiro na tela em que o saldo aparece, nenhum analytics | `retencao-e-eliminacao.md`, `subprocessadores.md` §4 | Teste de CI roda `inteligencia` **sem rede** (R-16) |
+| **Seu histórico não é refém da assinatura** — `expirada` é leitura completa e permanente | §4, §6.5 | P7 |
+| **Portabilidade de verdade** — ZIP com um `.jsonl` por entidade, anexos e manifesto, não um CSV que perde parcelamento | `retencao-e-eliminacao.md` §6.2 | O teste de schema quebra o build |
+| **Desfazer o que der errado** — importação em lote reversível por 7 dias | `arquitetura-informacao.md` §2.10 | I4 |
+| **Resposta quando você escrever** | 🔺 **DP-28**, abaixo | — |
+
+**A única promessa dessa lista que ainda não tem dono é a última** — e é a mais barata de quebrar. A R$ 35 com um concorrente igual, um chamado sem resposta é irritação. A R$ 59 acima do mercado, é o cancelamento. Padrão que proponho: **primeira resposta útil em 1 dia útil**, dita na página de preços. Se não formos honrar, é melhor não escrever.
+
+#### Quarto: o que a promessa proíbe
+
+Preço de topo remove desculpas que um produto barato tem:
+
+- **Nenhuma cota que exista só para empurrar upgrade.** A lista do §4 é normativa, e agora ela é também argumento comercial.
+- **Nenhum recurso essencial atrás do nível superior.** Relatórios, importação, exportação e histórico estão nos três planos, e permanecem.
+- **Nenhuma tela de retenção com atrito no cancelamento**, nenhum "fale conosco para cancelar", nenhum botão escondido.
+- **Nenhuma urgência inventada:** sem contador regressivo, sem "vagas limitadas", sem preço riscado que nunca foi praticado.
+- **Nenhuma menção à conexão bancária como entregue**, em nenhuma tela, até o épico 12 existir. Com preço acima do concorrente, insinuar a função que ele tem e nós não é a receita exata do reembolso.
 
 ---
 
@@ -119,9 +174,27 @@ A decisão é do dono (DP-19) e é contra a minha recomendação. Registro o que
 | `armazenamento_anexos_bytes` | Soma de `anexos.tamanho_bytes` não excluídos do `Tenant` | Único custo em bytes que cresce sem teto natural. Lançamento é texto; foto de recibo não |
 | `conexoes` | `conexoes` com `status = 'ativa'` (épico 12) | Custo marginal real e recorrente do agregador (ADR 0003). É a única cota que corresponde a uma fatura que a Mavia paga por unidade |
 
-Contagem sempre no servidor, sob RLS, na mesma transação da criação. Cota conferida na UI é conveniência; cota conferida só na UI é defeito.
+Contagem sempre no servidor, sob RLS, na mesma transação da criação. Cota conferida na UI é conveniência; cota conferida só na UI é defeito.O catálogo vive em **código** — `packages/domain/billing/catalogo.ts` —, não em tabela. Mesmo argumento que a política de retenção usa (`retencao-e-eliminacao.md` §1): configuração versionada em código não é alterável em produção sem deploy e sem teste, e `limitesDoPlano(codigo)` vira função pura testável em S1. A Stripe guarda os `price_id`; o catálogo guarda o mapa.
 
-O catálogo vive em **código** — `packages/domain/billing/catalogo.ts` —, não em tabela. Mesmo argumento que a política de retenção usa (`retencao-e-eliminacao.md` §1): configuração versionada em código não é alterável em produção sem deploy e sem teste, e `limitesDoPlano(codigo)` vira função pura testável em S1. A Stripe guarda os `price_id`; o catálogo guarda o mapa.
+### 3.1 🔺 DP-28 — as cotas que o preço novo obriga a rever
+
+*Cobrar mais e limitar igual é a combinação que produz cancelamento.* Duas cotas mudam, e as duas custam quase nada:
+
+| Cota | Antes | **Proposto** | Por quê |
+|---|---|---|---|
+| `pessoas` no **Pessoal** | 1 | **2** | A R$ 35 um plano solo é "o barato". A R$ 59 acima do mercado, dizer a alguém que ele não pode dividir o controle com quem divide as contas dele é a objeção mais previsível que existe — e o caso mais comum de finanças pessoais no Brasil **é um casal**. Uma pessoa a mais é uma sessão a mais; o custo é marginal e o motivo de cancelamento que ela remove, não |
+| `armazenamento_anexos_bytes` | 2 / 10 / 30 GB | **5 / 20 / 50 GB** | Armazenamento é o mais barato do que limitamos, e a cota existe para conter o caso patológico, não o normal. Triplicar mantém o teto e apaga a objeção |
+
+**Não mudam, e a razão importa:** `pessoas` em Família (5) e Negócio (10) continuam separando os níveis de verdade; `espacos` (1/1/3) é o eixo real do Negócio. Aumentar tudo apagaria a diferença entre os planos, e um plano que não se distingue do de baixo não é generoso — é confuso.
+
+**O que eu recuso fazer:** inventar função nova para justificar o preço. Produto que ganha recurso para defender preço fica inchado e continua caro. A resposta ao preço é a barra de qualidade do §2.6, não mais superfície.
+
+### 3.2 ⚠️ As cotas de conexão bancária precisam ser revistas no épico 12
+
+`0 / 3 / 10` foi **espelhado do Organizze** quando espelhávamos também o preço dele. A DP-27 desfez a âncora e deixou o espelho pendurado: com Família a R$ 79 oferecendo três conexões contra as três dele a R$ 45, a comparação no momento do lançamento da função seria pior do que a de hoje.
+
+**Não corrijo agora, e a razão é honesta:** conexão tem custo marginal real por unidade (ADR 0003), e escolher um número novo sem a cotação do agregador seria chutar. Fica registrado como revisão obrigatória, na mesma reunião trimestral que decide contratar o agregador — junto do preço, não depois dele.
+
 
 ---
 
@@ -207,7 +280,7 @@ Cinco estados. Uma `Assinatura` por `Tenant`.
 
 Mensal e anual usam **os mesmos cinco estados**, a mesma janela semiaberta `[periodo_inicio, periodo_fim)` e a mesma janela de graça de 14 dias. Muda só a duração do período e o `stripe_price_id`. Nenhum estado novo, nenhum ramo novo — a diferença é um campo, `Assinatura.intervalo`.
 
-A graça de 14 dias vale igualmente para o anual, e ali ela importa mais: uma cobrança de R$ 690 falha por limite de cartão com muito mais frequência que uma de R$ 69, e quase sempre por motivo que o titular resolve em um dia.
+A graça de 14 dias vale igualmente para o anual, e ali ela importa mais: uma cobrança de **R$ 990** falha por limite de cartão com muito mais frequência que uma de R$ 99, e quase sempre por motivo que o titular resolve em um dia. Com a DP-27, a diferença entre a cobrança mensal e a anual passou de 10× sobre R$ 69 para 10× sobre R$ 99 — a janela de graça ficou mais valiosa, não menos.
 
 ### 6.2 Upgrade, downgrade e troca de intervalo
 
@@ -225,7 +298,7 @@ A graça de 14 dias vale igualmente para o anual, e ali ela importa mais: uma co
 Três camadas, da mais forte para a mais fraca:
 
 1. **Arrependimento — 7 dias, integral, sem pergunta.** CDC art. 49. É **obrigação legal**, não política comercial, e vale igualmente para mensal e anual.
-2. **Primeira cobrança, até 30 dias — integral** (🔺 DP-20, pendente; padrão proposto). Custa pouco e remove o medo de assinar o anual.
+2. **Primeira cobrança, até 30 dias — integral, sem perguntar o motivo** (DP-20, **decidida**). Vale **uma vez por Tenant** e só para a **primeira** `Cobranca` da assinatura — nunca para uma renovação, o que impede que ela vire assinatura anual gratuita renovável. Com a DP-27 ela deixou de ser gentileza: é o que torna R$ 990 adiantados uma compra sem medo, e é a mitigação mais barata que temos contra estorno de valor alto.
 3. **Cancelamento depois disso — proporcional aos meses não iniciados**, a qualquer momento, sem perguntar o motivo:
 
 ```
@@ -235,7 +308,7 @@ reembolso = max(0, valor_pago − meses_iniciados × preco_mensal_do_plano)
 **Por que esta fórmula e não "valor pago ÷ 12 × meses restantes".** Três razões, e as três importam:
 
 - **Não há divisão.** Uma subtração e uma multiplicação em centavos, e nenhum arredondamento a declarar — a regra 3 do `CLAUDE.md` não é acionada e `ratear` não entra no caminho do dinheiro. A alternativa exigiria dividir o preço anual por 12, que não é exato em nenhum dos três planos.
-- **Devolve o desconto que não foi ganho.** Quem usou 3 meses do Negócio anual recebe `69000 − 3 × 6900 = R$ 483,00` e terá pago exatamente a tarifa mensal cheia pelo que usou. Sem isso, o desconto anual vira opção grátis: assina anual, cancela no mês 2, e paga barato pelo uso mensal.
+- **Devolve o desconto que não foi ganho.** Quem usou 3 meses do Negócio anual recebe `99000 − 3 × 9900 = R$ 693,00` e terá pago exatamente a tarifa mensal cheia pelo que usou. Sem isso, o desconto anual vira opção grátis: assina anual, cancela no mês 2, e paga barato pelo uso mensal. **A fórmula é indiferente ao preço** — a DP-27 mudou os números e não mudou uma linha desta regra, que é a propriedade que se quer de uma regra de dinheiro.
 - **Nunca cobra a mais.** O `max(0, …)` garante que o pior caso é reembolso zero, jamais uma cobrança de saída.
 
 `meses_iniciados` conta pela **Ancoragem de dia do mês** do `CONTEXT.md` — o termo que o `arquiteto-dominio-financeiro` promoveu justamente porque a regra estava reescrita em quatro lugares: o mês `k` começa em `periodo_inicio + k meses`, com o dia sempre calculado a partir do **dia âncora original** e **sem arrastar o ajuste**. Contagem em `America/Sao_Paulo`, janela semiaberta. A `Assinatura` é a quinta entidade a usá-la, e a razão de o termo existir é exatamente esta: que a quinta não divirja das quatro.
@@ -249,7 +322,7 @@ O reembolso é executado **na Stripe**, com `Idempotency-Key` derivada de `cobra
 **Renovação nunca é surpresa.** Dois avisos obrigatórios antes de toda renovação anual, por e-mail e no app:
 
 - **D-30** e **D-7**, cada um com: a data exata da cobrança, o **valor exato**, o cartão que será usado (marca e últimos 4) e um link de cancelamento que funciona em um clique, sem passar por tela de retenção.
-- Se qualquer um dos dois falhar em ser enviado, a renovação **é adiada**, não executada às cegas. Cobrar R$ 690 de alguém que não foi avisado é o caminho mais curto para um estorno, e estorno de valor alto é o dano do §13.
+- Se qualquer um dos dois falhar em ser enviado, a renovação **é adiada**, não executada às cegas. Cobrar R$ 990 de alguém que não foi avisado é o caminho mais curto para um estorno, e estorno de valor alto é o dano do §13.
 
 **Reajuste de preço.** `Assinatura` guarda `plano_versao` e o preço contratado.
 
@@ -272,6 +345,21 @@ Texto normativo, exibido no diálogo de cancelamento **antes** da confirmação:
 
 **Conciliação com `retencao-e-eliminacao.md`:** os prazos daquela política são disparados por `deleted_at`, por pedido do titular ou por obrigação legal. **`assinaturas.estado` não é gatilho de retenção em nenhuma classe** — cancelar não encurta prazo nenhum, e expirar não apaga nada. Isso é coerente com a **DP-5** (conta inativa não é eliminada) e precisa ser afirmado na política de privacidade, porque é diferença real em relação ao mercado.
 
+### 6.6 Quem perde o acesso e continua sendo cobrado
+
+**DP-25 está confirmada: não existe canal humano de recuperação.** Quem perde a Conta Google e não tem senha nem MFA perde o espaço. É decisão de segurança, e não se re-litiga aqui — qualquer canal de recuperação humana é também o caminho de quem se passa pelo cliente.
+
+Mas ela cria um caso que a autenticação não resolve e a **cobrança** precisa resolver: a pessoa perdeu o acesso, e a assinatura continua sendo cobrada todo mês, num cartão que funciona. Deixar assim é cobrar indefinidamente por um serviço que o titular comprovadamente não consegue usar, e para isso não há defesa — nem no CDC, nem no bom senso.
+
+> **Regra: o suporte pode cancelar a assinatura sem nunca dar acesso ao espaço.**
+
+As duas coisas são separáveis, e é a separação que torna isto seguro: cancelar cobrança não lê nenhum dado financeiro, não devolve sessão, não expõe nada, e o pior caso de um impostor bem-sucedido é **interromper uma cobrança** — dano reversível e sem valor para o atacante.
+
+- **Verificação:** o que só o pagador sabe — últimos 4 dígitos e marca do cartão, valor e data da última `Cobranca`. **Nunca por documento**: `dados_fiscais.documento` não é identificador, por veto do §11.4.4, e usá-lo aqui seria exatamente o uso secundário que aquele veto proíbe.
+- **O suporte faz:** cancela, com efeito no fim do período pago, e registra em `auditoria` como evento de segurança.
+- **O suporte nunca faz:** entra no espaço, exporta, reemite acesso, vincula outra Conta Google, lê um lançamento. `spec-autenticacao.md` é literal nisso e esta regra não abre exceção alguma.
+- **O espaço vai para `expirada` e não é apagado** (DP-5). Se a pessoa recuperar a Conta Google um dia, o histórico está inteiro lá.
+
 ---
 
 ## 7. O oitavo dia — o fim do teste sem cartão
@@ -286,7 +374,28 @@ Texto normativo, exibido no diálogo de cancelamento **antes** da confirmação:
 6. **Reativar é um clique**, e ao reativar tudo volta exatamente como estava — inclusive as pessoas que estavam no espaço.
 7. **O teste dá as cotas do nível Família**, para que a experimentação inclua o compartilhamento, que é o argumento de venda do nível 2. Consequência: quem convidou 4 pessoas e depois tenta assinar o Pessoal recebe a recusa do §8.1, que é honesta e é, ela própria, o argumento para o Família.
 
-**Abuso do teste sem cartão.** Sem cartão, um teste novo custa um e-mail novo. Guardas aceitáveis: **um teste por usuário** (não por espaço) e o teto de criação de tenants que a segurança já impôs (A-18). Um segundo espaço criado pela mesma pessoa não ganha teste novo — ele é coberto pela cota `espacos` do plano dela. Guardas que **recusamos**: exigir cartão, exigir documento, impressão digital de dispositivo. A perda por abuso é menor que a perda de conversão de pedir cartão, e essa é uma troca deliberada. Métrica para vigiar: proporção de testes que nunca passam de 5 lançamentos e vêm do mesmo IP.
+### 7.1 A R$ 59, sete dias é a parte mais frágil do funil
+
+Digo isto sem re-litigar a DP-15, e com uma proposta que não a altera.
+
+**O que justifica o preço só fica legível depois que uma fatura fecha.** A régua do ciclo, a composição, o realizado × previsto, o teto estourando no fim do mês — nada disso aparece em sete dias para a maioria das pessoas, porque a maioria dos cartões não fecha dentro da primeira semana de uso. A pessoa é convidada a decidir sobre R$ 59 **antes de ver aquilo pelo que está pagando a mais**.
+
+As duas metades da DP-15 se moveram em direções opostas com a DP-27, e vale registrar:
+
+- **"Sem cartão" ficou mais valiosa.** Quanto maior o preço, maior a hesitação no checkout — e mais caro seria exigir cartão só para experimentar. A decisão de não pedir cartão sai **fortalecida** pelo preço novo.
+- **"Sete dias" ficou apertada.** Era suficiente para responder *"é parecido com o outro?"*. É curta para responder *"vale 69% a mais?"*.
+
+**Mitigação que não mexe na DP-15**, e que é possível porque conhecemos o `closing_day` do cartão que a própria pessoa cadastrou:
+
+> **Um único e-mail de retorno, no dia em que a primeira fatura dela fecha:** *"Sua fatura de setembro fechou. Veja como ela ficou."* Um clique reativa.
+
+É o instante exato em que o produto fica legível, e é um fato que só nós sabemos. Regras que o mantêm honesto: **um por Tenant, para sempre**; só existe se houver `Cartao` cadastrado — sem cartão não há e-mail, e não inventamos pretexto; não é sequência de marketing, e o descadastro vale para sempre.
+
+**🔺 DP-29 — reavaliar 7 → 14 dias, com dado.** Não é pedido de reversão; é pedido de reavaliação com número: conversão por coorte de dia-8, partida entre quem viu e quem não viu uma fatura fechar. Catorze dias cobririam um fechamento para a maioria. Se a coorte que viu converter muito acima da que não viu, a resposta está dada e não precisa de opinião.
+
+### 7.2 Abuso do teste sem cartão
+
+Sem cartão, um teste novo custa um e-mail novo — e a DP-27 **aumentou o prêmio do abuso**, porque um teste vale agora R$ 59 em vez de R$ 35. Guardas aceitáveis: **um teste por usuário** (não por espaço) e o teto de criação de tenants que a segurança já impôs (A-18, DP-26: 3 por dia, 10 ativos). Um segundo espaço criado pela mesma pessoa não ganha teste novo — ele é coberto pela cota `espacos` do plano dela. Guardas que **recusamos**: exigir cartão, exigir documento, impressão digital de dispositivo. A perda por abuso continua menor que a perda de conversão de pedir cartão — e a margem **cresceu** com o preço novo, porque quanto mais alto o preço, mais hesitação o cartão antecipado provoca (§7.1). A troca é deliberada e ficou mais confortável, não menos. Métrica para vigiar: proporção de testes que nunca passam de 5 lançamentos e vêm do mesmo IP.
 
 ---
 
@@ -371,7 +480,7 @@ O `arquiteto-dominio-financeiro` apontou a lacuna certa: `paga | falhou | reembo
 > - `0 <= valor_reembolsado <= valor`, na mesma moeda. *(declarada pelo `arquiteto-dominio-financeiro`)*
 > - **`valor_reembolsado > 0` implica `estado = 'paga'`.** Não se devolve o que nunca entrou. É exatamente a invariante que o enum único não conseguia enunciar.
 > - `valor` é imutável depois de emitida. `valor_reembolsado` **é projeção da releitura na Stripe** (§10.4), nunca incrementado por delta do payload de um evento. Um reembolso que falha no provedor simplesmente não aparece — e é isso que mantém a §10.1 verdadeira também para o reembolso, e não só para a cobrança.
-> - A UI mostra os dois eixos juntos e nunca só um: *"Paga · R$ 690,00 · reembolsada em parte (R$ 483,00)"*. "Reembolsada" sozinha não é informação — é metade dela.
+> - A UI mostra os dois eixos juntos e nunca só um: *"Paga · R$ 990,00 · reembolsada em parte (R$ 693,00)"*. "Reembolsada" sozinha não é informação — é metade dela.
 > - Quando a emissão fiscal existir (§11.4.1), `valor_reembolsado > 0` exigirá nota de cancelamento ou substitutiva. Registrado agora para que a decisão futura não descubra o caso tarde.
 
 **`EventoDeCobranca`** — o livro de idempotência do webhook. `id` = `event.id` da Stripe (**chave primária** — é o mecanismo inteiro), `tipo`, `recebido_em`, `processado_em`, `tentativas`, `resultado`, `evento_criado_em`.
@@ -617,6 +726,8 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 | # | Critério | Seam |
 |---|---|---|
 | P6 | Espaço criado nasce com exatamente uma `Assinatura` em `teste`, `teste_termina_em = criado_em + 7 dias` calculado em `America/Sao_Paulo`, e cotas do Família | S2 |
+| P6a | O e-mail de retorno do §7.1 é enviado **uma vez por Tenant, para sempre**, e só existe se houver `Cartao` cadastrado. Rodar o job em dois fechamentos consecutivos envia **um** | S2 |
+| P6b | Cancelamento pelo suporte (§6.6) cancela a assinatura e **não** cria sessão, não devolve token e não lê nenhuma tabela financeira. Registrado em `auditoria` com `classe = 'seguranca'` | S2 |
 | P7 | No 8º dia sem assinatura: todo `GET` responde `200`; toda rota mutante responde `402` com explicação; **`POST /exportacoes` responde `202`** | S2 |
 | P8 | Em `em_atraso`, `POST /lancamentos` responde `201`. A degradação só ocorre ao fim dos 14 dias | S2 |
 | P9 | Em `cancelada` com `periodo_fim` no futuro, escrita continua funcionando; no instante de `periodo_fim`, e não antes, o estado vira `expirada` | S2 |
@@ -628,17 +739,17 @@ Verificáveis por quem não participou desta conversa. Seams conforme `sistema.m
 
 | # | Critério | Seam |
 |---|---|---|
-| P12a | O preço anual vem **declarado** do catálogo. Um teste falha se qualquer preço anual for igual a uma multiplicação calculada em tempo de execução a partir do mensal, e afirma os três valores literais: `35000`, `45000`, `69000` centavos | S1 |
+| P12a | O preço anual vem **declarado** do catálogo. Um teste falha se qualquer preço anual for igual a uma multiplicação calculada em tempo de execução a partir do mensal, e afirma os seis valores literais: mensal `5900`, `7900`, `9900`; anual `59000`, `79000`, `99000` centavos | S1 |
 | P12b | `reembolso(valor_pago, meses_iniciados, preco_mensal)` é property-based: o resultado **nunca é negativo**, **nunca excede `valor_pago`**, e é monótono não-crescente em `meses_iniciados`. **Nenhuma divisão** aparece na implementação | S1 |
-| P12c | Caso concreto: Negócio anual (`69000`), cancelado com 3 meses iniciados → reembolso de `48300` centavos, ao centavo | S1 |
-| P12d | Cancelamento dentro de 7 dias devolve **o valor integral**, e não o resultado da fórmula | S1 + S2 |
+| P12c | Caso concreto: Negócio anual (`99000`), cancelado com 3 meses iniciados → reembolso de `69300` centavos, ao centavo | S1 |
+| P12d | Cancelamento dentro de 7 dias devolve **o valor integral**, e não o resultado da fórmula. O mesmo vale até 30 dias na **primeira** `Cobranca` (DP-20); na segunda `Cobranca` da mesma assinatura, a fórmula volta a valer | S1 + S2 |
 | P12e | `meses_iniciados` de um período que começa em 31/01 conta 28/02 e 31/03 como meses 1 e 2, sem arrastar o ajuste | S1 |
 | P12f | Renovação anual sem os avisos de D-30 e D-7 registrados como enviados **não cobra**: o job adia e alerta o operador | S2 |
 | P12g | O aviso de D-30 contém data exata, valor exato, marca e últimos 4 do cartão, e um link de cancelamento que resolve em um passo | S2 |
 | P12h | Reajuste de preço anunciado a menos de 30 dias da renovação: a renovação sai **no preço antigo** | S2 |
 | P12i | Upgrade mensal → anual no meio do mês gera crédito de proração e **nenhuma cobrança retroativa** (asserção sobre o dublê) | S2 |
 | P12j | Reembolsar a mesma `Cobranca` duas vezes produz **um** reembolso na Stripe (mesma `Idempotency-Key`) | S2 |
-| P12k | `reembolso` é **derivado**: não existe coluna com esse nome no schema, e um teste percorre a tabela para provar. Com `valor = 69000` e `valor_reembolsado = 48300`, a derivação dá `parcial`; com `69000`, `integral`; com `0`, `nenhum` | S1 + S2 |
+| P12k | `reembolso` é **derivado**: não existe coluna com esse nome no schema, e um teste percorre a tabela para provar. Com `valor = 99000` e `valor_reembolsado = 69300`, a derivação dá `parcial`; com `99000`, `integral`; com `0`, `nenhum` | S1 + S2 |
 | P12l | Gravar `valor_reembolsado > 0` numa `Cobranca` com `estado <> 'paga'` é **rejeitado** pelo banco, não por `if` na aplicação | S2 |
 | P12m | Após um reembolso parcial, `Cobranca.valor_reembolsado` é igual ao que a Stripe reporta na releitura, e não à soma dos deltas dos eventos recebidos — provado entregando o mesmo evento duas vezes e um evento fora de ordem | S2 |
 
@@ -686,7 +797,9 @@ Onde o cliente desiste, se irrita ou pede reembolso — em ordem de gravidade.
 | Risco | Onde | Mitigação |
 |---|---|---|
 | **O 8º dia** — o cliente experimentou, gostou, e no dia seguinte encontra o produto trancado sem ter entendido que ia acontecer | Fim do teste | Data absoluta desde o dia 1; três avisos; dashboard preservado; leitura e exportação permanentes; zero cobrança sem cartão (§7) |
-| **A comparação com o Organizze nos níveis 2 e 3** — mesmo preço, sem conexão bancária | Página de preços | Vender o que entregamos (pessoas e espaços), nunca listar a conexão como entregue, e prometer que ela entra sem aumento de preço (§1.2) |
+| **O preço de entrada, 69% acima do concorrente** — é o maior risco isolado deste documento, e nenhuma função do produto o mitiga sozinha | Página de preços, primeiro contato | §2.6 inteiro: a ordem dos épicos como condição, a promessa declarada e o que ela proíbe. **Métrica que decide:** conversão da página de preços e motivo declarado no cancelamento nos três primeiros meses |
+| **A comparação com o Organizze nos três níveis** — mais caro, e sem conexão bancária em nenhum | Página de preços | Vender o que entregamos (pessoas e espaços), nunca listar a conexão como entregue, prometer que ela entra sem aumento de preço (§1.2), e comparar Mavia com Mavia (§2.6) |
+| **Sete dias insuficientes para justificar o preço** — a pessoa decide antes de ver a fatura fechar | Fim do teste | E-mail único de retorno no fechamento da primeira fatura (§7.1); DP-29 para reavaliar o prazo com dado |
 | **Webhook perdido** — o cliente pagou e continua bloqueado | Após o pagamento | Reconciliação diária + botão "já paguei" que força a releitura (§10.5) |
 | **Cobrança duplicada** | Assinar, retentativa de webhook | Reivindicação por `event.id`, releitura em vez de aplicação de payload, `Idempotency-Key` determinística, proteção de toque duplo (§10.4) |
 | **Cartão vencido derruba a sincronização bancária** — "meu banco parou e eu não sabia" | `em_atraso` → conexões pausadas | Aviso 15 dias antes do vencimento do cartão; 14 dias de produto inteiro em atraso; avisos em D0/D15/D25 antes de revogar (§8.3) |
@@ -697,8 +810,10 @@ Onde o cliente desiste, se irrita ou pede reembolso — em ordem de gravidade.
 | **Preço reajustado sem aviso** | Renovação | Versão de plano congelada na assinatura; migração exige comunicação explícita (§9.1) |
 | **Nota fiscal ausente** — cliente PJ não consegue lançar a despesa e pede o cancelamento | Primeira cobrança PJ | Decidido não emitir agora (DP-16). O documento é coletado desde a primeira venda (§11.4), de modo que a emissão futura não precise de campanha retroativa. Risco residual assumido pelo dono |
 | **Atrito do campo de CPF no checkout** | Checkout | Um campo, com a razão escrita ao lado (§11.4.6). Medir a queda de conversão na etapa; se for material, é decisão nova, não ajuste silencioso |
-| **Renovação anual esquecida** — R$ 690 num cartão doze meses depois | Renovação | Avisos obrigatórios em D-30 e D-7 com valor, data e cancelamento em um clique; renovação **adiada** se o aviso falhar (§6.4) |
-| **Estorno de valor anual** — muito mais danoso à conta na Stripe que um de R$ 35 | Anual | Reembolso proporcional sem perguntar motivo (§6.3) remove o motivo de estornar; avisos de renovação removem a surpresa |
+| **Renovação anual esquecida** — R$ 990 num cartão doze meses depois | Renovação | Avisos obrigatórios em D-30 e D-7 com valor, data e cancelamento em um clique; renovação **adiada** se o aviso falhar (§6.4) |
+| **Cobrança de quem perdeu o acesso** (DP-25) — pagar todo mês por um espaço em que não se consegue entrar | Perda da Conta Google | Suporte cancela a assinatura sem jamais dar acesso ao espaço (§6.6) |
+| **Estorno de valor anual** — muito mais danoso à conta na Stripe que um de R$ 59 | Anual | Reembolso proporcional sem perguntar motivo (§6.3) remove o motivo de estornar; avisos de renovação removem a surpresa |
+| **Suporte sem resposta a preço de topo** | Pós-venda | 🔺 DP-28: primeira resposta útil em 1 dia útil, dita na página de preços. É a promessa mais barata de quebrar e a mais cara de ter quebrado |
 | **Membro descobre o cartão do proprietário** | Espaço compartilhado | `billing` é exclusivo de `proprietario` (`matriz-de-acesso.md` §2.3); critério P26 |
 
 ---
@@ -713,10 +828,12 @@ Onde a decisão não é minha. Cada uma tem padrão, e o padrão vale enquanto n
 | **DP-17** ✅ | Vender os três planos desde o lançamento, ou só o Pessoal? | **Os três**, diferenciados por pessoas e espaços. Decidido em 2026-09-01 (§1.2, §2) |
 | **DP-18** ✅ | Nomes dos planos | **Pessoal · Família · Negócio.** Decidido em 2026-09-01 (§2) |
 | **DP-19** ✅ | Mensal só, ou mensal e anual? | **Mensal e anual com desconto.** Decidido em 2026-09-01, **contra a minha recomendação**. Desconto proposto por mim: `anual = 10 × mensal` (§2.4). As consequências que apontei viraram requisito em §2.5, §6.2, §6.3 e §6.4 — o anual só é seguro **com** o reembolso proporcional e os avisos de renovação |
-| **DP-20** 🔺 | Reembolso além do prazo legal | O arrependimento de **7 dias** do CDC art. 49 é **obrigação**, não escolha. A escolha é ser mais generoso: proponho **reembolso integral da primeira cobrança em até 30 dias, sem perguntar o motivo**. Com o anual aprovado, isso deixou de ser gentileza: é o que torna R$ 690 adiantados uma compra sem medo |
-| **DP-21** 🔺 | Janela de graça em `em_atraso` | **14 dias**, alinhados à retentativa da Stripe, iguais para mensal e anual (§6.1) |
-| **DP-22** 🔺 | Anunciar preço na lista de espera da conexão bancária | **Sim, com compromisso de 12 meses ao preço anunciado** — ou não anunciar nada (§1.3) |
-| **DP-27** 🔺 | Confirmar o desconto anual | **`anual = 10 × mensal`** — dois meses grátis, ≈16,7% (§2.4). O dono decidiu *que* haverá anual; *quanto* de desconto ainda é dele |
+| **DP-20** ✅ | Reembolso além do prazo legal | **Integral na primeira cobrança, em até 30 dias, sem perguntar o motivo.** Decidida em 2026-09-01 — o meu padrão. O arrependimento de 7 dias do CDC art. 49 continua sendo **obrigação** e não escolha; os 30 dias são a generosidade escolhida. Vale **uma vez por Tenant**, só na primeira `Cobranca` (§6.3) |
+| **DP-21** ✅ | Janela de graça em `em_atraso` | **14 dias**, alinhados à retentativa da Stripe, iguais para mensal e anual. Decidida em 2026-09-01 — o meu padrão (§6.1) |
+| **DP-22** ✅ | Anunciar preço na lista de espera da conexão bancária | **Sim, com compromisso de 12 meses.** Decidida em 2026-09-01. Com a DP-27 o compromisso passa a ser sobre o **preço vigente** (R$ 79 / R$ 99), não sobre um preço futuro — §1.3 |
+| **DP-27** ✅ | Preços e desconto anual | **R$ 59 · R$ 79 · R$ 99** por mês; anual = **10 × mensal** (R$ 590 · R$ 790 · R$ 990). Decidida em 2026-09-01. O desconto é o meu padrão; os preços mensais são do dono e **desancoram a Mavia do Organizze em todos os níveis**. O que isso obriga está em **§2.6**, e não é opcional |
+| **DP-28** 🔺 | As cotas que o preço novo obriga a rever, e a promessa de suporte | Três coisas juntas, porque nascem da mesma causa: **`pessoas` no Pessoal de 1 para 2**; **anexos de 2/10/30 para 5/20/50 GB**; e **primeira resposta útil em 1 dia útil**, dita na página de preços (§2.6, §3.1). As duas primeiras custam quase nada; a terceira é compromisso de gente, e por isso é do dono |
+| **DP-29** 🔺 | Reavaliar o teste de 7 para 14 dias | **Reavaliar com dado, não reverter por opinião** (§7.1). O que justifica R$ 59 só fica legível depois que uma fatura fecha, e isso raramente acontece em sete dias. Medir conversão por coorte de dia-8, partida entre quem viu e quem não viu um fechamento. Enquanto não houver dado, valem os 7 dias da DP-15 mais o e-mail único de retorno |
 
 ---
 
@@ -728,8 +845,9 @@ Nenhum destes é opcional: sem eles, este spec não passa no gate de risco.
 |---|---|
 | `CONTEXT.md` | **Com o `arquiteto-dominio-financeiro`, não por este documento.** Acrescentar `Assinatura`, `Plano`, `Intervalo`, `Cota`, `Cobranca`, `DadosFiscais`, `EventoDeCobranca`, `ListaDeEspera` e os cinco estados; acrescentar as linhas de termos proibidos do §9.2; **renomear `dentro_do_plano` para `dentro_do_planejado`** |
 | `docs/compliance/retencao-e-eliminacao.md` | ✅ **Feito neste mesmo passo**, porque a contradição não podia ficar de pé: §2.2 corrigida (o documento fiscal deixa de ser “não coletamos” e vira exceção enumerada, com os quatro vetos); §3.6 substituída pelo mapa completo do §11.1; §5.3 nomeando `cobrancas` e `dados_fiscais` como sobreviventes e acrescentando o cancelamento na Stripe; §6.1 incluindo `assinatura` e `cobrancas`; §11 com a linha DP-16 |
-| `docs/compliance/subprocessadores.md` | **Criar.** Stripe. Provedor fiscal **não entra** — não existe, por decisão de DP-16 |
-| `docs/adr/` | ADR de billing registrando: fonte de verdade de um lado só (§10.1), teste fora da Stripe (§10.2), catálogo em código (§3), e a **coleta de documento fiscal** como exceção nominada à §2.2 — esta última é exigida pelo próprio texto da §2.2 |
-| `docs/produto/arquitetura-informacao.md` | §2.12 “Plano e cobrança” ganha inventário próprio; a página de preços (com o alternador mensal/anual), o checkout e a lista de espera entram como telas |
-| `docs/seguranca/matriz-de-acesso.md` | A linha `billing` já existe e cobre as rotas. Acrescentar a rota de webhook como `publica-assinada` no manifesto |
-| `docs/pipeline.md` | Épico 11 passa a depender do 10 (compartilhamento) de forma dura, e não só por ordem: os níveis 2 e 3 vendem o espaço compartilhado |
+| `docs/compliance/subprocessadores.md` | ✅ **Criado.** Stripe (operadora **e** controladora independente) e Google (fonte, na entrada por OIDC — DP-12). Provedor fiscal **não entra**: não existe, por DP-16. Lacuna assumida: provedor de push e e-mail transacional será operador e precisa entrar antes do primeiro envio |
+| `docs/adr/0020-billing-e-assinatura.md` | ✅ **Escrita.** Quatro decisões que não se leem separadas: fonte de verdade de um lado só (D1), teste fora da Stripe (D2), catálogo em código (D3) e a coleta de documento fiscal como exceção nominada à §2.2 (D4) — esta última exigida pelo próprio texto daquela seção. **A DP-27 não alterou nenhuma das quatro** |
+| `docs/produto/arquitetura-informacao.md` | ✅ **Feito.** §2.12b nova com página de preços (alternador mensal/anual, bloco **“por que custa o que custa”** exigido pela DP-27, lista de espera), checkout e Plano e cobrança; §5 com as telas priorizadas |
+| `docs/seguranca/matriz-de-acesso.md` | ✅ **Feito.** §3.17 nova com as oito rotas de billing; `POST /webhooks/stripe` como **`publica-assinada`**; classe `RL-WEBHOOK`; reautenticação passa de onze para **doze** operações (reembolso move dinheiro para fora); `dados_fiscais.documento` entra na regra R-5 |
+| `docs/pipeline.md` | ✅ **Feito.** Épico 11 depende do 10 de forma dura — sem compartilhamento, os três planos são o mesmo plano com três preços. **A DP-27 estende a dependência ao épico 6** (§2.6): a R$ 59 contra um concorrente de R$ 35 que importa extrato, cobrar por um produto só manual não se sustenta. A revisão trimestral do ADR 0003 ganhou a lista de espera como insumo |
+| `docs/decisoes-do-produto.md` | Mantido pelo coordenador. DP-16 a DP-22 e DP-27 já registradas; **DP-28** (cotas e promessa de suporte) e **DP-29** (reavaliar 7 → 14 dias) entram quando decididas |

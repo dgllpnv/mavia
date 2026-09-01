@@ -461,9 +461,12 @@ Spec completo em `docs/produto/spec-planos-e-assinatura.md`. Aqui fica o que é 
 3. **Linha da conexão bancária**, dentro do comparativo, com `0 / 3 / 10` e a marca `em desenvolvimento` — e **fora** da lista do que o plano entrega hoje. É a única menção permitida dentro do cartão.
 4. **O que nenhum plano limita** — bloco próprio, e não rodapé: lançamentos, contas, cartões, categorias, relatórios, importação de arquivo, **histórico** e **exportação**. Declarar a ausência de limite é argumento de venda, e é verificável.
 5. **"Se você parar de pagar"** — uma frase, em destaque: *o espaço fica somente leitura, nada é apagado, e a exportação continua funcionando.* Está aqui, e não só nos termos, porque é a dúvida que trava a assinatura.
-6. **Lista de espera da conexão bancária** — seção separada, depois dos cartões, **nunca dentro de um deles**: e-mail, banco desejado, faixa de disposição a pagar, e o texto de consentimento do §11.6 do spec. É o insumo da revisão trimestral do ADR 0003.
+6. **Por que custa o que custa** — bloco próprio, e **obrigatório** desde a DP-27: com os preços acima do concorrente (R$ 59 · 79 · 99), a página que só mostra números deixa o visitante inventar a explicação — e a que ele inventa é "então deve conectar meu banco". As promessas do §2.6 do spec de planos, em linguagem de gente: a fatura como objeto, nenhum número errado sem aviso, categorização **local** (você não é o produto), portabilidade de verdade, desfazer importação, e a promessa de suporte.
+7. **Lista de espera da conexão bancária** — seção separada, depois dos cartões, **nunca dentro de um deles**: e-mail, banco desejado, faixa de disposição a pagar, e o texto de consentimento do §11.6 do spec. Anuncia o preço **vigente** de `Família` e `Negócio`, com o compromisso de 12 meses — nunca um preço futuro. É o insumo da revisão trimestral do ADR 0003.
 
-**Não tem:** nível bloqueado ou acinzentado (§1.1 do spec: porta trancada é propaganda do concorrente); tabela comparativa lado a lado com o Organizze; contador regressivo, "vagas limitadas" ou qualquer urgência inventada; preço riscado que nunca foi praticado; plano "sob consulta".
+**Não tem:** nível bloqueado ou acinzentado (§1.1 do spec: porta trancada é propaganda do concorrente); **tabela comparativa lado a lado com o Organizze** — comparamos Mavia com Mavia, porque montar a tabela do outro é escolher perder no eixo dele; contador regressivo, "vagas limitadas" ou qualquer urgência inventada; preço riscado que nunca foi praticado; plano "sob consulta".
+
+**A página não esconde que somos mais caros** — quem vem do Organizze fará a conta de qualquer jeito, e todo mês. Ela responde à conta com o bloco 6, que é a única defesa honesta disponível.
 
 #### Checkout
 

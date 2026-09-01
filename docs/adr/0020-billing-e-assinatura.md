@@ -130,6 +130,7 @@ Sem cartão não há `Customer`, não há `Subscription`, não há o que criar. 
 
 ## Revisão
 
-- **A cada revisão trimestral do ADR 0003** (custo do agregador × receita), conferir também: taxa de conversão do checkout desde a introdução do campo de documento, e volume de reembolso proporcional pedido no anual.
+- **A cada revisão trimestral do ADR 0003** (custo do agregador × receita), conferir também: taxa de conversão do checkout desde a introdução do campo de documento, volume de reembolso proporcional pedido no anual, e **as cotas de conexão bancária** — `0/3/10` foi espelhado de um concorrente cujo preço a DP-27 deixou de espelhar, e o número novo depende da cotação do agregador (spec §3.2).
+- **A DP-27 não altera nenhuma das quatro decisões acima**, e essa é a propriedade que se queria: o catálogo em código (D3) absorveu a mudança de preço em seis constantes, e a fórmula de reembolso, por não dividir, saiu ilesa. O que a DP-27 muda é **produto**, e está no §2.6 do spec — inclusive a condição de que o épico 11 não preceda os épicos 6 a 10.
 - **Se DP-16 mudar** — emissão de nota passando a existir, por conta própria em Salvador ou por terceiro —, esta ADR não muda; o que muda é `subprocessadores.md`, se houver terceiro, e o preenchimento de `cobrancas.documento_fiscal_id`, hoje reservado e nulo.
 - **Se o dono decidir nunca emitir**, executar a saída escrita em D4 e reverter a §2.2 ao texto original. A reversão é parte da decisão, não um esquecimento a corrigir depois.
