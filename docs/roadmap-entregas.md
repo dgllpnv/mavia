@@ -1,0 +1,198 @@
+# Roadmap de entregas
+
+O que falta, em ordem, e o que fica pronto ao fim de cada etapa.
+
+**Entrega aqui significa código rodando com teste passando** — não documento escrito. Especificação é insumo, não entrega.
+
+Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa só começa quando a anterior está verde.
+
+---
+
+## Estado atual
+
+| | |
+|---|---|
+| **Pronto** | Monorepo · `packages/domain` com `Money`, `ratear` e base temporal · tenancy com RLS provada · CI · ambiente Docker local |
+| **Testes** | 84 passando — 73 de domínio, 11 de integração contra Postgres real |
+| **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
+| **Em código** | Épico 1, parcialmente |
+
+---
+
+## Épico 1 — Fundação *(em andamento)*
+
+### 1B · Autenticação — **a etapa atual**
+
+**Entrega:** cadastro e login funcionando, por Google e por e-mail e senha.
+
+- Migrations 0002 a 0005: identidades federadas, credenciais, sessões, papel `mavia_auth` e as funções privilegiadas de cadastro
+- Fluxo OIDC completo com PKCE
+- Sessão com token opaco, rotação e revogação em cascata
+- Vinculação de contas com a matriz de seis casos
+- A resolução de tenant em quatro etapas
+
+**O que prova:** que o cadastro cria tenant sem que `mavia_app` ganhe `INSERT` em `tenants`; que a vinculação nunca entrega o espaço de outra pessoa; e que a escalada encontrada na policy da migration 0001 não volta.
+
+**Ao fim disto você consegue:** criar sua conta e entrar. Nada mais — ainda não há o que ver dentro.
+
+### 1C · Primeira rota e o seam S2
+
+**Entrega:** a API HTTP de pé, com uma rota real de contas.
+
+- NestJS sobre Fastify, contratos Zod em `packages/contracts`
+- `tenancy.withTenant` como ponto de entrada único
+- Guard de autorização que **nega por padrão e falha no boot**, a partir da matriz de acesso
+
+**O que prova:** o seam S2 como o arquiteto exigiu — **dois tenants em toda rota**, e uma transação sem contexto lança erro em vez de retornar linha.
+
+### 1D · Deploy na VPS
+
+**Entrega:** o ambiente de produção existindo, ainda sem produto dentro.
+
+- Docker Compose, Traefik com TLS, papéis de banco separados
+- Backup com recuperação a ponto no tempo, e **restauração testada de verdade** — backup não testado não é backup
+- Observabilidade: erro, latência e a métrica de negócio
+
+**Ao fim do épico 1 você consegue:** acessar a Mavia num domínio seu, entrar com Google, e ver uma tela vazia. É pouco de ver e é o alicerce de tudo.
+
+---
+
+## Épico 2 — Núcleo
+
+**Entrega:** o razão financeiro funcionando.
+
+`Conta` · `Categoria` com dois níveis · `Lancamento` com os três estados · saldo derivado com snapshot e job de reconciliação · `Transferencia` de duas pernas · `Estorno` · o módulo de agregação como tradutor único de toda soma.
+
+**O que prova:** a bateria de invariantes do `validador-financeiro` — saldo derivado bate com o snapshot, transferência soma zero, e o rodapé de realizado × previsto é igual à soma de todas as páginas.
+
+**Ao fim você consegue:** lançar despesa e receita, transferir entre contas, e ver o saldo certo. Pela API — ainda sem tela.
+
+---
+
+## Épico 3 — Cartão
+
+**Entrega:** o cartão de crédito com ciclo, que é a parte mais difícil do domínio.
+
+`Cartao` · `Fatura` com janela e estados · fechamento e vencimento · `GrupoDeParcelamento` com `data_compra` · pagamento de fatura como transferência · as três bases temporais de relatório.
+
+**O que prova:** compra no dia exato do fechamento cai na fatura certa; parcelamento soma exatamente o total; pagamento de fatura **não** aparece como despesa; e 31/jan em 3× não vira 28/mar.
+
+**Ao fim você consegue:** registrar compra parcelada e ver a fatura fechar e vencer corretamente.
+
+---
+
+## Épico 4 — Web
+
+**Entrega:** o produto visível, na direção "papel e trilho".
+
+Tokens em `packages/ui` · dashboard · extrato denso com o trilho · formulário de lançamento · tela de fatura como objeto de ciclo · filtros nos três eixos.
+
+**O que prova:** Playwright nos fluxos críticos, contraste WCAG AA verificado, e a auditoria de design da seção 5.
+
+**Ao fim você consegue:** usar a Mavia pelo navegador, de verdade. **É a primeira etapa em que dá para demonstrar o produto a alguém.**
+
+---
+
+## Épico 5 — Mobile *(fim do MVP)*
+
+**Entrega:** os apps Android e iOS.
+
+Expo · offline-first com fila durável e idempotência · lançamento em três toques · biometria · push · build e envio às lojas.
+
+**O que prova:** Maestro no fluxo de fumaça, e o teste que importa — modo avião, lança, volta, sincroniza **uma vez só**.
+
+**Ao fim você consegue:** lançar uma despesa no caixa do mercado, sem rede.
+
+---
+
+## Épico 6 — Importação
+
+**Entrega:** trazer extrato de verdade para dentro.
+
+`BankSyncProvider` com os adapters OFX e CSV · `LancamentoBruto` com idempotência · deduplicação · conciliação como sugestão · desfazer importação.
+
+> **Antes desta etapa, o processo `parser` isolado precisa existir** — sem rede, sem segredo, sem banco. É aqui que o **seu** extrato entra no sistema, e o parser é a superfície mais hostil do produto.
+
+**Correção do que eu disse antes:** afirmei que o guardião de chaves precisava existir já no épico 1. É impreciso. O **parser isolado** é pré-requisito desta etapa; o **guardião de chaves** é do épico 12, quando credencial bancária passa a existir.
+
+**Ao fim você consegue:** baixar o OFX do seu banco, importar, e ver os lançamentos conciliados sem duplicar.
+
+---
+
+## Épico 7 — Inteligência
+
+**Entrega:** categorização que aprende, sem terceiro na cadeia.
+
+Regra do usuário · histórico do próprio espaço · OCR de recibo com confirmação · explicabilidade e reversão em um toque.
+
+Sem modelo externo e sem treinar com dado de cliente, conforme suas decisões.
+
+---
+
+## Épico 8 — Planejamento
+
+**Entrega:** `Planejamento` com teto e piso · `Objetivo` de acúmulo com aportes · alertas em basis points · `Recorrencia` com ancoragem de dia do mês.
+
+**O que prova:** a precedência global → raiz → subcategoria sem contagem dupla, e o alerta de teto que **não** dispara invertido.
+
+---
+
+## Épico 9 — Relatórios
+
+**Entrega:** gráficos na direção visual · comparação de períodos · o seletor de base temporal no cabeçalho · exportação enumerando as 26 entidades.
+
+A exportação aqui é também o cumprimento do direito de portabilidade.
+
+---
+
+## Épico 10 — Compartilhamento
+
+**Entrega:** múltiplos usuários por espaço, com os papéis e a matriz de acesso aplicada.
+
+**Pré-requisito duro do épico 11:** sem isto, `Família` e `Negócio` são o mesmo plano com três preços.
+
+---
+
+## Épico 11 — Cobrança
+
+**Entrega:** Stripe · três planos · teste de 7 dias · cotas · ciclo de vida da assinatura · webhook idempotente · coleta do documento fiscal.
+
+> **Condição, não sugestão:** esta etapa exige os épicos 6 e 10 prontos. Cobrar R$ 59 por um produto só manual, contra um concorrente de R$ 35 que importa extrato, não se sustenta.
+
+**Ao fim você consegue:** vender.
+
+---
+
+## Épico 12 — Open Finance
+
+**Entrega:** adapter de agregador · `Conexao` · `Consentimento` versionado · sincronização periódica · revogação em três fases.
+
+> **Gatilho:** a receita cobrir o custo do agregador com margem (ADR 0003). Não é uma data, é um número.
+>
+> **Pré-requisito:** o guardião de chaves selado precisa existir **antes** de qualquer credencial bancária entrar — inclusive a sua, no teste manual.
+
+---
+
+## Trilhas que não são etapas
+
+Acontecem dentro das etapas, não depois delas.
+
+| Trilha | Quando |
+|---|---|
+| Exportação e eliminação (LGPD) | Cada entidade nova entra nos dois fluxos **na etapa em que nasce**, nunca num mutirão no fim |
+| Gate de risco | Todo épico, sobre o spec, antes do código |
+| Validação financeira | Todo merge que toque valor, saldo, fatura ou data |
+| `claude-security:scan` | Todo diff que toque autenticação, dado bancário ou pagamento |
+| Restauração de backup testada | A cada 4 a 6 épicos, com o tempo cronometrado |
+
+---
+
+## Onde o seu teste manual entra
+
+Você disse que só libera após teste manual rigoroso, com o seu próprio banco.
+
+- **Épico 4** é o primeiro momento em que dá para testar o produto de ponta a ponta pelo navegador.
+- **Épico 6** é quando o seu extrato real entra — e exige o parser isolado antes.
+- **Épico 12** é quando a sua conta bancária conecta de verdade — e exige o guardião de chaves antes.
+
+O `mavia reset` existe para você repetir um roteiro do zero quantas vezes quiser.
