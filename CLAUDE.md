@@ -37,22 +37,24 @@ Violar qualquer uma destas é motivo para reprovar o código, mesmo que os teste
 
 1. **Nunca `float`, `double` ou `number` para valor monetário.** Sempre inteiro em centavos (`BIGINT` no Postgres, `bigint` em TS) encapsulado no value object `Money` de `packages/domain`. Se você escreveu `0.1 + 0.2` em algum lugar perto de dinheiro, pare.
 2. **Toda `Money` carrega moeda ISO 4217.** Somar `Money` de moedas diferentes lança erro, não converte silenciosamente.
-3. **Arredondamento é explícito e declarado.** Nenhum arredondamento implícito. Divisões (rateio de parcela, split de despesa) usam distribuição de resto — a soma das partes é **exatamente** igual ao todo. Sempre. Prove isso com property-based testing.
+3. **Arredondamento é explícito e declarado.** Nenhum arredondamento implícito. Divisões (rateio de parcela, split de despesa) usam `ratear`: o resto em centavos é distribuído **uma unidade por parte, nas primeiras partes**, de modo que nenhuma parte difira de outra em mais de um centavo. A soma das partes é **exatamente** igual ao todo. Sempre. Prove isso com property-based testing — e a propriedade da soma **não basta**: sem `max − min <= 1` a suíte não distingue esta regra de "todo o resto na primeira parte".
 4. **Transferência entre contas são duas pernas.** Débito numa conta, crédito na outra, ligadas por `transfer_group_id`. Nunca uma linha única com um campo "conta destino". A soma das pernas de uma transferência é sempre zero.
 5. **Saldo é derivado, nunca um campo mutável isolado.** Verdade = soma dos lançamentos. Snapshots materializados existem só para performance, e um job de reconciliação compara snapshot vs. derivado. Divergência é incidente, não warning.
 6. **Sinal é explícito no domínio.** Despesa é negativa, receita é positiva, no próprio tipo. Nunca dependa de um enum `type` para inferir sinal na hora de somar.
 
 ### Tempo
 
-7. **UTC no banco, `America/Sao_Paulo` na tela.** Nenhuma data "nua" no domínio.
-8. **`posted_at` (competência) e `effective_at` (efetivação) são campos distintos.** Um lançamento de cartão acontece num dia e afeta o caixa noutro. Não colapse os dois.
+7. **UTC no banco, `America/Sao_Paulo` na tela.** Nenhuma data "nua" no domínio. **Toda janela de período é semiaberta `[inicio, fim)`**, em instantes UTC, com as bordas calculadas em `America/Sao_Paulo` antes da comparação — inclusive a janela da fatura. Uma convenção só, em todo o sistema.
+8. **`posted_at` (competência) e `settled_at` (compensação) são campos distintos.** Um lançamento de cartão acontece num dia e afeta o caixa noutro. Não colapse os dois. **`settled_at` é o fato: só é gravado quando o dinheiro se move**, é nulo até lá, e nunca recebe data futura. Num lançamento de cartão, quem move o dinheiro é o pagamento da fatura. **Não existe coluna de previsão de caixa em `lancamentos`** — a previsão de um cartão é a `Fatura`, não a linha.
+8b. **O eixo caixa agrega Contas e Faturas, nunca lançamentos de Cartao.** Saldo, Saldo geral, projeção e `Objetivo` somam lançamentos de `Conta` (por `settled_at`) e Faturas em aberto (pelo total, no vencimento). Uma compra de cartão não sai do bolso; a fatura sai.
 9. **Data de negócio nunca vem do relógio do cliente.** O servidor é a autoridade.
 
 ### Cartão de crédito
 
 10. **Fatura tem ciclo: `closing_day` e `due_day`.** Um lançamento entra na fatura cuja janela contém seu `posted_at`. Compras após o fechamento caem na fatura seguinte.
-11. **Parcelamento gera N lançamentos futuros** ligados por `installment_group_id`, com `installment_number`/`installment_total`. Nunca um lançamento único "12x". O resto da divisão vai na primeira parcela.
-12. **Pagamento de fatura é transferência** (conta → cartão), não uma despesa. Contar como despesa duplica o gasto — este é o erro clássico da categoria.
+11. **Parcelamento gera N lançamentos futuros** ligados por `installment_group_id`, com `installment_number`/`installment_total`. Nunca um lançamento único "12x". O resto da divisão segue a regra 3 — distribuído nas primeiras parcelas, um centavo por parcela.
+12. **Pagamento de fatura é transferência** (conta → cartão), não uma despesa. Contar como despesa duplica o gasto — este é o erro clássico da categoria. O vínculo pagamento ↔ fatura é `transferencias.fatura_id`, **nunca** `lancamentos.fatura_id`: a perna de crédito dentro da fatura zeraria o total dela.
+12b. **Transferência é excluída de toda agregação monetária de receita ou despesa, por construção.** A exclusão vive num tradutor de filtro único, não num `AND` repetido em cada consulta. Aparecer como linha na listagem e entrar num total são decisões distintas, e só a primeira é permitida.
 
 ### Ingestão de dados bancários
 

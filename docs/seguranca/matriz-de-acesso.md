@@ -119,7 +119,7 @@ Legenda: `✓` permitido · `✗` negado · `⊙` permitido apenas sobre o próp
 | `importacao` | `ler` | ✓ | ✓ | ✓ |
 | `importacao` | `criar` (upload) · `promover` · `desfazer` | ✓ | ✓ | ✗ |
 | `conexao` | `ler` (metadados: instituição, escopo, validade, estado) | ✓ | ✓ | ✓ |
-| `conexao` | `criar` (conectar banco) | ✓ | ✓ **[DP-1]** | ✗ |
+| `conexao` | `criar` (conectar banco) | ✓ | ✓ | ✗ |
 | `conexao` | `sincronizar` | ✓ | ✓ | ✗ |
 | `conexao` | `revogar` | ✓ | ⊙ (só a conexão que o próprio autorizou) | ✗ |
 | `consentimento` | `ler` | ✓ | ⊙ | ✗ |
@@ -171,7 +171,7 @@ Os valores acima são o **padrão seguro proposto**, escolhido para que a matriz
 
 | # | Pergunta | Padrão proposto | O que muda se a decisão for outra |
 |---|---|---|---|
-| **DP-1** | Um `membro` pode conectar o próprio banco ao espaço da família? | Sim | Se não: `conexao.criar` vira exclusivo de `proprietario` e o `membro` perde a autonomia sobre a própria instituição — o que também move a decisão de revogação |
+| **DP-1** ✅ | Um `membro` pode conectar o próprio banco ao espaço da família? | **SIM — decidido pelo dono do produto em 2026-09-01.** `conexao.criar` é permitida a `proprietario` e `membro`; `visualizador` continua fora. |
 | **DP-2** | Um `membro` pode convidar outras pessoas? | Não | Se sim: convite por `membro` deve exigir aprovação do `proprietario`, ou o espaço cresce sem que o titular do contrato saiba |
 | **DP-3** | Um `membro` pode criar chave de API / autorizar app de IA sobre o espaço? | Não | Se sim: cada chave herda o papel do criador e precisa de teto próprio; o `proprietario` precisa de tela para ver e revogar chaves de terceiros |
 | **DP-4** | Um `membro` pode excluir lançamento criado por outro membro? | Sim (o dado é do espaço, não do autor) | Se não: toda rota de escrita sobre `lancamento` ganha `dono-autor` como condição, e o produto precisa explicar por que uma correção óbvia é bloqueada |
@@ -346,7 +346,7 @@ Cinco rotas, uma linha — as condições são idênticas e devem ser implementa
 | Rota | Papéis | Verificação além de sessão + tenant | Reaut. | RL | Achado |
 |---|---|---|:--:|---|---|
 | `GET /conexoes` | P M V | Metadados apenas. `credenciais_cifradas`, `dek_cifrada`, `escopo` bruto e qualquer token **nunca** aparecem (R-5) | — | `RL-LEITURA` | A-38 |
-| `POST /conexoes` | P M **[DP-1]** | Credenciais são *write-only* no schema: `zConexaoResposta` não possui os campos. Nenhum handler de erro serializa `request.body`. Grava `conexoes.criado_por` e o `Consentimento` versionado na mesma transação | sim | `RL-CARA` | **A-38** |
+| `POST /conexoes` | P M | Credenciais são *write-only* no schema: `zConexaoResposta` não possui os campos. Nenhum handler de erro serializa `request.body`. Grava `conexoes.criado_por` e o `Consentimento` versionado na mesma transação | sim | `RL-CARA` | **A-38** |
 | `POST /conexoes/:id/sincronizar` | P M | Teto de 6 sincronizações por conexão por dia, visível na tela | — | `RL-EXTERNA` | — |
 | `GET /conexoes/:id/sincronizacoes` | P M V | — | — | `RL-LEITURA` | — |
 | `DELETE /conexoes/:id` (revoga) | P, ou ⊙ o autor do consentimento | **Sem reautenticação, por desenho** — revogar precisa ser de um toque (art. 8º §5º). Executa sincronamente, antes de responder 200: zera credenciais, remove jobs da fila, chama `BankSyncProvider.revogar()`. Ver `retencao-e-eliminacao.md` §10 | — | `RL-ESCRITA` | **B-14, B-15** |
@@ -504,7 +504,8 @@ A chave de cursor é um segredo de aplicação comum, não da hierarquia do ADR 
 ## 7. O que este documento **não** decide
 
 - **A ordem de implementação.** Isto é a matriz, não o cronograma. As rotas de §3.16 são do épico 12.
-- **DP-1 a DP-4** (§2.5) — do `product-financeiro`.
+- ~~**DP-1**~~ — **resolvida em 2026-09-01:** `membro` pode conectar banco.
+- **DP-2 a DP-4** (§2.5) — do `product-financeiro`.
 - **Se o destino de `inteligencia/*` é local ou terceiro** — de `engenheiro-dados-ia` + `especialista-lgpd-compliance`, via ADR (B-11). Enquanto não houver ADR, a rota fica bloqueada, não permissiva.
 - **A credencial de `/metricas`** e a topologia de rede que a isola — de `sre-devops-vps` (A-04, A-07).
 - **O destino dos dados já sincronizados após revogação** — ADR conjunta com `especialista-open-finance` (B-16). A matriz declara quem pode revogar; não declara o que acontece com o histórico.

@@ -2,6 +2,7 @@
 
 - **Status:** Aceita
 - **Data:** 2026-09-01
+- **Emendas:** 2026-09-01 — regra de `ratear` detalhada (sinal, partes zero, propriedade que a distingue) após a auditoria financeira do spec, que encontrou duas regras de rateio incompatíveis em documentos aceitos. A decisão original não mudou; o que faltava era precisão suficiente para ser testável.
 
 ## Contexto
 
@@ -17,7 +18,17 @@ O produto inteiro existe para mostrar números corretos. Duas decisões de model
 
 `Money` guarda `bigint` de centavos e moeda ISO 4217. Imutável. `BIGINT` no Postgres. Toda aritmética monetária passa por ele — inclusive somas em SQL, que operam sobre centavos inteiros. Operação entre moedas diferentes lança erro. Nenhum `number`, `float` ou `NUMERIC` implícito em caminho monetário.
 
-Divisão usa `allocate`, com distribuição do resto: a soma das partes é **exatamente** igual ao total, com o resto indo nas primeiras partes.
+Divisão usa `ratear`, com distribuição do resto: a soma das partes é **exatamente** igual ao total, com o resto indo **nas primeiras partes, uma unidade por parte**.
+
+**Esta é a regra única do sistema**, e vale tanto para parcelamento quanto para divisão de despesa. A auditoria do spec encontrou uma segunda regra circulando — *"todo o resto na primeira parcela"* — no `CLAUDE.md` e no texto de tela. As duas somam exatamente igual e coincidem sempre que o resto é 1, que é o caso de R$ 100,00 em 3x, o exemplo usado em toda conferência. Elas divergem em **R$ 0,03 na primeira parcela** já em R$ 100,00 em 7x: `1429×4 + 1428×3` contra `1432 + 1428×6`. O `CLAUDE.md` foi corrigido para esta regra; a ADR é a decisão durável e prevalece.
+
+Três precisões que faltavam, cada uma corrigindo um caso que a soma não detecta:
+
+- **Sinal.** `ratear` opera sobre a magnitude e reaplica o sinal: `ratear(−v, n) = map(negar, ratear(v, n))`. Sem isso, o truncamento de negativos produz `−3332, −3333, −3335` em vez de `−3334, −3333, −3333` — e as duas somam −10000.
+- **Partes zero.** `ratear` **pode** devolver partes de valor zero quando `|total| < n`; para o value object isso é correto. É a entidade que restringe: `GrupoDeParcelamento` exige `|valor_total| >= N` e **rejeita** o parcelamento fora disso, porque `Lancamento` tem `valor ≠ 0`. R$ 0,01 em 3x não é `(1, 0, 0)` — é um erro de domínio.
+- **Ordem.** As partes são não-crescentes. A regra determina a saída inteiramente: dados `(total, n)`, existe uma única resposta válida.
+
+**A propriedade que prova a regra não é a da soma.** Ambas as regras somam certo, e um property test de soma passa nas duas. A propriedade que as distingue é `max(partes) − min(partes) <= 1`, que a regra rejeitada viola em 7x (1432 contra 1428). Toda suíte que testa rateio sem essa asserção está testando a metade que não estava em disputa.
 
 Sinal vive no valor — despesa negativa, receita positiva — não num enum de tipo. Somar uma lista dá o líquido correto sem nenhum condicional.
 

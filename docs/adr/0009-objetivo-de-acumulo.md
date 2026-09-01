@@ -2,6 +2,7 @@
 
 - **Status:** Aceita
 - **Data:** 2026-09-01
+- **Emendas:** 2026-09-01 — após a auditoria financeira do spec (bloqueio B20, ressalva R8): `saldo_base` passa a ser reajustado por lançamento retroativo **anterior** à criação do Objetivo, e a travessia de `concluido_em` passa a ser avaliada na transação que altera o progresso, não na leitura.
 
 ## Contexto
 
@@ -66,7 +67,13 @@ Não há enum de modo. `conta_id` preenchido ou nulo é a única fonte — pelo 
 
 A Conta de poupança é o objetivo. `saldo_base` é um `Money` **capturado e armazenado** na criação, com padrão igual ao saldo da Conta naquele instante e editável para zero se o Usuario quiser contar o que já tinha.
 
-`saldo_base` **nunca é recalculado**. Se fosse derivado do saldo numa data, um lançamento retroativo mudaria o saldo do passado e o progresso mudaria sozinho, sem que nada tivesse sido aportado. É a mesma armadilha que o ADR 0005 evita ao proibir saldo como coluna mutável — mas invertida: aqui a segurança está em **congelar** o valor, porque ele é um marco histórico, não um saldo.
+`saldo_base` **nunca é derivado de uma data**. Se fosse recalculado como "o saldo em tal dia", um lançamento retroativo mudaria o saldo do passado e o progresso mudaria sozinho, sem que nada tivesse sido aportado. É a mesma armadilha que o ADR 0005 evita ao proibir saldo como coluna mutável — mas invertida: aqui a segurança está em **armazenar** o valor, porque ele é um marco histórico, não um saldo.
+
+**Reajuste por retroativo anterior à criação.** A versão original declarava `saldo_base` simplesmente imutável, e isso protegia contra o retroativo errado. Um Lancamento com `settled_at` **anterior** ao `criado_em` do Objetivo ajusta `saldo_base` pelo mesmo valor, de modo que o progresso fique inalterado.
+
+Sem essa regra: em 01/set o Usuario cria "Viagem" sobre uma poupança com saldo conhecido de R$ 2.000,00; em 10/set importa o OFX de agosto e aparece um depósito de R$ 3.000,00 feito em **15/ago**. O saldo vai a R$ 5.000,00 e o progresso a R$ 3.000,00 — 30% de uma meta de R$ 10.000,00 sem que ele tenha guardado um centavo desde a criação. O dinheiro já estava lá quando o marco foi capturado; só não estava registrado. Pior com um alvo menor: `concluido_em` seria gravado **em definitivo**, pela regra de fixidez, por um depósito de agosto.
+
+A distinção que o ADR precisava fazer é entre **saldo conhecido** e **saldo real**. `saldo_base` congela o conhecido; o reajuste o corrige para o real daquele instante quando o passado é completado. Retroativo **posterior** à criação continua movendo o progresso, que é o comportamento certo — o dinheiro entrou depois do marco.
 
 **Por aportes** (`conta_id` nulo) — `progresso = Σ valor` dos Lancamentos ligados por `Aporte`.
 
@@ -90,6 +97,12 @@ O Usuario estende o prazo (edição normal, no audit log) ou arquiva. Um Objetiv
 
 `concluido_em` é gravado na primeira travessia de `progresso >= valor_alvo`.
 
+**A travessia é avaliada na transação que altera o progresso.** Toda escrita que afete o saldo de uma Conta ancorada, ou o conjunto de Aportes de um Objetivo por aportes, reavalia os Objetivos afetados na mesma transação. Nunca na leitura da tela, nunca só por job noturno.
+
+A versão original dizia "primeira vez que `progresso >= valor_alvo`" sem dizer **o que observa**, e `progresso` é derivado de um saldo derivado. Apurado na leitura, "primeira travessia" vira "primeira vez que alguém abriu a tela": um objetivo atingido em 10/set e resgatado em 15/out, aberto em 20/out, mostra R$ 7.000,00 de R$ 10.000,00 e `concluido_em` **nunca** é gravado. A regra que este ADR chama de "a única que precisa ser lida duas vezes" — resgate não desfaz a conclusão — jamais chegaria a ser exercida.
+
+O caminho de importação em lote precisa da mesma reavaliação ao fim da transação de ingestão, pelo mesmo motivo pelo qual precisa do reajuste de `saldo_base`: é por ali que o passado muda.
+
 - **Resgate posterior não desfaz.** Atingir foi um fato histórico com data. O progresso cai, o estado continua `concluido`.
 - **Aumentar `valor_alvo` acima do progresso desfaz** — limpa `concluido_em`, volta a `ativo`.
 
@@ -103,7 +116,9 @@ Escritas para virar teste direto:
 2. Ancorado: `valor_alvo.moeda = conta.moeda`. Por aportes: `valor_alvo.moeda` = moeda base do Tenant, e todo Lancamento aportado tem essa moeda. Construção com moeda divergente é rejeitada — nunca convertida.
 3. `prazo`, quando informado, é `>= hoje` **no momento da escrita**. Prazo que ficou no passado pela passagem do tempo produz `vencido`, não inválido: a validação é de escrita, nunca de leitura.
 4. `saldo_base` existe se e somente se `conta_id` existe.
-5. `saldo_base` é imutável depois de criado.
+5. `saldo_base` só muda pelo reajuste de retroativo anterior à criação, sempre pelo valor do lançamento que o motivou, de modo que o progresso fique inalterado. Nenhum outro caminho o escreve.
+5b. Importar um lançamento com `settled_at` anterior ao `criado_em` do Objetivo **não altera o progresso**. *(regressão dos contraexemplos Z e AA)*
+5c. A travessia de `concluido_em` é avaliada na transação que altera o progresso. Um objetivo atingido e depois resgatado, sem nenhuma leitura de tela no intervalo, tem `concluido_em` gravado. *(regressão do contraexemplo AB)*
 6. Ancorado não tem nenhum `Aporte`. Por aportes não tem `saldo_base`.
 7. `progresso` não é limitado: pode passar do alvo e pode ficar negativo. O domínio devolve o número real; travar a barra em 100% é decisão de UI.
 8. `concluido_em` é gravado na primeira travessia do alvo e não é desfeito por queda de progresso.
@@ -124,7 +139,10 @@ Escritas para virar teste direto:
 - **Progresso maior que o alvo.** R$ 15.000 de R$ 12.000 = 125%. O domínio devolve 125%.
 - **Progresso negativo.** Objetivo por aportes com um resgate maior que os aportes → progresso negativo. Permitido, exibido como 0% na barra e como o número real no detalhe.
 - **Conta associada sendo excluída.** Soft delete bloqueado enquanto o Objetivo ancorado existir. A mensagem nomeia o Objetivo.
-- **Conta associada com lançamento retroativo.** Saldo do passado muda, `saldo_base` não. O progresso muda apenas pelo saldo atual — que é o comportamento correto, porque o dinheiro está lá.
+- **Retroativo posterior à criação.** Um aporte de 10/set importado em 20/set, num Objetivo criado em 01/set: o progresso sobe. Correto — o dinheiro entrou depois do marco.
+- **Retroativo anterior à criação.** Um depósito de 15/ago importado em 10/set, num Objetivo criado em 01/set: saldo sobe R$ 3.000,00, `saldo_base` sobe R$ 3.000,00, **progresso não muda**.
+- **Estorno anterior à criação.** Estorno de uma despesa de julho importado em setembro: mesmo tratamento, progresso inalterado. Sem isso, um alvo baixo seria concluído em definitivo por um estorno de julho.
+- **Objetivo em moeda diferente da Conta.** Impossível: a invariante de `Conta` já obriga toda conta do Tenant à moeda base. A checagem na construção permanece como segunda camada.
 - **Moeda divergente.** Objetivo em USD sobre Conta em BRL: rejeitado na construção. Trocar a moeda da Conta depois já é impedido pela invariante da própria `Conta`.
 - **Objetivo ancorado numa Conta com `incluir_no_saldo_geral = false`.** Funciona normalmente — é o caso comum, a conta de investimento fora do saldo geral. As duas noções são ortogonais.
 - **Aporte numa perna de Transferencia.** A perna positiva soma ao progresso; a Transferencia continua não aparecendo em relatório de gastos nem em `Planejamento`. Nenhuma das duas leituras contamina a outra.
@@ -146,7 +164,9 @@ Escritas para virar teste direto:
 
 **Progresso como coluna materializada em `Objetivo`.** Leitura instantânea. Rejeitado pela regra 5 do `CLAUDE.md`: progresso é saldo, saldo é derivado, e coluna mutável diverge sob concorrência sem que ninguém perceba. Se houver problema de desempenho, a saída é o mesmo caminho do `SaldoSnapshot`, com reconciliação — não uma coluna solta.
 
-**`saldo_base` derivado da data de criação, em vez de armazenado.** Um campo a menos. Rejeitado: lançamento retroativo reescreve o saldo do passado, e o progresso passaria a mudar sozinho sem nenhum aporte. O marco histórico precisa ser congelado justamente porque o passado, neste sistema, é editável.
+**`saldo_base` derivado da data de criação, em vez de armazenado.** Um campo a menos. Rejeitado: lançamento retroativo reescreve o saldo do passado, e o progresso passaria a mudar sozinho sem nenhum aporte. O marco histórico precisa ser armazenado justamente porque o passado, neste sistema, é editável.
+
+**`saldo_base` estritamente imutável, sem reajuste.** Era a redação original. Rejeitado: protegia contra o retroativo *posterior*, que não precisava de proteção, e deixava passar o *anterior*, que é o que corrompe o progresso — importar em setembro um depósito de agosto dava 30% de progresso sem nenhum aporte. A alternativa era redefinir progresso como "variação do saldo conhecido", que é o que a fórmula media mas não o que a palavra significa. Preferimos corrigir a fórmula a redefinir a palavra.
 
 **Congelar o progresso num campo quando a Conta é excluída, em vez de bloquear a exclusão.** Mais permissivo. Rejeitado: exige um campo que existe apenas nesse estado excepcional e cria um segundo significado para "progresso" — derivado às vezes, armazenado outras. Bloquear é uma regra, não um estado.
 

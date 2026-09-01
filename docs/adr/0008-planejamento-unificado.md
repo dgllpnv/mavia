@@ -2,7 +2,9 @@
 
 - **Status:** Aceita
 - **Data:** 2026-09-01
-- **Emendas:** 2026-09-01 — escopo global admitido (ver *Hierarquia de escopos*); a redação original o havia deixado em aberto por um receio de contagem dupla que a regra de precedência já resolvia. Emenda feita no mesmo dia, antes de qualquer implementação.
+- **Emendas:**
+  - 2026-09-01 — escopo global admitido (ver *Hierarquia de escopos*); a redação original o havia deixado em aberto por um receio de contagem dupla que a regra de precedência já resolvia.
+  - 2026-09-01 — após a auditoria financeira do spec (bloqueios B13, B14, B15, B16): definidos o tipo e o arredondamento de `consumo`, corrigida a inversão do limiar de alerta, particionado o realizado global por natureza, e fixada a identidade do Planejamento para que a cópia seja idempotente com escopo global. Ambas as emendas antes de qualquer implementação.
 
 ## Contexto
 
@@ -57,7 +59,27 @@ Uma comparação, sem nenhum `if` sobre natureza:
 - Piso de R$ 3.000 → `valor = 300000`. Recebi R$ 3.500 → `350000 >= 300000` → batido.
 - Piso de R$ 3.000 → `valor = 300000`. Recebi R$ 2.000 → `200000 >= 300000` → abaixo.
 
-O mesmo vale para o consumo: `consumo = realizado / valor` é positivo nos dois casos, porque os sinais se cancelam. 60% de um teto e 60% de um piso são o mesmo cálculo, com leituras opostas — e a leitura oposta é trabalho da UI, não do domínio.
+### O consumo é uma razão inteira, e o limiar não pode ser calculado por multiplicação
+
+`consumo_bp = razaoEmBp(realizado, valor)` — `(realizado.centavos × 10000) / valor.centavos`, truncado **em direção a zero**. Inteiro com sinal, em basis points: 10000 bp = 100,00%. É a única grandeza fracionária do domínio, e é inteira; `Money` não ganha divisão que devolva `Money`.
+
+O limiar é `atingiu(pct) ⟺ consumo_bp >= pct × 100`.
+
+**A forma proibida é evitar a divisão multiplicando os dois lados por `valor`.** Ela é idêntica à que funciona para piso e está errada para teto, porque `valor` negativo **inverte o sentido da desigualdade**. Com teto de R$ 500,00 e R$ 300,00 gastos — 60% de consumo:
+
+```
+realizado × 100 >= pct × valor
+ −30000  × 100 >=  80 × (−50000)
+    −3.000.000 >= −4.000.000        →  VERDADEIRO  →  alerta de 80% disparado a 60%
+```
+
+E, pior, a mesma forma **para** de alertar exatamente quando o teto é atingido. O `if` sobre natureza que a decisão central deste ADR aboliu tinha voltado pela porta dos fundos, dentro do cálculo percentual, e invertido. A correção é estrutural, não um sinal trocado: **divide-se uma vez, para um inteiro com sinal, e compara-se esse inteiro.** Nunca se multiplica pela grandeza que carrega o sinal.
+
+**A exibição usa o mesmo `consumo_bp`, dividido por 100.** Com realizado de −R$ 399,99 sob teto de R$ 500,00, o consumo verdadeiro é 79,998%; truncado, 7999 bp. A tela mostra 79,99% e o alerta de 80% não dispara — coerentes porque são o mesmo número. Formatar por arredondamento a partir de outro cálculo faria a tela anunciar 80,00% sem alerta, ou o alerta disparar um centavo antes do limiar. Trunca-se, nunca se arredonda, justamente para não anunciar um limiar que não foi cruzado.
+
+**`consumo_bp` pode ser negativo**, e a redação anterior do glossário afirmava o contrário. Um mês cujo único lançamento na categoria é um estorno de R$ 80,00 sob um teto de R$ 500,00 dá `8000 / (−50000)` = −1600 bp = −16%. `dentro_do_plano` continua verdadeiro e correto; a barra recebe um número negativo, exibido como 0% com o valor real no detalhe. Nenhum limiar positivo é cruzado por consumo negativo, então nenhum alerta espúrio nasce daí.
+
+**Gastar exatamente o teto** é `dentro_do_plano` **e** `consumo_bp = 10000`, que cruza o limiar padrão de 100. Não é contradição, são duas perguntas — mas a tela mostraria verde e o sino mostraria alerta para o mesmo objeto. O estado exibido nesse ponto é um terceiro rótulo derivado, **`no_limite`**, nem dentro nem estourado.
 
 `natureza` (`teto` | `piso`) continua no glossário como propriedade **derivada** do sinal, para rotular tela. Nunca persistida: um enum e um sinal podem se contradizer, e estado inválido representável é exatamente o que não fazemos.
 
@@ -83,17 +105,41 @@ A contagem dupla só apareceria no agregado, e uma regra a resolve nos três ní
 
 Existindo um global, ele é o total e os demais são sub-tetos. Não existindo, somam-se as raízes — e, nas raízes sem Planejamento, as subcategorias que tiverem. A regra é a mesma que já valia para pai e filha; o global é só mais um nível acima.
 
-Duas consequências mecânicas, que são custo de engenharia e não de modelagem:
+**A regra é enunciada duas vezes, uma por natureza.** Teto e piso são caminhos disjuntos: existe um total planejado de despesa e um total planejado de receita, e eles nunca se somam. Um teto global de R$ 3.000,00 e um piso global de R$ 5.000,00 somados dariam `+R$ 2.000,00`, um número que não significa nada e que a tela exibiria se ninguém escrevesse isto.
 
-- A invariante de concordância entre sinal e `Categoria.natureza` não tem contra o que ser checada no nível global. Lá o sinal *define* o escopo em vez de ser conferido por ele.
-- `NULL` não colide em índice único no Postgres, então a constraint natural `(tenant_id, categoria_id, competencia)` não impede dois globais. São necessários **dois índices únicos parciais** sobre `(tenant_id, competencia)`, um `WHERE categoria_id IS NULL AND valor < 0` e outro `WHERE categoria_id IS NULL AND valor > 0` — um teto global e um piso global por mês, no máximo.
+### O realizado global é apurado por natureza, nunca pela soma líquida
+
+Este foi o furo da primeira emenda. Ela disse que o sinal define a abrangência do escopo global e não disse **como o realizado global é apurado** — e a leitura literal, "sem `if`", é a soma líquida de tudo no mês. Com ela, o teto global é **impossível de estourar para qualquer usuário com superávit**, que é a maioria de quem define um teto:
+
+```
+despesas −1.000.000 · salário +2.000.000
+realizado = +1.000.000 >= −300.000  →  dentro do plano, com R$ 10.000 gastos sob teto de R$ 3.000
+```
+
+A regra correta: **o realizado de um Planejamento soma os Lancamentos cuja `Categoria.natureza` é igual à natureza do Planejamento.** Um teto agrega despesa; um piso agrega receita.
+
+Por **natureza da Categoria**, e não pelo sinal do lançamento — a distinção é o que salva dois casos:
+
+- Um **estorno de salário** é um lançamento negativo numa categoria de receita. Pelo sinal, consumiria teto de despesa e o estouraria com R$ 2.500,00 de gasto real. Pela natureza, reduz corretamente a receita realizada e não toca o teto.
+- Um **estorno de compra** é positivo numa categoria de despesa e reduz o consumo do teto, que é o comportamento certo.
+
+Isso exige que a natureza esteja sempre disponível, e é por isso que **`Lancamento.categoria_id` passa a ser obrigatório** fora das pernas de transferência, com Categorias de sistema `Sem categoria` por natureza. Com `categoria_id` nulo permitido, R$ 5.000,00 de despesas sem categoria não consumiriam teto nenhum e sumiriam de todo planejamento, em silêncio.
+
+E exige a `Categoria.analitica`: **`Ajuste de saldo` não consome teto.** Ajustar saldo é correção de registro, não fato econômico; sem isso um ajuste de −R$ 300,00 vira R$ 300,00 de despesa e come o teto global.
+
+### Identidade, e por que a cópia quebrava com escopo global
+
+A identidade de um Planejamento é **`(tenant_id, competencia, natureza, categoria_id)`**, com `categoria_id` nulo sendo um valor legítimo e único da chave. Dela decorrem o índice e a verificação de existência da cópia — e ambos precisam de tratamento explícito de `NULL`, que é custo de engenharia, não de modelagem:
+
+- `NULL` não colide em índice único no Postgres, então a constraint natural não impede dois globais. São necessários **dois índices únicos parciais** sobre `(tenant_id, competencia)`: `WHERE categoria_id IS NULL AND valor < 0` e `WHERE categoria_id IS NULL AND valor > 0`.
+- `NULL = NULL` avalia para `NULL`, nunca para `TRUE`. A verificação de existência da cópia escrita como `categoria_id = origem.categoria_id` **não encontra** o global existente, tenta inseri-lo, é barrada pelo índice parcial e **aborta a transação inteira** — levando junto as categorias que já tinham sido copiadas, e violando a idempotência com um erro de banco na cara do Usuario. A comparação é `IS NOT DISTINCT FROM`, sobre a identidade inteira.
 
 ### Copiar do mês anterior
 
 `copiarPlanejamento(competencia_origem, competencia_destino)`.
 
-- **Idempotente.** Duas execuções, o mesmo conjunto.
-- **Não destrutiva.** Só cria onde a categoria **não tem** Planejamento no destino. Nunca sobrescreve valor que o Usuario editou — mesma disciplina da regra 15 do `CLAUDE.md`.
+- **Idempotente.** Duas execuções, o mesmo conjunto — inclusive com Planejamento global na origem, pela comparação por identidade acima.
+- **Não destrutiva.** Só cria onde a identidade **não existe** no destino. Nunca sobrescreve valor que o Usuario editou — mesma disciplina da regra 15 do `CLAUDE.md`.
 - **Ignora categorias com `arquivada_em` preenchido** no momento da cópia. Arquivar uma categoria não deve ressuscitá-la todo mês.
 - **Copia o valor literalmente.** Sem correção monetária, sem projeção, sem inflação. O produto não adivinha.
 
@@ -106,19 +152,26 @@ Uma tela **Planejamento**, item de primeiro nível, com tetos e pisos lado a lad
 Escritas para virar teste direto:
 
 1. `dentro_do_plano ⟺ realizado >= valor`, para teto e piso, sem ramificação por natureza. *(property-based)*
-2. `consumo = realizado / valor > 0` sempre que `realizado` e `valor` têm o mesmo sinal.
+2. `consumo_bp = razaoEmBp(realizado, valor)`, inteiro com sinal, truncado em direção a zero. **Pode ser negativo** — a redação anterior, "positivo em ambos os casos", era falsa e o glossário a repetia como incondicional.
+2b. `atingiu(pct) ⟺ consumo_bp >= pct × 100`, em aritmética inteira sobre `consumo_bp`, jamais sobre o percentual formatado e **jamais** multiplicando por `valor`. *(regressão do contraexemplo Q: teto de R$ 500, gasto de R$ 300, o alerta de 80% não dispara)*
+2c. O percentual exibido é `consumo_bp / 100`, truncado. O número mostrado e o número que dispara o alerta são o mesmo. *(regressão do contraexemplo R)*
+2d. `consumo_bp = 10000` exatamente ⟹ estado `no_limite`, nem `dentro` nem `estourado`.
 3. `valor ≠ 0`. Planejamento de zero é ausência de planejamento — que se expressa apagando o registro.
 4. Com `categoria_id` preenchido, `sinal(valor)` concorda com `Categoria.natureza`: despesa ⟹ negativo, receita ⟹ positivo. Discordância é rejeição na construção, não warning. Com `categoria_id` nulo não há o que conferir — o sinal define o escopo.
 5. `valor.moeda` = moeda base do Tenant.
 6. No máximo um Planejamento por `(tenant_id, categoria_id, competencia)` com `deleted_at IS NULL`. Constraint no banco, não só no código.
 6b. No máximo um Planejamento global de cada natureza por `(tenant_id, competencia)`. Dois índices únicos parciais — a constraint natural não pega, porque `NULL` não colide.
 7. `competencia` tem `dia = 1`.
-8. Nenhuma `Transferencia` entra em nenhum realizado.
+8. Nenhuma `Transferencia` e nenhuma Categoria não analítica entram em nenhum realizado.
+8b. O realizado de um Planejamento soma apenas Lancamentos cuja `Categoria.natureza` iguala a natureza do Planejamento. **Nunca a soma líquida.** *(regressão dos contraexemplos T, U e V)*
+8c. Com um teto global de R$ 3.000, R$ 10.000 de despesa e R$ 20.000 de receita no mês, o teto está **estourado**. *(o caso que a redação anterior dava como dentro do plano)*
 9. O realizado de cartão usa `data_parcela` e é **invariante** à preferência de base temporal do Tenant.
-10. `copiar` é idempotente: `copiar(a,b); copiar(a,b)` = `copiar(a,b)`.
+10. `copiar` é idempotente: `copiar(a,b); copiar(a,b)` = `copiar(a,b)`, **com e sem Planejamento global na origem**. A segunda execução não lança, não cria e não aborta. *(regressão do contraexemplo W)*
 11. `copiar` nunca altera um Planejamento pré-existente no destino.
 12. Total planejado do mês nunca soma dois Planejamentos do mesmo caminho: nunca global com raiz, nunca raiz com subcategoria.
 13. Com um teto global e N tetos de categoria na mesma competência, o total planejado é **exatamente** o valor do global — invariante de regressão contra a contagem dupla. *(property-based)*
+14. Total planejado é apurado por natureza. Teto global e piso global nunca entram na mesma soma. *(regressão do contraexemplo X)*
+15. Todo `Lancamento` que entra num realizado tem Categoria. Não há caminho pelo qual uma despesa escape de todo planejamento por falta de categoria.
 
 ### Cenários de borda que a suíte precisa cobrir
 
@@ -136,7 +189,15 @@ Escritas para virar teste direto:
 - **Piso não atingido no fim do mês.** Nada acontece automaticamente. Planejamento não gera lançamento, nunca.
 - **Teto global com tetos de categoria.** Global de R$ 3.000 mais tetos de R$ 600, R$ 400 e R$ 300 → total planejado = R$ 3.000, não R$ 4.300 nem R$ 1.300. Os três continuam alertando por conta própria.
 - **Teto global sem nenhum teto de categoria.** Total planejado = o global; realizado = toda a despesa do mês, exceto Transferencia.
-- **Copiar mês com global.** O global é copiado pela mesma regra dos demais, e as duas constraints parciais impedem que a cópia crie um segundo global.
+- **Copiar mês com global, duas vezes.** A segunda execução é um no-op silencioso. Escrita com `=` em vez de `IS NOT DISTINCT FROM`, ela aborta a transação e desfaz também as categorias copiadas na primeira.
+- **Teto global com superávit.** R$ 10.000 de despesa, R$ 20.000 de receita, teto global de R$ 3.000 → **estourado**, consumo 333%.
+- **Estorno de salário sob teto global.** R$ 2.500 gastos e um estorno de salário de −R$ 800 numa categoria de receita → teto de R$ 3.000 **não** estourado. Pela partição por sinal, estaria.
+- **Despesa sem categoria escolhida.** Vai para `Sem categoria (despesa)` e **consome** o teto global. Não existe despesa invisível ao planejamento.
+- **Ajuste de saldo de −R$ 300.** Não consome teto nenhum, não entra em relatório de gasto.
+- **Alerta a 60% de consumo.** Teto de R$ 500, R$ 300 gastos, limiar de 80% → **não dispara**. É o contraexemplo Q e é a regressão mais importante desta emenda.
+- **Um centavo no limiar.** Teto de R$ 500, realizado de −R$ 399,99 → `consumo_bp = 7999`, tela mostra 79,99%, alerta de 80% não dispara. Em −R$ 400,00 → 8000 bp, dispara.
+- **Consumo negativo.** Teto de R$ 500 cuja única movimentação do mês é um estorno de +R$ 80 → −1600 bp. `dentro_do_plano` verdadeiro, barra exibida como 0%, nenhum alerta.
+- **Gasto exatamente igual ao teto.** `consumo_bp = 10000`, estado `no_limite`.
 
 ## Consequências
 

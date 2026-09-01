@@ -4,7 +4,7 @@ Este é o glossário do domínio. **Nome no código = nome no banco = nome na UI
 
 Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 
-**Convenção de nomes de campo.** Conceito de domínio em português (`Lancamento`, `Fatura`, `natureza`, `competencia`). Os campos temporais fixados pelas regras inegociáveis do `CLAUDE.md` permanecem em inglês (`posted_at`, `effective_at`, `closing_day`, `due_day`, `deleted_at`, `*_group_id`) — renomeá-los seria re-litigar regra aceita. Campo novo nasce em português.
+**Convenção de nomes de campo.** Conceito de domínio em português (`Lancamento`, `Fatura`, `natureza`, `competencia`). Os campos temporais fixados pelas regras inegociáveis do `CLAUDE.md` permanecem em inglês (`posted_at`, `settled_at`, `closing_day`, `due_day`, `deleted_at`, `*_group_id`) — renomeá-los seria re-litigar regra aceita. Campo novo nasce em português.
 
 **Invariantes.** Cada entidade declara as suas. Elas são escritas para virar teste direto — se uma invariante não pode ser expressa como asserção, ela está mal escrita.
 
@@ -14,7 +14,16 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 
 **Money** — Value object. Inteiro de centavos (`bigint`) + moeda ISO 4217. Imutável. Toda aritmética monetária passa por ele. Operações entre moedas distintas lançam erro. _Nunca_ use `number` para dinheiro.
 
-**Rateio (allocate)** — Divisão de uma `Money` em N partes cuja soma é exatamente igual ao total. O resto em centavos é distribuído nas primeiras partes. Base de parcelamento e de divisão de despesa.
+**Rateio (`ratear`)** — Divisão de uma `Money` em N partes cuja soma é exatamente igual ao total. O resto em centavos é distribuído **uma unidade por parte, nas primeiras partes**. Regra única do sistema: vale para parcelamento e para divisão de despesa. Base de `GrupoDeParcelamento`.
+
+> **Invariantes**
+> - `Σ partes = total`, exatamente, para qualquer total e qualquer N.
+> - `max(partes) − min(partes) <= 1`. **É esta invariante, e não a da soma, que distingue a regra escolhida de "todo o resto na primeira parte"** — as duas somam certo, e divergem em R$ 0,03 já em R$ 100,00 / 7.
+> - As partes são não-crescentes: `parte[i] >= parte[j]` para `i < j`.
+> - `ratear(−v, n) = map(negar, ratear(v, n))`. O rateio opera sobre a magnitude e reaplica o sinal; sem isso, o truncamento de negativos produz uma distribuição diferente que também soma certo.
+> - `ratear` **pode** produzir partes de valor zero quando `|total| < n`. Isso é válido para o value object e **proibido** para `GrupoDeParcelamento`, que rejeita esse caso — a restrição é da entidade, não da aritmética.
+
+**Razão em basis points (`razaoEmBp`)** — `(a, b: Money) → bigint`, com `a` e `b` na mesma moeda e `b ≠ 0`: `(a.centavos * 10000) / b.centavos`, truncado **em direção a zero**. Única grandeza fracionária do domínio, e é inteira: 10000 bp = 100,00%. Preserva sinal. `Money` não tem divisão que devolva `Money`.
 
 **Sinal** — Convenção do domínio: **despesa é negativa, receita é positiva**. O sinal vive no valor, não num campo de tipo separado. Somar uma lista de lançamentos dá o resultado líquido sem nenhum `if`.
 
@@ -29,15 +38,39 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 > - A competência de um instante é calculada convertendo o instante para `America/Sao_Paulo` **antes** de extrair mês e ano. Nunca a partir do UTC nu.
 > - O domínio nunca usa offset fixo (`-03:00`). Sempre a zona IANA — o Brasil já teve horário de verão e pode voltar a ter.
 
-**posted_at** — Competência do `Lancamento`: quando o fato econômico aconteceu. É o campo que decide em qual `Fatura` uma compra de cartão cai e em qual competência ela aparece no relatório. Imutável depois de criado.
+**Janela** — Todo intervalo de tempo do domínio é **semiaberto, `[inicio, fim)`**, expresso em instantes UTC, com as bordas calculadas em `America/Sao_Paulo`. Uma convenção só, sem exceção — inclusive a janela da fatura. Janelas consecutivas satisfazem `fim(k) = inicio(k+1)` exatamente, o que torna contiguidade e disjunção verificáveis por igualdade em vez de por "o instante seguinte".
 
-**effective_at** — Efetivação: quando o dinheiro de fato saiu ou entrou do caixa. Em `Lancamento` de `Conta`, é escrito quando o lançamento compensa. Em `Lancamento` de `Cartao`, é **derivado** da `Fatura` — ver ADR 0007.
+> **Invariantes**
+> - Nenhuma comparação de janela usa `DATE`. `DATE` não representa instante, e a coerção `DATE → TIMESTAMPTZ` depende do fuso da sessão que escreve.
+> - Dois períodos comparados entre si usam a mesma regra de fronteira e a mesma `BaseTemporal` nos dois lados. Comparação com fronteiras ou bases distintas produz variação inventada.
+
+**Data civil** — Campo que nomeia um **dia**, não um instante: `Fatura.data_fechamento`, `Fatura.data_vencimento`, `Objetivo.prazo`, `Planejamento.competencia`. Sempre interpretado em `America/Sao_Paulo`. Nomeado com prefixo `data_`/`prazo`/`competencia` justamente para não ser confundido com instante e coagido por engano — os instantes são `posted_at`, `settled_at`, `periodo_inicio`, `periodo_fim`.
+
+**posted_at** — Instante. Competência do `Lancamento`: quando o fato econômico aconteceu. É o campo que decide em qual `Fatura` uma compra de cartão cai e em qual competência ela aparece no relatório. Imutável depois de criado.
+
+**settled_at** — Instante. Compensação: quando o dinheiro **de fato** saiu ou entrou do caixa. Nulo enquanto não aconteceu. Em `Lancamento` de `Conta`, é escrito quando o lançamento compensa. Em `Lancamento` de `Cartao`, é escrito quando a `Fatura` que o contém é **paga** — nunca antes, e nunca com a data de vencimento. Ver ADR 0007.
+
+> Este campo se chamava `effective_at`. O nome foi **aposentado**: "efetivação" é lido como *fato* por metade dos leitores e como *previsão* pela outra metade, e a ambiguidade produziu dois modelos de dados incompatíveis entre dois arquitetos trabalhando em paralelo. `settled_at` — compensação, liquidação — só tem uma leitura.
+
+**Eixo caixa** — Como se responde "quanto há, e quanto haverá, na conta". Soma **duas** coisas, e nenhuma delas é lançamento de cartão:
+
+1. Lancamentos de `Conta`, por `settled_at` (realizado) ou por `posted_at` (agendados ainda não compensados).
+2. `Fatura`s não pagas, pelo seu **total**, na `data_vencimento`, debitando a Conta de pagamento.
+
+Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar por lançamento de cartão exigiria roteá-lo até uma Conta pelo cartão, seria mais caro e estaria errado quando a fatura fosse paga por outra conta. A `Fatura` é a unidade certa: é uma linha por ciclo em vez de N, e é o que o Usuario de fato paga.
+
+> **Invariantes**
+> - Nenhum `Lancamento` de `Cartao` entra no eixo caixa, em nenhuma circunstância.
+> - Uma `Fatura` entra na projeção **enquanto não estiver `paga`**. Depois de paga, quem representa a saída é a perna de débito da `Transferencia`, na Conta. Nunca as duas — é aqui que a dupla contagem entraria.
+> - O eixo caixa e o eixo competência nunca se misturam na mesma resposta, e o eixo usado aparece no payload.
+
+**Vencimento previsto** — Quando uma `Fatura` deve virar desembolso: a própria `Fatura.data_vencimento`. É propriedade da Fatura, **jamais coluna de `Lancamento`**. Copiá-la para a linha a transformaria numa compensação que não aconteceu — foi exatamente o defeito que fez toda compra de cartão nascer `efetivada`.
 
 **Base temporal (BaseTemporal)** — Qual das referências de tempo de um lançamento de cartão o relatório usa para atribuí-lo a uma competência: `data_compra`, `data_parcela` (padrão) ou `data_fatura`. Só afeta lançamentos de `Cartao`. Ver ADR 0007.
 
 **Ciclo de faturamento** — A regra recorrente de um `Cartao`: `closing_day` e `due_day`. Gera as janelas. Não é uma entidade — é a configuração que as produz.
 
-**Janela da Fatura** — O intervalo concreto de uma `Fatura`, `(periodo_inicio, periodo_fim]`, fechado à direita: uma compra **no dia exato do fechamento** entra na fatura que fecha naquele dia. Ver ADR 0007.
+**Janela da Fatura** — O intervalo concreto de uma `Fatura`: `[periodo_inicio, periodo_fim)`, em `TIMESTAMPTZ`, onde `periodo_fim` é **00h00 de `America/Sao_Paulo` do dia seguinte ao `closing_day`**. Isso mantém a decisão do ADR 0007 — uma compra **no dia exato do fechamento**, a qualquer hora, entra na fatura que fecha naquele dia — usando a convenção semiaberta única do domínio. Ver ADR 0007.
 
 ---
 
@@ -57,6 +90,7 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 - `incluir_no_saldo_geral` — Booleano. Decide se a conta entra no **Saldo geral**. É escolha do Usuario; o `tipo` apenas define o valor **inicial** (`investimento` nasce `false`, todos os demais nascem `true`).
 
 > **Invariantes**
+> - **Toda Conta e todo Cartao de um Tenant têm a moeda base do Tenant.** Multi-moeda não existe no MVP e o modelo o impede — não é decisão de tela. Sem isso o Saldo geral não tem número correto possível: somar centavos de moedas distintas viola a regra 2 do `CLAUDE.md`, e converter exige uma entidade de câmbio que não existe. Introduzir multi-moeda exige ADR própria com taxa datada e fonte declarada.
 > - `moeda` é imutável depois que a Conta tem qualquer `Lancamento`.
 > - `incluir_no_saldo_geral = false` **nunca** altera o saldo da própria Conta, só a soma do Saldo geral.
 > - Mudar `tipo` nunca muda saldo, sinal, nem `incluir_no_saldo_geral` já persistido.
@@ -69,39 +103,74 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 > - Se `due_day <= closing_day`, o vencimento cai no **mês seguinte** ao do fechamento.
 > - A Conta de pagamento padrão pertence ao mesmo Tenant e tem a mesma moeda do Cartao.
 
-**Lancamento** — O átomo do sistema. Um movimento de dinheiro: valor (`Money` com sinal), Categoria, Conta **ou** Cartao, `posted_at`, `effective_at`, descrição, `status`. Nunca é editado destrutivamente — alterações passam pelo audit log.
+**Lancamento** — O átomo do sistema. Um movimento de dinheiro: valor (`Money` com sinal), Categoria, Conta **ou** Cartao, `posted_at`, `settled_at`, descrição. Nunca é editado destrutivamente — alterações passam pelo audit log.
 
 > **Invariantes**
 > - Aponta para exatamente uma Conta **ou** um Cartao. Nunca zero, nunca ambos.
 > - `valor.moeda` = moeda da Conta ou do Cartao.
 > - `valor ≠ 0`.
 > - `posted_at` é imutável.
-> - `status = efetivado ⟺ effective_at != null`.
+> - `settled_at != null ⟹` o dinheiro se moveu. Nunca recebe data futura.
+> - **`categoria_id` é obrigatório**, exceto em perna de `Transferencia`, onde é obrigatoriamente nulo. Não existe lançamento de receita ou despesa sem Categoria — quando o Usuario não escolhe, o domínio atribui a Categoria de sistema `Sem categoria` da natureza correspondente ao sinal. Sem isso, todo agregado por natureza (teto global, relatório por categoria) perde silenciosamente os lançamentos sem categoria.
+> - O sinal do `valor` **pode** discordar da `natureza` da Categoria. Um crédito numa categoria de despesa é um `Estorno`; um débito numa categoria de receita é uma devolução de receita. Impor concordância tornaria o estorno irrepresentável.
 > - Se aponta para um Cartao, pertence a exatamente uma `Fatura`.
 
-**Status de lançamento** — `previsto` (agendado, ainda não aconteceu), `pendente` (aconteceu, não compensou), `efetivado` (compensado). Só `efetivado` conta no **Realizado**; `previsto` alimenta o **Projetado**.
+**Status de lançamento** — **Derivado, nunca coluna.** `efetivado` se `settled_at != null`; senão `previsto` se `posted_at` está no futuro; senão `pendente`. Derivar elimina a classe de bug em que um job esquece de virar o status e o número congela.
 
-**Realizado** — Soma dos Lancamentos `efetivado` de um recorte. **Projetado** — Realizado + os `previsto` do mesmo recorte. O par realizado × projetado é o eixo conceitual dos relatórios e do `Planejamento`. Nunca some os dois na mesma linha.
+- `previsto` — ainda não aconteceu (parcela futura, agendamento, recorrência materializada à frente).
+- `pendente` — aconteceu, o dinheiro ainda não se moveu (compra na fatura aberta, débito não compensado).
+- `efetivado` — o dinheiro se moveu.
+
+**Realizado** — Soma dos Lancamentos **`efetivado` + `pendente`** de um recorte: tudo que já aconteceu. **Projetado** — Realizado + os `previsto`. O par realizado × projetado é o eixo conceitual dos relatórios e do `Planejamento`. Nunca some os dois na mesma linha.
+
+> `Saldo` **não** é Realizado. Saldo conta só `efetivado` — dinheiro que se moveu. Realizado conta o que aconteceu, movido ou não. Uma compra de cartão da fatura aberta está no Realizado do mês e não no Saldo. São perguntas diferentes e a UI precisa rotular as duas.
 
 **Transferencia** — Movimento entre duas Contas próprias. **Materializada como dois Lancamentos** (uma perna negativa, uma positiva) unidos por `transfer_group_id`. Não é receita nem despesa — não aparece em relatório de gastos nem em `Planejamento`. A soma das pernas é sempre zero.
 
-**Fatura** — Ciclo de cobrança de um Cartao. Tem `periodo_inicio`, `periodo_fim`, `data_fechamento`, `data_vencimento`, `competencia` e um estado. Agrega os Lancamentos do Cartao cuja janela contém seu `posted_at`.
+> **Invariantes**
+> - Um `transfer_group_id` tem exatamente duas pernas não excluídas, e a soma delas é zero.
+> - **Excluir uma perna isolada é proibido.** A exclusão é da Transferencia inteira e marca as duas pernas na mesma transação. Uma perna solta cria dinheiro do nada: o saldo do destino sobe e nada o compensa.
+> - Editar o valor de uma perna edita as duas. Não existe caminho que altere uma só.
+> - A soma-zero é verificada considerando apenas pernas com `deleted_at IS NULL`.
+> - Transferencia é excluída de **toda** agregação de receita ou despesa, por construção — no tradutor de filtro único, nunca por predicado repetido em cada consulta. Ela pode aparecer como linha na listagem; nunca pode entrar num total.
+
+**Fatura** — Ciclo de cobrança de um Cartao. Tem `periodo_inicio` e `periodo_fim` (instantes), `data_fechamento`, `data_vencimento` e `competencia` (datas civis), e um estado. **Agrega os Lancamentos que apontam para ela por `fatura_id`** — a pertinência é um vínculo explícito, não uma consulta por janela.
+
+**Regra de atribuição** — Um Lancamento novo vai para a Fatura cuja janela contém seu `posted_at`; se essa Fatura não estiver `aberta`, vai para a **Fatura aberta mais antiga** do Cartao e é marcado `retroativo`. Separar a regra da definição é o que permite o retroativo sem que a definição de Fatura passe a mentir.
 
 > **Invariantes**
 > - `competencia` da Fatura é o mês de `data_vencimento` — o mês em que o Usuario paga. Uma fatura que fecha em 25/set e vence em 05/out tem competência **outubro**.
-> - As janelas de um Cartao são contíguas e não se sobrepõem: `periodo_inicio` de uma fatura é o instante seguinte ao `periodo_fim` da anterior.
-> - `periodo_inicio < periodo_fim <= data_fechamento <= data_vencimento`.
-> - O total de uma Fatura `fechada` ou `paga` é imutável.
-> - Todo Lancamento de Cartao pertence a exatamente uma Fatura.
+> - As janelas de um Cartao são contíguas e disjuntas: `periodo_fim` de uma fatura **é igual** ao `periodo_inicio` da seguinte. Nenhum instante em duas janelas, nenhum instante fora de todas. Esta invariante fala de **janelas**, não de lançamentos — um retroativo não a viola.
+> - `periodo_inicio < periodo_fim`, e `data_fechamento <= data_vencimento`.
+> - Todo Lancamento de Cartao tem exatamente um `fatura_id`.
+> - **`total` exclui pernas de Transferencia.** O total é a soma dos lançamentos da fatura com `transfer_group_id IS NULL`. Sem isso, a perna de crédito do pagamento zera a fatura que ela acabou de quitar.
+> - O total de uma Fatura `fechada` ou `paga` é imutável. Um lançamento novo nunca reabre uma fatura fechada — vai para a aberta mais antiga.
+> - Composição da fatura: `compras do ciclo + parcelas de compras anteriores + retroativos − estornos = total`. São **quatro** parcelas, não três; sem o balde de retroativos a conferência não fecha.
 
 **Estado de fatura** — `aberta` (recebendo lançamentos), `fechada` (janela encerrada, valor travado), `paga`, `parcialmente_paga`, `vencida`.
 
 **Pagamento de fatura** — **É uma Transferencia** da Conta para o Cartao, nunca uma despesa. Contá-la como despesa duplicaria o gasto — o erro mais comum da categoria.
 
+> **Invariantes**
+> - O vínculo pagamento ↔ fatura é **`transferencias.fatura_id`**, e só ele. A perna de crédito **não** recebe `lancamentos.fatura_id`: dentro da fatura, ela anularia o total.
+> - Ao a Fatura passar a `paga`, o domínio grava `settled_at` = instante de efetivação do pagamento em **todos** os lançamentos daquela Fatura, na mesma transação. É aí que a compra de cartão vira desembolso.
+> - Pagamento parcial não grava `settled_at` em lançamento nenhum. A Fatura fica `parcialmente_paga` e seus lançamentos seguem `pendente`.
+
+**Estorno** — Lançamento **novo**, de sinal oposto, que desfaz total ou parcialmente um lançamento anterior. Aponta para o original por `estorno_de_lancamento_id`. Nunca é edição nem exclusão do original — o fato aconteceu e depois foi desfeito, e as duas coisas ficam registradas.
+
+> **Invariantes**
+> - Sinal oposto ao do original, mesma Conta ou Cartao, mesma Categoria e mesma moeda.
+> - `|valor do estorno| <= |valor do original|`, somado a estornos anteriores do mesmo original.
+> - Um estorno **nunca** altera o `valor` do original nem o `valor_total` de um `GrupoDeParcelamento`. O grupo continua dizendo o que a compra custou; o estorno diz o que voltou.
+> - Estorno de compra parcelada é um lançamento único na competência em que o dinheiro voltou. As parcelas futuras **não** encolhem — encolhê-las quebraria `Σ filhos = valor_total` e produziria parcela de valor zero.
+> - Sob a base `data_compra`, o estorno de uma compra parcelada é atribuído à competência da **`data_compra` do grupo estornado**, não à sua própria. É a única forma de o relatório de julho deixar de mostrar um gasto que foi desfeito.
+
 **GrupoDeParcelamento** — A compra parcelada como objeto, dona dos fatos que pertencem à **compra**, não a cada parcela: `data_compra`, `valor_total`, `installment_total` e a descrição original. Os N Lancamentos filhos apontam para ele por `installment_group_id`, cada um com seu `installment_number`.
 
 > **Invariantes**
-> - Soma dos `valor` dos N filhos = `valor_total`, exatamente. O resto do rateio vai na **primeira** parcela.
+> - **`valor_total` carrega o sinal do domínio.** Uma compra parcelada de R$ 100,00 tem `valor_total = −10000` e filhos negativos. Guardá-lo como magnitude positiva faria `Σ filhos = valor_total` falhar literalmente, invertida em sinal.
+> - Soma dos `valor` dos N filhos = `valor_total`, exatamente, para qualquer total e qualquer N. O resto segue a regra única de `ratear`: distribuído **nas primeiras parcelas**, um centavo por parcela.
+> - **`|valor_total| >= N`.** Não se divide R$ 0,01 em 3 parcelas: duas delas seriam zero, e `valor ≠ 0` é invariante do `Lancamento`. O parcelamento é **rejeitado** na construção, não silenciosamente reduzido a menos parcelas do que o Usuario pediu.
 > - `installment_number` ∈ [1, N], sem lacuna e sem repetição.
 > - `data_compra` é o mesmo fato para as N parcelas — persistido **uma vez**, no grupo. Nunca copiado para os filhos.
 > - `data_compra <= posted_at` de toda parcela.
@@ -112,7 +181,16 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 
 **Recorrencia** — Regra que gera Lancamentos repetidos (salário, aluguel, assinatura). Guarda a regra, não as ocorrências; um job materializa as ocorrências dentro de um horizonte. Editar a regra não reescreve o passado.
 
-**Categoria** — Classificação de Lancamento. Hierarquia de dois níveis (categoria → subcategoria). Tem `natureza` (`receita` ou `despesa`), cor, ícone e `arquivada_em`.
+> **Invariantes**
+> - `dia_do_mes` em mês que não o tem é **fixado no último dia do mês**: `min(dia_do_mes, ultimo_dia_do_mes)`, sempre calculado a partir do `dia_do_mes` da regra, nunca do mês anterior. Dia 31 produz 28/fev (29 em bissexto) e volta a 31 em março.
+> - A recorrência **nunca pula** um mês por falta do dia, e **nunca transborda** para o mês seguinte. Pular faz o mês perder o lançamento e o teto ficar verde indevidamente; transbordar dá duas ocorrências ao mês seguinte e estoura o teto dele.
+> - A identidade de uma ocorrência é `(tenant_id, recorrencia_id, competencia_da_ocorrencia)` — a **competência**, não a data exata. Alterar `dia_do_mes` na regra reposiciona ocorrências futuras sem duplicá-las; com a data na chave, a alteração faria o job materializar tudo de novo.
+> - Alterar a regra não altera ocorrências já materializadas com `posted_at` no passado.
+
+**Categoria** — Classificação de Lancamento. Hierarquia de dois níveis (categoria → subcategoria). Tem `natureza` (`receita` ou `despesa`), `analitica`, cor, ícone e `arquivada_em`.
+
+- `analitica` — Booleano, padrão `true`. Categoria **não analítica** classifica lançamentos que não são fato econômico e é excluída de todo relatório de gasto e de todo `Planejamento`, exatamente como a Transferencia. Hoje há uma: **`Ajuste de saldo`**. Ajustar saldo é correção de registro, não gasto — sem isso, um ajuste de −R$ 300,00 vira R$ 300,00 de despesa no relatório e consome o teto global.
+- **Categorias de sistema** — `Sem categoria` (uma por natureza) e `Ajuste de saldo`. Podem ser renomeadas, nunca excluídas e nunca arquivadas: são o destino obrigatório de lançamentos que precisam de Categoria e não têm uma escolhida.
 
 - `arquivada_em` — Timestamp de arquivamento. **Arquivar não é excluir.** Categoria arquivada some dos seletores e da cópia de `Planejamento`, mas continua classificando todo o histórico e continua aparecendo em relatórios do passado. `deleted_at` continua existindo e continua sendo o mecanismo de exclusão — os dois campos coexistem e significam coisas diferentes.
 
@@ -127,29 +205,42 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 
 **Planejamento** — Valor esperado para uma Categoria numa Competencia. Substitui **Limite** e a **meta de receita mensal** — o piso mensal por categoria, que era o espelho exato do Limite. **Não** substitui o objetivo de acúmulo plurimensal: esse é `Objetivo`, entidade própria. O sinal do `valor` carrega a direção: valor negativo é **teto** de despesa, valor positivo é **piso** de receita. Ver ADR 0008.
 
-- `natureza` (`teto` | `piso`) — **derivada** do sinal de `valor`, nunca persistida. Existe para rotular a UI.
-- `categoria_id` — Opcional. Preenchido, o escopo é a Categoria. Nulo, é um **Planejamento global**: o sinal define a abrangência (negativo cobre toda despesa do mês, positivo cobre toda receita).
-- `alertas_percentuais` — Percentuais de `consumo` em que o domínio emite evento. Padrão `[80, 100]`.
+- `natureza` (`teto` | `piso`) — **derivada** do sinal de `valor`, nunca persistida. Existe para rotular a UI e para particionar o escopo global.
+- `categoria_id` — Opcional. Preenchido, o escopo é a Categoria. Nulo, é um **Planejamento global**.
+- `alertas_percentuais` — Percentuais em que o domínio emite evento. Padrão `[80, 100]`.
 
-**Precedência hierárquica** — Os escopos formam três níveis: **global → categoria-raiz → subcategoria**. Um Planejamento num nível superior agrega o realizado de tudo abaixo dele; um de nível inferior é um sub-teto legítimo, e o mesmo lançamento conta nos dois. Para não haver contagem dupla, o **total planejado** soma, em cada caminho da hierarquia, apenas o Planejamento de **nível mais alto** que existir naquela competência.
+**Identidade** — `(tenant_id, competencia, natureza, categoria_id)`, com `categoria_id` nulo sendo um valor legítimo e único da chave. Dela decorrem tanto o índice quanto a verificação de existência da cópia. Como `NULL` não colide em índice único nem satisfaz `=` no Postgres, isso exige índices únicos **parciais** e comparação por `IS NOT DISTINCT FROM` — a constraint natural e o `=` ingênuo deixam passar um segundo global e quebram a idempotência da cópia.
+
+**Apuração do realizado** — O realizado de um Planejamento é a soma dos Lancamentos que, na competência, pertencem ao seu escopo e cuja **`Categoria.natureza` é igual à `natureza` do Planejamento**. Um teto agrega despesa; um piso agrega receita. Nunca a soma líquida.
+
+> Isto é o que faz o teto **global** funcionar. Sem partição por natureza, receita anula despesa e o teto global é impossível de estourar para qualquer usuário com superávit: R$ 10.000 gastos sob teto de R$ 3.000, com R$ 20.000 de salário, dariam `+1.000.000 >= −300.000` — dentro do plano. E a partição é por **natureza da Categoria**, não pelo sinal do lançamento: um estorno de salário é negativo e é receita, e não pode consumir teto de despesa.
+
+**Precedência hierárquica** — Três níveis: **global → categoria-raiz → subcategoria**. Um Planejamento superior agrega o realizado de tudo abaixo; um inferior é um sub-teto legítimo, e o mesmo lançamento conta nos dois. Para não haver contagem dupla, o **total planejado** soma, em cada caminho, apenas o Planejamento de **nível mais alto** que existir. A regra é enunciada **duas vezes, uma por natureza**: há um total planejado de despesa e um de receita, e eles nunca se somam.
+
+**Consumo** — `consumo_bp = razaoEmBp(realizado, valor)`, inteiro com sinal, truncado em direção a zero. `atingiu(pct) ⟺ consumo_bp >= pct * 100`.
+
+> Uma única divisão, uma única comparação, nenhum `if` sobre natureza — e é aqui que a versão anterior errava. Multiplicar os dois lados por `valor` para evitar a divisão **inverte a desigualdade quando `valor` é negativo**: com teto de R$ 500 e R$ 300 gastos, `−30000 × 100 >= 80 × −50000` é verdadeiro e o alerta de 80% dispara a 60% de consumo. O `if` abolido do `dentro_do_plano` tinha voltado, invertido, dentro do cálculo percentual.
+>
+> A exibição usa **o mesmo `consumo_bp`**, dividido por 100. Com realizado de −R$ 399,99 sob teto de R$ 500, o truncamento dá 7999 bp: a tela mostra 79,99% e o alerta de 80% não dispara. Formatar por arredondamento a partir de outro número faria a tela anunciar 80,00% sem alerta, ou disparar um centavo antes do limiar.
 
 > **Invariantes**
 > - `dentro_do_plano ⟺ realizado >= valor`, com o sinal do domínio, para teto e piso igualmente. Sem nenhum `if` sobre natureza.
-> - `consumo = realizado / valor`, positivo em ambos os casos.
-> - Com `categoria_id` preenchido, `sinal(valor)` concorda com `Categoria.natureza`: despesa ⟹ negativo, receita ⟹ positivo. Discordância é estado inválido, não aviso.
-> - Com `categoria_id` nulo não há Categoria contra a qual conferir: o sinal **define** o escopo em vez de ser conferido por ele.
-> - `valor ≠ 0`.
-> - No máximo um Planejamento por `(tenant_id, categoria_id, competencia)` não excluído.
-> - No máximo um Planejamento global **de cada natureza** por `(tenant_id, competencia)`. `NULL` não colide em índice único no Postgres — isso exige dois índices únicos parciais sobre o sinal, não a constraint natural.
-> - Transferencia nunca entra no realizado de um Planejamento.
+> - `consumo_bp` **pode ser negativo**: um mês cujo único lançamento na categoria é um estorno tem realizado de sinal oposto ao do teto. Barra negativa é exibida como 0% e o número real no detalhe. Nenhum limiar positivo é cruzado por um consumo negativo.
+> - `atingiu` é avaliado em aritmética inteira sobre `consumo_bp`, jamais sobre o percentual formatado.
+> - Gastar exatamente o teto é `dentro_do_plano` **e** `consumo_bp = 10000`. O estado exibido é **`no_limite`**, derivado — nem verde nem estourado. Sem esse terceiro rótulo a tela mostra verde e o sino mostra alerta para o mesmo objeto no mesmo instante.
+> - Com `categoria_id` preenchido, `sinal(valor)` concorda com `Categoria.natureza`: despesa ⟹ negativo, receita ⟹ positivo.
+> - Com `categoria_id` nulo não há Categoria contra a qual conferir: o sinal **define** a natureza do escopo em vez de ser conferido por ela.
+> - `valor ≠ 0` — o que também garante que `razaoEmBp` nunca divide por zero.
+> - No máximo um Planejamento por identidade não excluída.
+> - Transferencia e Categoria não analítica nunca entram no realizado de um Planejamento.
 > - O realizado de um Planejamento usa **sempre** a base temporal `data_parcela`, independentemente da preferência de relatório do Usuario.
-> - O total planejado de um mês nunca soma dois Planejamentos do mesmo caminho da hierarquia: nunca global com raiz, nunca raiz com subcategoria.
+> - O total planejado de um mês nunca soma dois Planejamentos do mesmo caminho, nem naturezas diferentes.
 
 **Copiar planejamento** — Operação que replica os Planejamentos de uma competência para outra.
 
 > **Invariantes**
-> - Idempotente: executar duas vezes produz o mesmo conjunto.
-> - Não destrutiva: só cria Planejamento para categoria que **não tem** um na competência de destino. Nunca sobrescreve valor editado pelo Usuario.
+> - Idempotente: executar duas vezes produz o mesmo conjunto — **inclusive com um Planejamento global na origem**. A verificação de existência compara a identidade inteira com `IS NOT DISTINCT FROM`; escrita como `categoria_id = origem.categoria_id`, o global nunca é encontrado (`NULL = NULL` é `NULL`), o `INSERT` é tentado, o índice parcial o rejeita e a transação aborta levando junto as categorias que já tinham sido copiadas.
+> - Não destrutiva: só cria Planejamento para identidade que **não existe** na competência de destino. Nunca sobrescreve valor editado pelo Usuario.
 > - Ignora categorias com `arquivada_em` preenchido no momento da cópia.
 > - Copia o valor literalmente. Sem correção monetária, sem projeção.
 
@@ -158,7 +249,8 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 - `valor_alvo` — `Money` **sempre positivo**. Objetivo é um **estoque-alvo**, não um fluxo: a convenção de sinal do ADR 0005 governa movimentos, e um alvo de acúmulo não tem direção a codificar.
 - `prazo` — `DATE` em `America/Sao_Paulo`, **opcional**. Sem prazo, o Objetivo nunca vence — é o caso da reserva de emergência.
 - **Modo de apuração**, derivado de `conta_id`, nunca persistido como enum:
-  - **Ancorado** (`conta_id` preenchido) — `progresso = saldo(conta) - saldo_base`, onde `saldo_base` é um `Money` **capturado e armazenado** na criação. Nunca recalculado: lançamento retroativo muda o saldo do passado, e um `saldo_base` derivado faria o progresso mudar sozinho.
+  - **Ancorado** (`conta_id` preenchido) — `progresso = saldo(conta) - saldo_base`, onde `saldo_base` é um `Money` **armazenado**, capturado na criação. Nunca derivado de uma data: se fosse recalculado, um lançamento retroativo mudaria o progresso sozinho.
+    **Reajuste por retroativo anterior.** Um Lancamento com `settled_at` **anterior** ao `criado_em` do Objetivo ajusta `saldo_base` pelo mesmo valor, preservando o progresso. Sem isso, importar em setembro um depósito feito em agosto — dinheiro que já estava na conta quando o marco foi capturado — dá 30% de progresso sem que o Usuario tenha guardado um centavo. `saldo_base` congela o saldo *conhecido*; o reajuste o corrige para o saldo *real* daquele instante.
   - **Por aportes** (`conta_id` nulo) — `progresso = Σ valor` dos Lancamentos ligados por `Aporte`.
 - **Estado**, derivado: `concluido` se `concluido_em != null`; senão `vencido` se `prazo != null && prazo < hoje`; senão `ativo`.
 - **Prazo vencido sem atingir o alvo: nada acontece.** O Objetivo passa a `vencido`, sai da lista de ativos, é preservado intacto e o domínio emite `ObjetivoVencido`. Não exclui, não estende sozinho, **não gera Lancamento** — Objetivo nunca move dinheiro.
@@ -168,7 +260,9 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 > - Ancorado: `valor_alvo.moeda = conta.moeda`. Por aportes: `valor_alvo.moeda` = moeda base do Tenant, e todo Lancamento aportado tem essa moeda. Sem conversão silenciosa, nunca.
 > - `prazo`, quando informado, é `>= hoje` **no momento da escrita**. Um Objetivo cujo prazo passou pelo tempo é `vencido`, não inválido — a validação é de escrita, não de leitura.
 > - `progresso` **não é limitado** ao alvo: pode passar de 100% e pode ficar negativo se houver resgate. A UI pode travar a barra; o domínio devolve o número real.
+> - `saldo_base` só muda pelo reajuste de retroativo anterior à criação, e sempre pelo valor do lançamento que o motivou — de modo que o progresso fique inalterado. Nenhum outro caminho o escreve.
 > - `concluido_em` é gravado na **primeira** vez que `progresso >= valor_alvo` e é **fixo**: resgate posterior reduz o progresso e não desfaz a conclusão. Atingir foi um fato histórico.
+> - A travessia é avaliada **na transação que altera o progresso** — toda escrita que afete o saldo da Conta ancorada ou o conjunto de Aportes reavalia os Objetivos afetados. Nunca na leitura da tela. Apurada na leitura, "primeira travessia" vira "primeira vez que alguém abriu a tela": um objetivo atingido em setembro e resgatado em outubro nunca seria concluído, e a regra do resgate — a que este glossário manda ler duas vezes — nunca chegaria a ser exercida.
 > - Reduzir `valor_alvo` para valor já alcançado conclui o Objetivo na hora. **Aumentar** `valor_alvo` acima do progresso **limpa** `concluido_em` e devolve o Objetivo a `ativo` — a fixidez protege contra queda de progresso, não contra redefinição deliberada do alvo.
 > - Um Objetivo ancorado não excluído **bloqueia** o soft delete da sua Conta. Para excluir a Conta, exclua o Objetivo antes. O progresso nunca é congelado num campo.
 > - Objetivo nunca cria, altera ou exclui `Lancamento`.
@@ -185,8 +279,9 @@ Mantido pelo `arquiteto-dominio-financeiro` via `/domain-modeling`.
 **Saldo geral** — Soma dos saldos das Contas com `incluir_no_saldo_geral = true`, na moeda base do Tenant. É o número principal do produto.
 
 > **Invariantes**
-> - Contas de moedas diferentes só entram no Saldo geral após conversão explícita e datada. Somar moedas distintas lança erro.
+> - Todas as Contas somadas têm a mesma moeda, garantido pela invariante de `Conta`. Não há conversão porque não há multi-moeda; se um dia houver, o Saldo geral exige uma taxa datada e uma ADR, não um `SUM`.
 > - Alterar `incluir_no_saldo_geral` muda o Saldo geral e nada mais.
+> - Saldo geral soma **saldos de Conta**, nunca dívida de Cartao. "Quanto eu tenho" e "quanto eu devo" são dois números e a UI rotula os dois.
 
 **SaldoSnapshot** — Materialização de `(conta_id, dia) → saldo`, existente apenas para desempenho. Reconciliado por job contra o derivado. Divergência é incidente, não warning.
 
@@ -225,7 +320,7 @@ Não use — geram ambiguidade e bugs reais:
 | `transaction` | `Lancamento` | Colide com transação de banco de dados |
 | `amount: number` | `Money` | Ponto flutuante em dinheiro é defeito, não estilo |
 | `balance` como coluna mutável | `SaldoSnapshot` | Deixa claro que é derivado |
-| `date` | `posted_at` / `effective_at` | Colapsar competência e efetivação quebra o cartão |
+| `date` | `posted_at` / `settled_at` | Colapsar competência e efetivação quebra o cartão |
 | "a data" de um lançamento de cartão | `data_compra` · `posted_at` · `Fatura.competencia` | São três bases distintas; "a data" não existe |
 | `purchase_date` no `Lancamento` | `GrupoDeParcelamento.data_compra` | Repetir o fato em N linhas permite que N linhas divirjam |
 | `card account` | `Cartao` | Cartão não guarda dinheiro |
@@ -238,7 +333,21 @@ Não use — geram ambiguidade e bugs reais:
 | `Limite` como entidade | `Planejamento` | Teto e piso mensais são o mesmo mecanismo; duas entidades duplicam CRUD, alerta e cópia |
 | `Meta` | `Planejamento` (piso mensal) · `Objetivo` (acúmulo com prazo) | Um nome para dois conceitos de horizonte diferente. A ambiguidade quase apagou o acúmulo do modelo — foi preciso um veto para recuperá-lo |
 | `objetivo.progresso` como coluna | soma derivada (saldo − `saldo_base`, ou Σ Aportes) | Progresso é saldo; saldo é derivado (ADR 0005) |
-| `saldo_base` recalculado | `saldo_base` capturado e armazenado | Lançamento retroativo faria o progresso mudar sozinho |
+| `saldo_base` recalculado | `saldo_base` armazenado, com reajuste só por retroativo anterior | Lançamento retroativo faria o progresso mudar sozinho |
+| `status` como coluna | `status` derivado de `settled_at` e `posted_at` | Coluna de status envelhece quando um job esquece de virá-la |
+| `effective_at` | `settled_at` (fato) · `Fatura.data_vencimento` (previsão) | Lido como fato por uns e como previsão por outros; produziu dois modelos incompatíveis |
+| `settled_at` = vencimento da fatura | `settled_at` = pagamento | Data futura em campo de compensação faz toda compra de cartão nascer realizada |
+| coluna de previsão de caixa em `lancamentos` | `Fatura.data_vencimento` | Previsão persistida envelhece quando o vencimento do cartão muda |
+| lançamento de `Cartao` no eixo caixa | `Fatura` no eixo caixa | Compra de cartão não sai do bolso; a fatura sai |
+| `periodo_inicio`/`periodo_fim` como `DATE` | `TIMESTAMPTZ` | `DATE` não representa instante; a coerção depende do fuso da sessão |
+| janela `(inicio, fim]` | `[inicio, fim)` | Uma convenção só; duas produzem dia contado em dobro ou em nenhum lugar |
+| `lancamentos.fatura_id` na perna do pagamento | `transferencias.fatura_id` | A perna de crédito dentro da fatura zera o total dela |
+| editar ou excluir o lançamento original | `Estorno` | O fato aconteceu e depois foi desfeito; os dois ficam registrados |
+| `categoria_id` nulo em receita ou despesa | Categoria de sistema `Sem categoria` | Nulo escapa de todo agregado por natureza, em silêncio |
+| resto do rateio "na primeira parcela" | `ratear`: nas primeiras partes | Duas regras que somam certo e divergem R$ 0,03 em 7x |
+| `consumo` obtido multiplicando por `valor` | `razaoEmBp`, uma divisão só | Multiplicar por `valor` negativo inverte a desigualdade do alerta |
+| percentual formatado como gatilho de alerta | `consumo_bp` inteiro | Um centavo decide o alerta, e o número exibido tem de ser o mesmo que dispara |
+| realizado global como soma líquida | soma por `Categoria.natureza` | Receita anula despesa e o teto global nunca estoura |
 | `natureza` persistida no `Planejamento` | sinal de `valor` | Enum e sinal podem se contradizer — estado inválido representável |
 | `pago: boolean` | `status` | Receita não é "paga", e o booleano apaga o estado `pendente` |
 | `Conta.tipo` para decidir saldo ou sinal | `incluir_no_saldo_geral` · sinal do valor | Tipo é rótulo de relatório, nunca aritmética |
