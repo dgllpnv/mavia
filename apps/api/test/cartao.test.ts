@@ -344,3 +344,163 @@ describe('lançamento de cartão fora do eixo caixa', () => {
     expect(r.rows[0]!.n).toBe('0')
   })
 })
+
+describe('fechar e pagar a fatura', () => {
+  it('fechar trava o total com a soma dos lançamentos da fatura', async () => {
+    const fatura = await criarFatura({ ano: 2028, mes: 3 })
+    const dentro = new Date('2028-02-10T12:00:00Z')
+    await comprarNoCartao({ fatura, centavos: -30000n, postedAt: dentro })
+    await comprarNoCartao({ fatura, centavos: -20000n, postedAt: dentro })
+
+    const r = await banco.cliente.query<{ fechar_fatura: string }>(
+      'SELECT fechar_fatura($1,$2) AS fechar_fatura',
+      [TENANT_A, fatura],
+    )
+
+    expect(r.rows[0]!.fechar_fatura).toBe('-50000')
+  })
+
+  it('fechar duas vezes é recusado, e não silenciosamente idempotente', async () => {
+    // Idempotente seria pior: recalcularia o total de uma fatura que já pode
+    // ter sido paga, e esconderia o erro de quem chamou.
+    const fatura = await criarFatura({ ano: 2028, mes: 4 })
+    await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
+
+    await expect(
+      banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura]),
+    ).rejects.toThrow(/FATURA_JA_FECHADA/)
+  })
+
+  it('pagar antes de fechar é recusado', async () => {
+    // Pagar um total que ainda pode mudar.
+    const fatura = await criarFatura({ ano: 2028, mes: 5 })
+    await expect(
+      banco.cliente.query('SELECT registrar_pagamento_de_fatura($1,$2,$3,now())', [
+        TENANT_A,
+        fatura,
+        10000,
+      ]),
+    ).rejects.toThrow(/FATURA_AINDA_ABERTA/)
+  })
+
+  it('a compra só compensa quando a fatura é quitada', async () => {
+    // É o pagamento que move o dinheiro, não a compra. Enquanto a fatura não
+    // é paga, a compra está no Realizado do mês e fora do Saldo.
+    const fatura = await criarFatura({ ano: 2028, mes: 6 })
+    const compra = await comprarNoCartao({
+      fatura,
+      centavos: -40000n,
+      postedAt: new Date('2028-05-10T12:00:00Z'),
+    })
+
+    const antes = await banco.cliente.query<{ settled_at: Date | null }>(
+      'SELECT settled_at FROM lancamentos WHERE id = $1',
+      [compra],
+    )
+    expect(antes.rows[0]!.settled_at).toBeNull()
+
+    await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
+    const quando = new Date('2028-06-05T12:00:00Z')
+    await banco.cliente.query('SELECT registrar_pagamento_de_fatura($1,$2,$3,$4)', [
+      TENANT_A,
+      fatura,
+      40000,
+      quando,
+    ])
+
+    const depois = await banco.cliente.query<{ settled_at: Date | null }>(
+      'SELECT settled_at FROM lancamentos WHERE id = $1',
+      [compra],
+    )
+    expect(depois.rows[0]!.settled_at?.toISOString()).toBe(quando.toISOString())
+  })
+
+  it('pagamento parcial não compensa nada', async () => {
+    // Metade do dinheiro ter saído não torna metade das compras compensadas —
+    // não há como dizer quais.
+    const fatura = await criarFatura({ ano: 2028, mes: 7 })
+    const compra = await comprarNoCartao({
+      fatura,
+      centavos: -60000n,
+      postedAt: new Date('2028-06-10T12:00:00Z'),
+    })
+    await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
+
+    const r = await banco.cliente.query<{ registrar_pagamento_de_fatura: string }>(
+      'SELECT registrar_pagamento_de_fatura($1,$2,$3,now()) AS registrar_pagamento_de_fatura',
+      [TENANT_A, fatura, 20000],
+    )
+    expect(r.rows[0]!.registrar_pagamento_de_fatura).toBe('parcialmente_paga')
+
+    const l = await banco.cliente.query<{ settled_at: Date | null }>(
+      'SELECT settled_at FROM lancamentos WHERE id = $1',
+      [compra],
+    )
+    expect(l.rows[0]!.settled_at).toBeNull()
+  })
+
+  it('a soma dos pagamentos parciais quita a fatura', async () => {
+    const fatura = await criarFatura({ ano: 2028, mes: 8 })
+    await comprarNoCartao({
+      fatura,
+      centavos: -10000n,
+      postedAt: new Date('2028-07-10T12:00:00Z'),
+    })
+    await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
+
+    // A data do pagamento precisa ser posterior à da compra: compensar antes
+    // do fato acontecer é impossível, e o `CHECK` recusa.
+    const quitacao = new Date('2028-08-05T12:00:00Z')
+    await banco.cliente.query('SELECT registrar_pagamento_de_fatura($1,$2,$3,$4)', [
+      TENANT_A,
+      fatura,
+      6000,
+      quitacao,
+    ])
+    const r = await banco.cliente.query<{ registrar_pagamento_de_fatura: string }>(
+      'SELECT registrar_pagamento_de_fatura($1,$2,$3,$4) AS registrar_pagamento_de_fatura',
+      [TENANT_A, fatura, 4000, quitacao],
+    )
+
+    expect(r.rows[0]!.registrar_pagamento_de_fatura).toBe('paga')
+  })
+
+  it('recusa pagamento maior que a fatura', async () => {
+    const fatura = await criarFatura({ ano: 2028, mes: 9 })
+    await comprarNoCartao({
+      fatura,
+      centavos: -10000n,
+      postedAt: new Date('2028-08-10T12:00:00Z'),
+    })
+    await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
+
+    await expect(
+      banco.cliente.query('SELECT registrar_pagamento_de_fatura($1,$2,$3,now())', [
+        TENANT_A,
+        fatura,
+        10001,
+      ]),
+    ).rejects.toThrow(/PAGAMENTO_EXCEDE_A_FATURA/)
+  })
+
+  it('o pagamento não vira despesa: a fatura paga sai da projeção e entra a perna', async () => {
+    // A invariante que impede a dupla contagem. Uma fatura entra na projeção
+    // enquanto não está paga; depois, quem representa a saída é a perna de
+    // débito da transferência, na conta. Nunca as duas.
+    const emAberto = await banco.cliente.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM faturas
+        WHERE tenant_id = $1 AND estado <> 'paga' AND deleted_at IS NULL`,
+      [TENANT_A],
+    )
+    const pagas = await banco.cliente.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM faturas
+        WHERE tenant_id = $1 AND estado = 'paga' AND deleted_at IS NULL`,
+      [TENANT_A],
+    )
+
+    expect(Number(emAberto.rows[0]!.n)).toBeGreaterThan(0)
+    expect(Number(pagas.rows[0]!.n)).toBeGreaterThan(0)
+    // Nenhuma fatura paga entra no índice do eixo caixa, que é parcial em
+    // `estado <> 'paga'`.
+  })
+})

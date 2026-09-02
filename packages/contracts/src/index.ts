@@ -180,3 +180,60 @@ export type Lancamento = z.infer<typeof zLancamento>
 export type CriarTransferencia = z.infer<typeof zCriarTransferencia>
 export type CriarEstorno = z.infer<typeof zCriarEstorno>
 export type Resumo = z.infer<typeof zResumo>
+
+// ---------------------------------------------------------------------------
+// Cartão e fatura
+// ---------------------------------------------------------------------------
+const zDiaDoMes = z.number().int().min(1).max(31)
+
+export const zCriarCartao = z.object({
+  nome: z.string().trim().min(1).max(60),
+  limiteCentavos: zCentavos.regex(/^\d+$/, 'o limite é positivo').default('0'),
+  closingDay: zDiaDoMes,
+  dueDay: zDiaDoMes,
+  contaPagamentoId: zUuid.optional(),
+})
+
+export const zCartao = z.object({
+  id: zUuid,
+  nome: z.string(),
+  limiteCentavos: zCentavos,
+  closingDay: zDiaDoMes,
+  dueDay: zDiaDoMes,
+  contaPagamentoId: zUuid.nullable(),
+  moeda: zMoeda,
+})
+
+export const zEstadoDeFatura = z.enum([
+  'aberta',
+  'fechada',
+  'parcialmente_paga',
+  'paga',
+  'vencida',
+])
+
+export const zFatura = z.object({
+  id: zUuid,
+  cartaoId: zUuid,
+  /** Data civil: nomeia um dia, não um instante. */
+  competencia: z.string(),
+  dataFechamento: z.string(),
+  dataVencimento: z.string(),
+  estado: zEstadoDeFatura,
+  totalCentavos: zCentavos,
+  pagoCentavos: zCentavos,
+})
+
+export const zPagarFatura = z.object({
+  /** Magnitude, sempre positiva. A dívida é negativa; o pagamento a reduz. */
+  valorCentavos: zCentavos.regex(/^\d+$/, 'o pagamento tem magnitude positiva'),
+  pagoEm: z.string().datetime(),
+  /** Ausente usa a conta de pagamento congelada na fatura. */
+  contaId: zUuid.optional(),
+})
+
+export type CriarCartao = z.infer<typeof zCriarCartao>
+export type Cartao = z.infer<typeof zCartao>
+export type EstadoDeFatura = z.infer<typeof zEstadoDeFatura>
+export type Fatura = z.infer<typeof zFatura>
+export type PagarFatura = z.infer<typeof zPagarFatura>

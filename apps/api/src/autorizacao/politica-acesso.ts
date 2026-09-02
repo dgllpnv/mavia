@@ -52,6 +52,15 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // Estornar é operação de escrita comum: desfaz sem apagar, e fica no log.
   // Ver a decisão DP-4 — o dado é do espaço, e a correção é rastreável.
   ['POST /v1/lancamentos/:id/estornos', { papeis: QUEM_ESCREVE }],
+
+  ['GET /v1/cartoes', { papeis: TODOS }],
+  ['POST /v1/cartoes', { papeis: QUEM_ESCREVE }],
+  ['GET /v1/cartoes/:id/faturas', { papeis: TODOS }],
+  ['POST /v1/cartoes/:id/faturas', { papeis: QUEM_ESCREVE }],
+  // Fechar trava o total que o usuário vai pagar, e não tem desfazer simples.
+  ['POST /v1/cartoes/faturas/:faturaId/fechar', { papeis: QUEM_ESCREVE }],
+  // Pagar move dinheiro para fora da conta.
+  ['POST /v1/cartoes/faturas/:faturaId/pagamentos', { papeis: QUEM_ESCREVE }],
 ])
 
 export function chaveDaRota(rota: Rota): string {

@@ -284,3 +284,123 @@ describe('POST /v1/contas', () => {
     expect(r.statusCode).toBe(400)
   })
 })
+
+describe('cartão pelo HTTP', () => {
+  let cartaoId = ''
+  let contaId = ''
+  let faturaId = ''
+
+  it('cria o cartão com o ciclo', async () => {
+    const contas = await pedir({
+      metodo: 'GET',
+      url: '/v1/contas',
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+    })
+    contaId = contas.json().itens[0].id
+
+    const r = await pedir({
+      metodo: 'POST',
+      url: '/v1/cartoes',
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+      corpo: {
+        nome: 'Nubank',
+        limiteCentavos: '500000',
+        closingDay: 25,
+        dueDay: 5,
+        contaPagamentoId: contaId,
+      },
+    })
+
+    expect(r.statusCode).toBe(201)
+    expect(r.json()).toMatchObject({ nome: 'Nubank', closingDay: 25, dueDay: 5 })
+    cartaoId = r.json().id
+  })
+
+  it('abre a fatura com a janela vinda do domínio', async () => {
+    const r = await pedir({
+      metodo: 'POST',
+      url: `/v1/cartoes/${cartaoId}/faturas`,
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+      corpo: { ano: 2026, mes: 11 },
+    })
+
+    expect(r.statusCode).toBe(201)
+    // Fecha 25, vence 5: a fatura de novembro vence em 05/dez.
+    expect(r.json()).toMatchObject({ estado: 'aberta', dataVencimento: '2026-12-05' })
+    faturaId = r.json().id
+  })
+
+  it('recusa abrir a mesma fatura duas vezes', async () => {
+    // Duas faturas cobrindo o mesmo ciclo cobrariam a compra duas vezes.
+    const r = await pedir({
+      metodo: 'POST',
+      url: `/v1/cartoes/${cartaoId}/faturas`,
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+      corpo: { ano: 2026, mes: 11 },
+    })
+
+    expect(r.statusCode).toBe(409)
+  })
+
+  it('fecha a fatura e trava o total', async () => {
+    const r = await pedir({
+      metodo: 'POST',
+      url: `/v1/cartoes/faturas/${faturaId}/fechar`,
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+    })
+
+    expect(r.statusCode).toBe(200)
+    expect(r.json().totalCentavos).toBe('0')
+  })
+
+  it('recusa fechar duas vezes', async () => {
+    const r = await pedir({
+      metodo: 'POST',
+      url: `/v1/cartoes/faturas/${faturaId}/fechar`,
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+    })
+
+    expect(r.statusCode).toBe(409)
+  })
+
+  it('o cartão de um tenant não aparece para o outro', async () => {
+    const r = await pedir({
+      metodo: 'GET',
+      url: '/v1/cartoes',
+      usuario: USUARIO_B,
+      tenant: TENANT_B,
+    })
+
+    expect(r.statusCode).toBe(200)
+    expect(r.json().itens).toEqual([])
+  })
+
+  it('a fatura de um tenant não é listada pelo outro', async () => {
+    const r = await pedir({
+      metodo: 'GET',
+      url: `/v1/cartoes/${cartaoId}/faturas`,
+      usuario: USUARIO_B,
+      tenant: TENANT_B,
+    })
+
+    expect(r.statusCode).toBe(200)
+    expect(r.json().itens).toEqual([])
+  })
+
+  it('visualizador lê o cartão e não cria', async () => {
+    // A matriz de acesso, aplicada às rotas novas.
+    const { pode } = await import('../src/autorizacao/politica-acesso.js')
+
+    expect(pode({ metodo: 'GET', caminho: '/v1/cartoes' }, 'visualizador')).toBe(true)
+    expect(pode({ metodo: 'POST', caminho: '/v1/cartoes' }, 'visualizador')).toBe(false)
+    expect(
+      pode({ metodo: 'POST', caminho: '/v1/cartoes/faturas/:faturaId/pagamentos' }, 'visualizador'),
+    ).toBe(false)
+  })
+})
