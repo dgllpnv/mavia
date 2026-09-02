@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { faturaAlvo, gerarParcelas, janelaDaFatura, vencimentoDaFatura } from '@mavia/domain'
-import { semearDoisTenants, subirPostgres, TENANT_A, USUARIO_A, type BancoDeTeste } from './postgres.js'
+import type { PoolClient } from 'pg'
+import { projetarCaixa, saldoGeralDoTenant } from '../src/agregacao/projecao.js'
+import { comoApp, semearDoisTenants, subirPostgres, TENANT_A, USUARIO_A, type BancoDeTeste } from './postgres.js'
 
 /**
  * Cartão, fatura e parcelamento, contra Postgres real.
@@ -502,5 +504,141 @@ describe('fechar e pagar a fatura', () => {
     expect(Number(pagas.rows[0]!.n)).toBeGreaterThan(0)
     // Nenhuma fatura paga entra no índice do eixo caixa, que é parcial em
     // `estado <> 'paga'`.
+  })
+})
+
+describe('a projeção do eixo caixa agrega faturas, não compras', () => {
+  const comoTenant = <T>(t: () => Promise<T>) =>
+    comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, t)
+
+  it('a fatura em aberto entra pelo saldo devedor, não pelo total', async () => {
+    // Fatura de R$ 100,00 com R$ 60,00 já pagos: faltam R$ 40,00. Usar o total
+    // projetaria os R$ 100,00 inteiros e contaria duas vezes a parte já paga —
+    // uma na perna de débito que saiu da conta, outra na fatura.
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome, saldo_inicial_centavos)
+       VALUES ($1,'Projecao',100000) RETURNING id`,
+      [TENANT_A],
+    )
+    const contaId = conta.rows[0]!.id
+
+    const cr = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO cartoes (tenant_id, nome, closing_day, due_day, conta_pagamento_id)
+       VALUES ($1,'Proj',25,5,$2) RETURNING id`,
+      [TENANT_A, contaId],
+    )
+    const cartaoProj = cr.rows[0]!.id
+
+    const f = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO faturas (tenant_id, cartao_id, periodo_inicio, periodo_fim,
+                            data_fechamento, data_vencimento, competencia,
+                            conta_pagamento_id, estado, total_centavos, pago_centavos)
+       VALUES ($1,$2,'2030-01-26','2030-02-26','2030-02-25','2030-03-05','2030-03-01',
+               $3,'parcialmente_paga',-10000,6000) RETURNING id`,
+      [TENANT_A, cartaoProj, contaId],
+    )
+    expect(f.rows[0]?.id).toBeTruthy()
+
+    const projetado = await comoTenant(() =>
+      projetarCaixa(banco.cliente as unknown as PoolClient, {
+        tenantId: TENANT_A,
+        ate: new Date('2030-03-31T00:00:00Z'),
+        contaId,
+        moeda: 'BRL',
+      }),
+    )
+
+    // 100.000 de saldo − 4.000 que ainda faltam da fatura.
+    expect(projetado.centavos).toBe(96000n)
+  })
+
+  it('fatura paga sai da projeção sozinha, sem depender de um if sobre o estado', async () => {
+    // `total + pago` chega a zero na quitação, no mesmo instante em que a
+    // perna de débito passa a representar a saída. É a aritmética que impede
+    // a dupla contagem.
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome, saldo_inicial_centavos)
+       VALUES ($1,'Quitada',100000) RETURNING id`,
+      [TENANT_A],
+    )
+    const contaId = conta.rows[0]!.id
+    const cr = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO cartoes (tenant_id, nome, closing_day, due_day, conta_pagamento_id)
+       VALUES ($1,'Quit',25,5,$2) RETURNING id`,
+      [TENANT_A, contaId],
+    )
+    await banco.cliente.query(
+      `INSERT INTO faturas (tenant_id, cartao_id, periodo_inicio, periodo_fim,
+                            data_fechamento, data_vencimento, competencia,
+                            conta_pagamento_id, estado, total_centavos, pago_centavos)
+       VALUES ($1,$2,'2031-01-26','2031-02-26','2031-02-25','2031-03-05','2031-03-01',
+               $3,'paga',-10000,10000)`,
+      [TENANT_A, cr.rows[0]!.id, contaId],
+    )
+
+    const projetado = await comoTenant(() =>
+      projetarCaixa(banco.cliente as unknown as PoolClient, {
+        tenantId: TENANT_A,
+        ate: new Date('2031-03-31T00:00:00Z'),
+        contaId,
+        moeda: 'BRL',
+      }),
+    )
+
+    expect(projetado.centavos).toBe(100000n)
+  })
+
+  it('a compra de cartão não entra na projeção da conta', async () => {
+    // Uma compra não sai do bolso. Se entrasse, o valor seria contado duas
+    // vezes: na compra e na fatura que a cobra.
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome, saldo_inicial_centavos)
+       VALUES ($1,'SemCompra',50000) RETURNING id`,
+      [TENANT_A],
+    )
+    const contaId = conta.rows[0]!.id
+    const cr = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO cartoes (tenant_id, nome, closing_day, due_day, conta_pagamento_id)
+       VALUES ($1,'SemCompraCartao',25,5,$2) RETURNING id`,
+      [TENANT_A, contaId],
+    )
+    const fx = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO faturas (tenant_id, cartao_id, periodo_inicio, periodo_fim,
+                            data_fechamento, data_vencimento, competencia, conta_pagamento_id)
+       VALUES ($1,$2,'2032-01-26','2032-02-26','2032-02-25','2032-03-05','2032-03-01',$3)
+       RETURNING id`,
+      [TENANT_A, cr.rows[0]!.id, contaId],
+    )
+    await banco.cliente.query(
+      `INSERT INTO lancamentos (tenant_id, cartao_id, categoria_id, valor_centavos, moeda,
+                                posted_at, descricao, fatura_id, criado_por)
+       VALUES ($1,$2,$3,-30000,'BRL','2032-02-10','compra',$4,$5)`,
+      [TENANT_A, cr.rows[0]!.id, catDespesa, fx.rows[0]!.id, USUARIO_A],
+    )
+
+    const projetado = await comoTenant(() =>
+      projetarCaixa(banco.cliente as unknown as PoolClient, {
+        tenantId: TENANT_A,
+        ate: new Date('2032-03-31T00:00:00Z'),
+        contaId,
+        moeda: 'BRL',
+      }),
+    )
+
+    // A fatura ainda está aberta com total zero — o fechamento é que o calcula.
+    // A compra em si não desconta nada da conta.
+    expect(projetado.centavos).toBe(50000n)
+  })
+
+  it('o saldo geral mostra a dívida do cartão separada do saldo', async () => {
+    // O cartão não tem saldo para incluir; a dívida aparece na conta que vai
+    // pagá-la, que é onde ela de fato vai doer.
+    const r = await comoTenant(() =>
+      saldoGeralDoTenant(banco.cliente as unknown as PoolClient, TENANT_A, 'BRL'),
+    )
+
+    expect(r.saldo.centavos).toBeGreaterThan(0n)
+    // Negativo: são dívidas.
+    expect(r.faturasEmAberto.centavos).toBeLessThanOrEqual(0n)
   })
 })
