@@ -38,6 +38,7 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-27** | Preços e desconto anual | **R$ 59 · R$ 79 · R$ 99** por mês; anual = 10 × mensal | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-28** | Ajustar cotas por causa do preço maior | **Não.** Cotas mantidas como estão. Sem promessa de prazo de suporte na página | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-29** | Duração do teste (7 dias) | **Mantida.** Reavaliar com dado de conversão, não por opinião | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-30** | O modo escuro segue a preferência do sistema? | **Sim.** `prefers-color-scheme` aplica o escuro; a escolha explícita no produto vence nos dois sentidos | `docs/design/direcao-visual.md` |
 
 **DP-10** (`BankSyncProvider.revogar()`) era consequência técnica da DP-9, não escolha do dono. Resolvida por ADR própria.
 

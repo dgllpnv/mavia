@@ -19,7 +19,7 @@
 | 5 | Nem toda informação dentro de card | ✅ **Nenhum** card. O agrupamento é rótulo em caixa alta de 11px, régua de 1px e o buraco de 44px da escala. O único retângulo com raio e sombra é o modal — que se move e se dispensa |
 | 6 | Contraste de escala ≥ 3:1 | ✅ 56 / 15 = **3,73 : 1**, por salto de tamanho e não por cinza mais claro |
 | 7 | Coluna de valor tabular e à direita | ✅ `tabular-nums lining-nums slashed-zero`, largura fixa, sinal em coluna própria |
-| 8 | Modo escuro projetado, não invertido | ✅ Croma reduzido, elevação por superfície + borda, verdes e vermelhos reajustados. **E ele é escolha, não inferência** — ver §3 |
+| 8 | Modo escuro projetado, não invertido | ✅ Croma reduzido, elevação por superfície + borda, verdes e vermelhos reajustados. Segue o sistema (DP-30), com a escolha do usuário vencendo nos dois sentidos. Conferido na tela densa, que é onde o escuro invertido quebra |
 | 9 | Nenhuma animação decorativa; `prefers-reduced-motion` | ✅ A única transição do produto é a largura da carga do trilho, e ela zera sob `prefers-reduced-motion` |
 | 10 | WCAG AA, e nada dependendo só de cor | ✅ Ver §2 |
 | 11 | O texto cita algo específico do usuário | ✅ *"Ainda há −R$ 149,00 previstos para sair este mês, e o saldo fecha menor do que está hoje."* — montada com os números daquele espaço |
@@ -37,7 +37,7 @@ O item 10 é o que mais se marca sem verificar, então ele fica detalhado.
 | **Glifo** | `−` (U+2212) e `+`, sempre renderizados, em coluna própria de 1 dígito | Sim |
 | **Direção da carga** | Trilho de despesa carrega da direita para a esquerda; de receita, ao contrário | Sim |
 | **Peso** | Realizado 600, previsto 400 — separa a *certeza*, que é outra dimensão | Sim |
-| **Cor** | Verde `#0F6B43` / vermelho `#A32B22`, por último | Não, e por isso nunca sozinha |
+| **Cor** | Verde `#0F6B43` / vermelho `#A32B22` no claro; `#4FB98A` / `#EF8577` no escuro | Não, e por isso nunca sozinha |
 
 Três dos quatro sobrevivem à escala de cinza. O `+` da receita é sempre
 desenhado — o Organizze só mostra o `−`, e a ausência de sinal é sinal fraco
@@ -52,23 +52,31 @@ clássico da categoria.
 
 ---
 
-## 3. Desvios conscientes da direção visual
+## 3. Onde a implementação se afasta da direção visual
 
-Os três estão implementados como decisão, não como esquecimento.
+Dois desvios conscientes (D-2 e D-3) e um item revertido por decisão do dono do
+produto (D-1). Nenhum é esquecimento.
 
-### D-1 · O escuro deixou de seguir `prefers-color-scheme`
+### D-1 · ~~O escuro deixou de seguir `prefers-color-scheme`~~ — revertido
 
-**§2.5 previa o escuro como preferência do usuário.** A primeira versão o
-aplicava por `@media (prefers-color-scheme: dark)`, e o resultado foi que a
-tela de entrada abriu escura na primeira execução.
+**Este item não é mais um desvio.** Ele está registrado porque o caminho
+importa mais do que o desfecho.
 
-A direção visual diz, no cabeçalho: *o claro é a identidade canônica; o escuro
-é preferência do usuário, não a cara do produto; quando os dois conflitarem, o
-claro vence.* Herdar a preferência do sistema faria a maioria dos usuários
-nunca ver a identidade que o dono do produto escolheu.
+A primeira versão herdava `prefers-color-scheme`, e a tela de entrada abriu
+escura. Li o cabeçalho da direção visual — *"o escuro é preferência do usuário,
+não a cara do produto; no conflito, o claro vence"* — como "não herdar o
+sistema", e troquei a herança por uma escolha explícita dentro do produto.
 
-O escuro passa a entrar por `data-tema="escuro"` — escolha dentro do produto.
-Continua projetado, e o bloco de tokens é o mesmo.
+**O dono do produto decidiu o contrário (DP-30):** o escuro segue a
+preferência do sistema. A leitura correta é que "o claro vence" governa a
+escolha de forma e de material, não a herança de preferência — respeitar o que
+a pessoa já declarou ao sistema é cortesia, não conflito com a identidade.
+
+Implementado como: `@media (prefers-color-scheme: dark)` sobre
+`:root:not([data-tema='claro'])`, mais `:root[data-tema='escuro']`. O `:not()`
+é o que permite forçar o claro num sistema escuro sem depender de ordem de
+regra. A paleta escura tem **uma** definição, aplicada por referência nos dois
+lugares: CSS não tem mixin, e duas cópias de trinta e dois valores divergem.
 
 ### D-2 · O trilho do herói mede despesa, não saldo
 

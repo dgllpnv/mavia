@@ -89,109 +89,174 @@
 }
 
 /**
- * O escuro é **escolha**, não inferência.
+ * O escuro segue a preferência do sistema — decisão DP-30.
  *
- * Não há `@media (prefers-color-scheme: dark)` aplicando este bloco sozinho, e
- * a ausência é deliberada. A direção visual diz que o claro é a identidade
- * canônica da Mavia e que o escuro é preferência do usuário, "não a cara do
- * produto" — e que, quando os dois conflitarem, o claro vence.
+ * A `@media` aplica o tema escuro a quem já pediu tema escuro ao sistema
+ * operacional, e as duas regras de `data-tema` abaixo vencem nos **dois**
+ * sentidos: quem liga o claro dentro do produto recebe claro mesmo com o
+ * sistema em escuro, e vice-versa. É a ordem no arquivo que garante isso —
+ * as duas vêm depois da consulta de mídia, e mesma especificidade empata pela
+ * ordem.
  *
- * Herdar a preferência do sistema operacional faria a maioria dos usuários
- * nunca ver a identidade que o dono do produto escolheu. O escuro entra quando
- * a pessoa o liga, e aí `data-tema` marca a raiz.
+ * A direção visual continua valendo no que ela decide: o claro é a identidade
+ * canônica da Mavia, e é dele que saem as capturas, o material e o primeiro
+ * contato. O que muda é que respeitar a escolha que a pessoa já fez no sistema
+ * não é conflito com a identidade — é a mesma cortesia de não perguntar duas
+ * vezes.
  *
- * O escuro continua **projetado**, não invertido: a elevação vem de superfície
- * mais clara e borda, o croma dos neutros cai, e os verdes e vermelhos são
+ * O escuro é **projetado**, não invertido: a elevação vem de superfície mais
+ * clara e borda, o croma dos neutros cai, e os verdes e vermelhos são
  * reajustados porque saturam demais sobre fundo escuro.
  */
-:root[data-tema='escuro'] {
-  color-scheme: dark;
-
-  --paper-0: #0e0d0b;
-  --surface-1: #161512;
-  --surface-2: #1e1c18;
-  --surface-3: #262320;
-  --line: #2e2a24;
-  --line-forte: #453f36;
-  --ink-4: #6b6558;
-  --ink-3: #8e887a;
-  --ink-2: #b8b2a4;
-  --ink-1: #f2efe7;
-  --ink-0: #fffdf6;
-
-  /* 8.69:1 nos dois modos — o botão primário tem o mesmo peso ótico. */
-  --primaria: var(--petroleo-300);
-  --primaria-hover: var(--petroleo-200);
-  --primaria-ativa: var(--petroleo-400);
-  --primaria-sobre: var(--petroleo-900);
-  --primaria-fundo-sutil: #12242a;
-  --foco: var(--petroleo-300);
-
-  --receita: #4fb98a;
-  --receita-fundo: #12241c;
-  --despesa: #ef8577;
-  --despesa-fundo: #2a1714;
-  --atencao: #e0a63c;
-
-  --dado-1: #3e92ce;
-  --dado-2: #a85830;
-  --dado-3: #1dae80;
-  --dado-4: #b33470;
-  --dado-5: #b08c10;
-  --dado-6: #b85084;
-  --dado-outros: #8e887a;
-
-  /* No escuro, sombra praticamente não comunica elevação. Ela passa a ser
-     superfície mais clara + borda — a diferença mais visível entre um escuro
-     projetado e um escuro invertido. */
-  --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
-  --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
-  --elev-borda: var(--line-forte);
+/**
+ * A paleta escura, definida **uma vez**.
+ *
+ * Ela precisa ser aplicada em dois lugares — na preferência do sistema e na
+ * escolha explícita do usuário —, e CSS não tem mixin. Guardar os valores aqui
+ * e atribuí-los por referência é o que impede que as duas cópias divirjam: uma
+ * linha faltando salta aos olhos, um `#1e1c18` virando `#1e1c19` num dos dois
+ * lugares não saltaria nunca.
+ *
+ * O escuro é **projetado**, não invertido: a elevação vem de superfície mais
+ * clara e borda (a sombra praticamente não comunica elevação sobre fundo
+ * escuro), o croma dos neutros cai porque marrom escuro fica lamacento em tela
+ * retroiluminada, e os verdes e vermelhos são reajustados porque saturam
+ * demais. `--ink-3` é mais claro do que a inversão daria, para compensar o halo
+ * do texto claro sobre fundo escuro.
+ */
+:root {
+  --escuro-paper-0: #0e0d0b;
+  --escuro-surface-1: #161512;
+  --escuro-surface-2: #1e1c18;
+  --escuro-surface-3: #262320;
+  --escuro-line: #2e2a24;
+  --escuro-line-forte: #453f36;
+  --escuro-ink-4: #6b6558;
+  --escuro-ink-3: #8e887a;
+  --escuro-ink-2: #b8b2a4;
+  --escuro-ink-1: #f2efe7;
+  --escuro-ink-0: #fffdf6;
+  --escuro-primaria: var(--petroleo-300);
+  --escuro-primaria-hover: var(--petroleo-200);
+  --escuro-primaria-ativa: var(--petroleo-400);
+  --escuro-primaria-sobre: var(--petroleo-900);
+  --escuro-primaria-fundo-sutil: #12242a;
+  --escuro-foco: var(--petroleo-300);
+  --escuro-receita: #4fb98a;
+  --escuro-receita-fundo: #12241c;
+  --escuro-despesa: #ef8577;
+  --escuro-despesa-fundo: #2a1714;
+  --escuro-atencao: #e0a63c;
+  --escuro-dado-1: #3e92ce;
+  --escuro-dado-2: #a85830;
+  --escuro-dado-3: #1dae80;
+  --escuro-dado-4: #b33470;
+  --escuro-dado-5: #b08c10;
+  --escuro-dado-6: #b85084;
+  --escuro-dado-outros: #8e887a;
+  --escuro-elev-1: 0 8px 20px rgb(0 0 0 / 55%);
+  --escuro-elev-2: 0 16px 40px rgb(0 0 0 / 70%);
+  --escuro-elev-borda: var(--line-forte);
 }
 
 /**
- * O claro explícito.
+ * O escuro segue a preferência do sistema — decisão DP-30.
  *
- * Idêntico ao `:root` de cima porque o claro **é** o padrão. Existe para o
- * dia em que a raiz ganhar `data-tema` por outro motivo e o produto precisar
- * dizer "claro" com a mesma especificidade com que diz "escuro".
+ * `:not([data-tema='claro'])` é o que permite ao usuário forçar o claro num
+ * sistema em escuro: sem ele, a consulta de mídia e a escolha explícita
+ * empatariam em especificidade e a ordem no arquivo decidiria — que é frágil
+ * demais para uma decisão do usuário.
+ *
+ * A direção visual continua valendo no que ela decide: o claro é a identidade
+ * canônica da Mavia, e é dele que saem as capturas e o material. Respeitar a
+ * preferência que a pessoa já declarou ao sistema não conflita com isso — é a
+ * cortesia de não perguntar duas vezes.
  */
-:root[data-tema='claro'] {
-  color-scheme: light;
-
-  --paper-0: #fffefb;
-  --surface-1: #fbf9f4;
-  --surface-2: #f4f1e8;
-  --surface-3: #ede9dd;
-  --line: #e3ded2;
-  --line-forte: #cfc8b6;
-  --ink-4: #a79f8b;
-  --ink-3: #756e5d;
-  --ink-2: #575144;
-  --ink-1: #1c1a16;
-  --ink-0: #0e0d0b;
-  --primaria: var(--petroleo-700);
-  --primaria-hover: var(--petroleo-600);
-  --primaria-ativa: var(--petroleo-800);
-  --primaria-sobre: var(--paper-0);
-  --primaria-fundo-sutil: var(--petroleo-50);
-  --foco: var(--petroleo-600);
-  --receita: #0f6b43;
-  --receita-fundo: #e8f2ec;
-  --despesa: #a32b22;
-  --despesa-fundo: #f7eae7;
-  --atencao: #8a5a00;
-  --dado-1: #1b6fa8;
-  --dado-2: #8c4a28;
-  --dado-3: #17a177;
-  --dado-4: #9e2e62;
-  --dado-5: #b08c10;
-  --dado-6: #d2649a;
-  --dado-outros: #8c8474;
-  --elev-1: 0 1px 2px rgb(28 26 22 / 6%), 0 4px 12px rgb(28 26 22 / 10%);
-  --elev-2: 0 2px 4px rgb(28 26 22 / 8%), 0 16px 40px rgb(28 26 22 / 18%);
-  --elev-borda: transparent;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='claro']) {
+    --paper-0: var(--escuro-paper-0);
+    --surface-1: var(--escuro-surface-1);
+    --surface-2: var(--escuro-surface-2);
+    --surface-3: var(--escuro-surface-3);
+    --line: var(--escuro-line);
+    --line-forte: var(--escuro-line-forte);
+    --ink-4: var(--escuro-ink-4);
+    --ink-3: var(--escuro-ink-3);
+    --ink-2: var(--escuro-ink-2);
+    --ink-1: var(--escuro-ink-1);
+    --ink-0: var(--escuro-ink-0);
+    --primaria: var(--escuro-primaria);
+    --primaria-hover: var(--escuro-primaria-hover);
+    --primaria-ativa: var(--escuro-primaria-ativa);
+    --primaria-sobre: var(--escuro-primaria-sobre);
+    --primaria-fundo-sutil: var(--escuro-primaria-fundo-sutil);
+    --foco: var(--escuro-foco);
+    --receita: var(--escuro-receita);
+    --receita-fundo: var(--escuro-receita-fundo);
+    --despesa: var(--escuro-despesa);
+    --despesa-fundo: var(--escuro-despesa-fundo);
+    --atencao: var(--escuro-atencao);
+    --dado-1: var(--escuro-dado-1);
+    --dado-2: var(--escuro-dado-2);
+    --dado-3: var(--escuro-dado-3);
+    --dado-4: var(--escuro-dado-4);
+    --dado-5: var(--escuro-dado-5);
+    --dado-6: var(--escuro-dado-6);
+    --dado-outros: var(--escuro-dado-outros);
+    --elev-1: var(--escuro-elev-1);
+    --elev-2: var(--escuro-elev-2);
+    --elev-borda: var(--escuro-elev-borda);
+  }
 }
+
+/** A escolha explícita de escuro, que vale mesmo com o sistema em claro. */
+:root[data-tema='escuro'] {
+  --paper-0: var(--escuro-paper-0);
+  --surface-1: var(--escuro-surface-1);
+  --surface-2: var(--escuro-surface-2);
+  --surface-3: var(--escuro-surface-3);
+  --line: var(--escuro-line);
+  --line-forte: var(--escuro-line-forte);
+  --ink-4: var(--escuro-ink-4);
+  --ink-3: var(--escuro-ink-3);
+  --ink-2: var(--escuro-ink-2);
+  --ink-1: var(--escuro-ink-1);
+  --ink-0: var(--escuro-ink-0);
+  --primaria: var(--escuro-primaria);
+  --primaria-hover: var(--escuro-primaria-hover);
+  --primaria-ativa: var(--escuro-primaria-ativa);
+  --primaria-sobre: var(--escuro-primaria-sobre);
+  --primaria-fundo-sutil: var(--escuro-primaria-fundo-sutil);
+  --foco: var(--escuro-foco);
+  --receita: var(--escuro-receita);
+  --receita-fundo: var(--escuro-receita-fundo);
+  --despesa: var(--escuro-despesa);
+  --despesa-fundo: var(--escuro-despesa-fundo);
+  --atencao: var(--escuro-atencao);
+  --dado-1: var(--escuro-dado-1);
+  --dado-2: var(--escuro-dado-2);
+  --dado-3: var(--escuro-dado-3);
+  --dado-4: var(--escuro-dado-4);
+  --dado-5: var(--escuro-dado-5);
+  --dado-6: var(--escuro-dado-6);
+  --dado-outros: var(--escuro-dado-outros);
+  --elev-1: var(--escuro-elev-1);
+  --elev-2: var(--escuro-elev-2);
+  --elev-borda: var(--escuro-elev-borda);
+}
+
+/**
+ * O claro explícito **não repete a paleta**, e não precisa.
+ *
+ * `:not([data-tema='claro'])` na consulta de mídia acima já impede o escuro de
+ * se aplicar aqui, então o que vale é o `:root` do topo — que é o claro. Uma
+ * terceira cópia dos mesmos trinta e dois valores seria só mais um lugar para
+ * divergir.
+ *
+ * O atributo continua existindo porque é ele que o seletor de tema escreve, e
+ * porque `color-scheme` precisa voltar a `light` para os controles nativos e a
+ * barra de rolagem — isso o `:root` do topo já declara.
+ */
 
 :root {
   /* ---------------------------------------------------------------------

@@ -1,10 +1,21 @@
 # Direção visual da Mavia — "Papel e trilho"
 
 > **Status: APROVADA em 2026-09-01.** O dono do produto escolheu a direção **A — "Papel e trilho"**,
-> **sobre fundo claro**. O claro é a identidade canônica da Mavia; o modo escuro da §2.5 permanece
-> como preferência do usuário, não como a cara do produto. Quando os dois conflitarem numa escolha,
-> **o claro vence**. As direções B e C da §8 ficam como registro do que foi considerado e descartado.
+> **sobre fundo claro**. O claro é a identidade canônica da Mavia: é dele que saem as capturas, o
+> material e o primeiro contato, e é ele que decide quando uma escolha de forma ficar em dúvida.
+> As direções B e C da §8 ficam como registro do que foi considerado e descartado.
 > Ver `docs/adr/0006`, Emenda 1. Prévia navegável: `docs/design/preview-direcao-visual.html`.
+>
+> **Emenda 2 — 2026-09-02 (DP-30).** O modo escuro da §2.5 **segue a preferência do sistema
+> operacional** (`prefers-color-scheme`). A escolha explícita dentro do produto vence nos dois
+> sentidos: quem liga o claro num sistema escuro recebe claro, e vice-versa.
+>
+> A redação anterior — "o escuro é preferência do usuário, não a cara do produto; no conflito, o
+> claro vence" — foi lida na implementação como "não herdar o sistema", e o resultado foi a tela de
+> entrada abrindo escura para quem já tinha pedido escuro ao sistema. O dono do produto decidiu o
+> contrário: **respeitar a preferência já declarada não conflita com a identidade** — é a cortesia de
+> não perguntar duas vezes. "O claro vence" continua valendo onde ela nasceu, que é a escolha de
+> forma e de material, não a herança de preferência.
 
 
 - **Status:** **Aprovada.** Proposta pelo `engenheiro-frontend-web`, escolhida pelo dono do produto em 2026-09-01, sobre fundo claro. Normativa a partir daqui.
