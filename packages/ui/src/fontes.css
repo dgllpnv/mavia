@@ -1,0 +1,45 @@
+/**
+ * As duas fontes da Mavia, auto-hospedadas.
+ *
+ * Nenhuma vem de CDN. `docs/design/direcao-visual.md` §3.1: os arquivos entram
+ * no bundle, e não numa requisição a um terceiro que sabe quem leu qual página
+ * e a que horas.
+ *
+ * **Archivo** (variável, eixos `wght` e `wdth`, OFL) carrega números e títulos.
+ * O eixo de largura é o que dá presença ao número herói sem apelar para uma
+ * fonte display: Semi-Expanded 700 em 56px.
+ *
+ * **Public Sans** (variável, `wght`, OFL) carrega o texto de interface. Ela
+ * existe para **não** competir com os números.
+ *
+ * Sobre a troca de fonte: a §3.1 pedia métricas de fallback via `size-adjust`
+ * para que a substituição não mexesse na altura das linhas do extrato. Aqui a
+ * altura da linha é fixa em `--altura-linha` e não depende da métrica
+ * intrínseca da fonte, o que resolve o mesmo problema de forma estrutural em
+ * vez de por número calibrado — que envelheceria na primeira atualização da
+ * fonte. O `swap` continua, com `preload` no documento para encurtar a janela.
+ */
+
+@font-face {
+  font-family: 'Archivo';
+  src: url('../fontes/archivo.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+  /* Só o latino: o produto é pt-BR, e o resto do arquivo seria peso morto. */
+  unicode-range: u+0000-00ff, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da,
+    u+02dc, u+2000-206f, u+2074, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
+    u+feff, u+fffd;
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  src: url('../fontes/public-sans.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: u+0000-00ff, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da,
+    u+02dc, u+2000-206f, u+2074, u+20ac, u+2122, u+2191, u+2193, u+2212, u+2215,
+    u+feff, u+fffd;
+}

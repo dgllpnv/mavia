@@ -27,6 +27,14 @@ export {
 export { ratear, type ErroDeRateio } from './ratear.js'
 
 export {
+  partesDoValor,
+  rotuloAcessivel,
+  valorEmTexto,
+  type ContextoDoRotulo,
+  type PartesDoValor,
+} from './formatar.js'
+
+export {
   competencia,
   competenciaDe,
   competenciaSeguinte,

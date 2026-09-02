@@ -1,0 +1,22 @@
+{
+  "name": "@mavia/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mavia/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^3",
+    "vitest": "^2"
+  }
+}

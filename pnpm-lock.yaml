@@ -83,6 +83,19 @@ importers:
         specifier: ^2
         version: 2.1.9(@types/node@22.20.1)(supports-color@7.2.0)
 
+  packages/ui:
+    dependencies:
+      '@mavia/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      fast-check:
+        specifier: ^3
+        version: 3.23.2
+      vitest:
+        specifier: ^2
+        version: 2.1.9(@types/node@22.20.1)(supports-color@7.2.0)
+
 packages:
 
   '@balena/dockerignore@1.0.2':

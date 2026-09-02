@@ -1,0 +1,322 @@
+/**
+ * Tokens da Mavia — direção "Papel e trilho".
+ *
+ * Fonte normativa: `docs/design/direcao-visual.md` §2, aprovada em 2026-09-01.
+ * Nenhum valor aqui foi escolhido neste arquivo; todos vêm de lá, e alterá-los
+ * sem alterar o documento faz o produto e a sua direção divergirem.
+ *
+ * **O claro é a identidade canônica.** O escuro é preferência do usuário, e é
+ * projetado — não invertido: no escuro a elevação vem de superfície mais clara
+ * e borda, o croma dos neutros cai, e os verdes e vermelhos são reajustados
+ * porque saturam demais sobre fundo escuro.
+ *
+ * Componente novo compõe token. Não inventa valor.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---------------------------------------------------------------------
+   * Neutros — papel de jornal financeiro, matiz ~45°, croma mínimo.
+   * Quentes o bastante para não serem cinza, discretos para não serem bege.
+   * ------------------------------------------------------------------- */
+  --paper-0: #fffefb;
+  --surface-1: #fbf9f4;
+  --surface-2: #f4f1e8;
+  --surface-3: #ede9dd;
+  --line: #e3ded2;
+  --line-forte: #cfc8b6;
+  --ink-4: #a79f8b;
+  --ink-3: #756e5d;
+  --ink-2: #575144;
+  --ink-1: #1c1a16;
+  --ink-0: #0e0d0b;
+
+  /* ---------------------------------------------------------------------
+   * Petróleo — navegação, ação e identidade. NUNCA dado.
+   * Se a cor da marca aparecer num gráfico, o usuário procura significado nela.
+   * ------------------------------------------------------------------- */
+  --petroleo-50: #eef7f9;
+  --petroleo-100: #d6ebf0;
+  --petroleo-200: #a9d6e1;
+  --petroleo-300: #5fc0d6;
+  --petroleo-400: #2e9bb4;
+  --petroleo-500: #12798f;
+  --petroleo-600: #0e6478;
+  --petroleo-700: #0b4f5f;
+  --petroleo-800: #083b47;
+  --petroleo-900: #062a33;
+
+  --primaria: var(--petroleo-700);
+  --primaria-hover: var(--petroleo-600);
+  --primaria-ativa: var(--petroleo-800);
+  --primaria-sobre: var(--paper-0);
+  --primaria-fundo-sutil: var(--petroleo-50);
+  --foco: var(--petroleo-600);
+
+  /* ---------------------------------------------------------------------
+   * Direção do dinheiro. Sempre o quarto canal, nunca o único.
+   * Transferência é neutra de propósito: não é receita nem despesa, e
+   * pintá-la de verde ou vermelho é o erro que duplica o gasto do mês.
+   * ------------------------------------------------------------------- */
+  --receita: #0f6b43;
+  --receita-fundo: #e8f2ec;
+  --despesa: #a32b22;
+  --despesa-fundo: #f7eae7;
+  --atencao: #8a5a00;
+  --transferencia: var(--ink-2);
+
+  /* ---------------------------------------------------------------------
+   * Paleta de dados — separada da paleta de marca, por decreto.
+   * Atribuída por ENTIDADE (a categoria), nunca por posição ou rank: filtro
+   * que remove uma série não repinta as sobreviventes.
+   * ------------------------------------------------------------------- */
+  --dado-1: #1b6fa8;
+  --dado-2: #8c4a28;
+  --dado-3: #17a177;
+  --dado-4: #9e2e62;
+  --dado-5: #b08c10;
+  --dado-6: #d2649a;
+  --dado-outros: #8c8474;
+
+  /* ---------------------------------------------------------------------
+   * Elevação — três degraus, e o primeiro cobre ~95% da interface.
+   * ------------------------------------------------------------------- */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgb(28 26 22 / 6%), 0 4px 12px rgb(28 26 22 / 10%);
+  --elev-2: 0 2px 4px rgb(28 26 22 / 8%), 0 16px 40px rgb(28 26 22 / 18%);
+  --elev-borda: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper-0: #0e0d0b;
+    --surface-1: #161512;
+    --surface-2: #1e1c18;
+    --surface-3: #262320;
+    --line: #2e2a24;
+    --line-forte: #453f36;
+    --ink-4: #6b6558;
+    --ink-3: #8e887a;
+    --ink-2: #b8b2a4;
+    --ink-1: #f2efe7;
+    --ink-0: #fffdf6;
+
+    /* 8.69:1 nos dois modos — o botão primário tem o mesmo peso ótico. */
+    --primaria: var(--petroleo-300);
+    --primaria-hover: var(--petroleo-200);
+    --primaria-ativa: var(--petroleo-400);
+    --primaria-sobre: var(--petroleo-900);
+    --primaria-fundo-sutil: #12242a;
+    --foco: var(--petroleo-300);
+
+    --receita: #4fb98a;
+    --receita-fundo: #12241c;
+    --despesa: #ef8577;
+    --despesa-fundo: #2a1714;
+    --atencao: #e0a63c;
+
+    --dado-1: #3e92ce;
+    --dado-2: #a85830;
+    --dado-3: #1dae80;
+    --dado-4: #b33470;
+    --dado-5: #b08c10;
+    --dado-6: #b85084;
+    --dado-outros: #8e887a;
+
+    /* No escuro, sombra praticamente não comunica elevação. Ela passa a ser
+       superfície mais clara + borda — a diferença mais visível entre um escuro
+       projetado e um escuro invertido. */
+    --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
+    --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
+    --elev-borda: var(--line-forte);
+  }
+}
+
+/* O seletor do usuário vence a preferência do sistema, nos dois sentidos. */
+:root[data-tema='claro'] {
+  color-scheme: light;
+
+  --paper-0: #fffefb;
+  --surface-1: #fbf9f4;
+  --surface-2: #f4f1e8;
+  --surface-3: #ede9dd;
+  --line: #e3ded2;
+  --line-forte: #cfc8b6;
+  --ink-4: #a79f8b;
+  --ink-3: #756e5d;
+  --ink-2: #575144;
+  --ink-1: #1c1a16;
+  --ink-0: #0e0d0b;
+  --primaria: var(--petroleo-700);
+  --primaria-hover: var(--petroleo-600);
+  --primaria-ativa: var(--petroleo-800);
+  --primaria-sobre: var(--paper-0);
+  --primaria-fundo-sutil: var(--petroleo-50);
+  --foco: var(--petroleo-600);
+  --receita: #0f6b43;
+  --receita-fundo: #e8f2ec;
+  --despesa: #a32b22;
+  --despesa-fundo: #f7eae7;
+  --atencao: #8a5a00;
+  --dado-1: #1b6fa8;
+  --dado-2: #8c4a28;
+  --dado-3: #17a177;
+  --dado-4: #9e2e62;
+  --dado-5: #b08c10;
+  --dado-6: #d2649a;
+  --dado-outros: #8c8474;
+  --elev-1: 0 1px 2px rgb(28 26 22 / 6%), 0 4px 12px rgb(28 26 22 / 10%);
+  --elev-2: 0 2px 4px rgb(28 26 22 / 8%), 0 16px 40px rgb(28 26 22 / 18%);
+  --elev-borda: transparent;
+}
+
+:root[data-tema='escuro'] {
+  color-scheme: dark;
+
+  --paper-0: #0e0d0b;
+  --surface-1: #161512;
+  --surface-2: #1e1c18;
+  --surface-3: #262320;
+  --line: #2e2a24;
+  --line-forte: #453f36;
+  --ink-4: #6b6558;
+  --ink-3: #8e887a;
+  --ink-2: #b8b2a4;
+  --ink-1: #f2efe7;
+  --ink-0: #fffdf6;
+  --primaria: var(--petroleo-300);
+  --primaria-hover: var(--petroleo-200);
+  --primaria-ativa: var(--petroleo-400);
+  --primaria-sobre: var(--petroleo-900);
+  --primaria-fundo-sutil: #12242a;
+  --foco: var(--petroleo-300);
+  --receita: #4fb98a;
+  --receita-fundo: #12241c;
+  --despesa: #ef8577;
+  --despesa-fundo: #2a1714;
+  --atencao: #e0a63c;
+  --dado-1: #3e92ce;
+  --dado-2: #a85830;
+  --dado-3: #1dae80;
+  --dado-4: #b33470;
+  --dado-5: #b08c10;
+  --dado-6: #b85084;
+  --dado-outros: #8e887a;
+  --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
+  --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
+  --elev-borda: var(--line-forte);
+}
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Tipografia. Archivo para números e títulos, Public Sans para o corpo.
+   *
+   * Não é Inter de propósito: os numerais da Inter são impecáveis e
+   * completamente anônimos, e num produto em que o número é o protagonista o
+   * numeral é o rosto da marca (`docs/design.md` §1).
+   *
+   * As métricas de fallback ficam no `@font-face` de `fontes.css`, para que a
+   * troca da fonte não mexa na altura das linhas do extrato.
+   * ------------------------------------------------------------------- */
+  --fonte-numero: 'Archivo', 'Archivo Fallback', system-ui, sans-serif;
+  --fonte-corpo: 'Public Sans', 'Public Sans Fallback', system-ui, sans-serif;
+  --fonte-id: ui-monospace, sfmono-regular, menlo, monospace;
+
+  /* A escala salta de 24 para 36 e de 36 para 56 exatamente para que não
+     exista "tamanho médio confortável" — o default de quem não decidiu.
+     Contraste 56/15 = 3,73:1, acima do mínimo de 3:1 da auditoria. */
+  --text-heroi: 3.5rem;
+  --text-4: 2.25rem;
+  --text-3: 1.5rem;
+  --text-2: 1.125rem;
+  --text-1: 1rem;
+  --text-corpo: 0.9375rem;
+  --text-sm: 0.8125rem;
+  --text-xs: 0.6875rem;
+
+  --lh-heroi: 1;
+  --lh-4: 1.05;
+  --lh-3: 1.15;
+  --lh-2: 1.3;
+  --lh-1: 1.45;
+  --lh-corpo: 1.5;
+  --lh-sm: 1.4;
+  --lh-xs: 1.35;
+
+  --tracking-heroi: -0.03em;
+  --tracking-4: -0.02em;
+  --tracking-3: -0.015em;
+  --tracking-2: -0.005em;
+  --tracking-xs: 0.06em;
+
+  /* Peso é canal semântico: realizado 600, previsto 400. */
+  --peso-corpo: 400;
+  --peso-rotulo: 500;
+  --peso-realizado: 600;
+  --peso-heroi: 700;
+
+  /* ---------------------------------------------------------------------
+   * Espaçamento base 4, com a cauda deliberadamente não-linear.
+   * Não existem 40 e 48: separação DENTRO de um bloco vai até 24, separação
+   * ENTRE blocos começa em 44. É isso que substitui o card.
+   * ------------------------------------------------------------------- */
+  --s-2: 2px;
+  --s-4: 4px;
+  --s-6: 6px;
+  --s-8: 8px;
+  --s-12: 12px;
+  --s-16: 16px;
+  --s-20: 20px;
+  --s-24: 24px;
+  --s-32: 32px;
+  --s-44: 44px;
+  --s-64: 64px;
+  --s-96: 96px;
+
+  --gutter: var(--s-44);
+  --largura-maxima: 1240px;
+
+  /* ---------------------------------------------------------------------
+   * Raios — deliberadamente NÃO uniformes. O raio classifica.
+   * Nada acima de 8px existe no produto.
+   * ------------------------------------------------------------------- */
+  --r-0: 0;
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 8px;
+
+  /* ---------------------------------------------------------------------
+   * Densidade. Compacto é o padrão, e essa é a decisão: 15 linhas por tela
+   * contra 6 do Organizze. Densidade aqui não é estética — é a diferença
+   * entre comparar e lembrar.
+   * ------------------------------------------------------------------- */
+  --altura-linha: 36px;
+  --altura-linha-confortavel: 44px;
+  --altura-cabecalho-dia: 24px;
+  --altura-nav: 48px;
+  --altura-colunas: 28px;
+  --altura-rodape: 56px;
+
+  /* O trilho: 2px na linha, 3px no herói, 4px no ciclo da fatura. */
+  --trilho-altura: 2px;
+  --trilho-altura-heroi: 3px;
+  --trilho-altura-ciclo: 4px;
+  --trilho-marca-altura: 8px;
+
+  /* Movimento só quando explica algo. A carga do trilho é a única coisa que
+     anima no produto, e só quando o dado muda. */
+  --transicao-carga: 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+:root[data-densidade='confortavel'] {
+  --altura-linha: var(--altura-linha-confortavel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transicao-carga: 0ms;
+  }
+}
