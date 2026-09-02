@@ -41,3 +41,10 @@ export {
   type ErroDeCompetencia,
   type Janela,
 } from './tempo.js'
+
+export {
+  decidirEntradaFederada,
+  type DecisaoDeEntrada,
+  type FatosDaEntrada,
+  type MotivoDeRecusa,
+} from './identidade.js'
