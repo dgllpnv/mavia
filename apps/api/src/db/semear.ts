@@ -1,5 +1,6 @@
 import { hash } from '@node-rs/argon2'
-import { Client } from 'pg'
+import { Client, type PoolClient } from 'pg'
+import { registrarCompra } from '../cartoes/compras.js'
 
 /**
  * `pnpm db:seed` — um espaço de demonstração no banco local.
@@ -116,13 +117,46 @@ async function principal(): Promise<void> {
       [TENANT, conta, grupo, meioDia('2026-09-06'), USUARIO, poupanca],
     )
 
-    const cartao = await inserir(
+    const cartao: string = await inserir(
       c,
       `INSERT INTO cartoes (tenant_id, nome, limite_centavos, closing_day, due_day,
                             conta_pagamento_id)
        VALUES ($1, 'Cartão principal', 500000, 25, 5, $2) RETURNING id`,
       [TENANT, conta],
     )
+
+    // As compras de cartão passam por `registrarCompra` — a **mesma** função
+    // que a rota usa. Reescrever a divisão das parcelas aqui criaria uma
+    // segunda regra de rateio, e a semente passaria a mentir sobre o produto.
+    //
+    // O elenco: uma compra à vista e um parcelamento em 6x, o suficiente para a
+    // fatura aparecer com total e para o trilho de ciclo ter o que desenhar.
+    const comoCliente = c as unknown as PoolClient
+    const cartaoDaCompra = {
+      id: cartao,
+      closingDay: 25,
+      dueDay: 5,
+      contaPagamentoId: conta,
+      moeda: 'BRL' as const,
+    }
+
+    await registrarCompra(comoCliente, { tenantId: TENANT, usuarioId: USUARIO }, cartaoDaCompra, {
+      categoriaId: mercado,
+      valorCentavos: '-31890',
+      postedAt: meioDia('2026-09-12'),
+      parcelas: 1,
+      descricao: 'Mercado no cartão',
+    })
+
+    await registrarCompra(comoCliente, { tenantId: TENANT, usuarioId: USUARIO }, cartaoDaCompra, {
+      categoriaId: transporte,
+      // R$ 1.000,00 em 6x não divide: 166,66… O resto vai para as primeiras
+      // parcelas, uma unidade por parcela, e a soma bate no centavo.
+      valorCentavos: '-100000',
+      postedAt: meioDia('2026-09-14'),
+      parcelas: 6,
+      descricao: 'Pneus',
+    })
 
     await c.query('COMMIT')
 

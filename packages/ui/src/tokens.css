@@ -88,54 +88,74 @@
   --elev-borda: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+/**
+ * O escuro é **escolha**, não inferência.
+ *
+ * Não há `@media (prefers-color-scheme: dark)` aplicando este bloco sozinho, e
+ * a ausência é deliberada. A direção visual diz que o claro é a identidade
+ * canônica da Mavia e que o escuro é preferência do usuário, "não a cara do
+ * produto" — e que, quando os dois conflitarem, o claro vence.
+ *
+ * Herdar a preferência do sistema operacional faria a maioria dos usuários
+ * nunca ver a identidade que o dono do produto escolheu. O escuro entra quando
+ * a pessoa o liga, e aí `data-tema` marca a raiz.
+ *
+ * O escuro continua **projetado**, não invertido: a elevação vem de superfície
+ * mais clara e borda, o croma dos neutros cai, e os verdes e vermelhos são
+ * reajustados porque saturam demais sobre fundo escuro.
+ */
+:root[data-tema='escuro'] {
+  color-scheme: dark;
 
-    --paper-0: #0e0d0b;
-    --surface-1: #161512;
-    --surface-2: #1e1c18;
-    --surface-3: #262320;
-    --line: #2e2a24;
-    --line-forte: #453f36;
-    --ink-4: #6b6558;
-    --ink-3: #8e887a;
-    --ink-2: #b8b2a4;
-    --ink-1: #f2efe7;
-    --ink-0: #fffdf6;
+  --paper-0: #0e0d0b;
+  --surface-1: #161512;
+  --surface-2: #1e1c18;
+  --surface-3: #262320;
+  --line: #2e2a24;
+  --line-forte: #453f36;
+  --ink-4: #6b6558;
+  --ink-3: #8e887a;
+  --ink-2: #b8b2a4;
+  --ink-1: #f2efe7;
+  --ink-0: #fffdf6;
 
-    /* 8.69:1 nos dois modos — o botão primário tem o mesmo peso ótico. */
-    --primaria: var(--petroleo-300);
-    --primaria-hover: var(--petroleo-200);
-    --primaria-ativa: var(--petroleo-400);
-    --primaria-sobre: var(--petroleo-900);
-    --primaria-fundo-sutil: #12242a;
-    --foco: var(--petroleo-300);
+  /* 8.69:1 nos dois modos — o botão primário tem o mesmo peso ótico. */
+  --primaria: var(--petroleo-300);
+  --primaria-hover: var(--petroleo-200);
+  --primaria-ativa: var(--petroleo-400);
+  --primaria-sobre: var(--petroleo-900);
+  --primaria-fundo-sutil: #12242a;
+  --foco: var(--petroleo-300);
 
-    --receita: #4fb98a;
-    --receita-fundo: #12241c;
-    --despesa: #ef8577;
-    --despesa-fundo: #2a1714;
-    --atencao: #e0a63c;
+  --receita: #4fb98a;
+  --receita-fundo: #12241c;
+  --despesa: #ef8577;
+  --despesa-fundo: #2a1714;
+  --atencao: #e0a63c;
 
-    --dado-1: #3e92ce;
-    --dado-2: #a85830;
-    --dado-3: #1dae80;
-    --dado-4: #b33470;
-    --dado-5: #b08c10;
-    --dado-6: #b85084;
-    --dado-outros: #8e887a;
+  --dado-1: #3e92ce;
+  --dado-2: #a85830;
+  --dado-3: #1dae80;
+  --dado-4: #b33470;
+  --dado-5: #b08c10;
+  --dado-6: #b85084;
+  --dado-outros: #8e887a;
 
-    /* No escuro, sombra praticamente não comunica elevação. Ela passa a ser
-       superfície mais clara + borda — a diferença mais visível entre um escuro
-       projetado e um escuro invertido. */
-    --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
-    --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
-    --elev-borda: var(--line-forte);
-  }
+  /* No escuro, sombra praticamente não comunica elevação. Ela passa a ser
+     superfície mais clara + borda — a diferença mais visível entre um escuro
+     projetado e um escuro invertido. */
+  --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
+  --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
+  --elev-borda: var(--line-forte);
 }
 
-/* O seletor do usuário vence a preferência do sistema, nos dois sentidos. */
+/**
+ * O claro explícito.
+ *
+ * Idêntico ao `:root` de cima porque o claro **é** o padrão. Existe para o
+ * dia em que a raiz ganhar `data-tema` por outro motivo e o produto precisar
+ * dizer "claro" com a mesma especificidade com que diz "escuro".
+ */
 :root[data-tema='claro'] {
   color-scheme: light;
 
@@ -173,43 +193,6 @@
   --elev-borda: transparent;
 }
 
-:root[data-tema='escuro'] {
-  color-scheme: dark;
-
-  --paper-0: #0e0d0b;
-  --surface-1: #161512;
-  --surface-2: #1e1c18;
-  --surface-3: #262320;
-  --line: #2e2a24;
-  --line-forte: #453f36;
-  --ink-4: #6b6558;
-  --ink-3: #8e887a;
-  --ink-2: #b8b2a4;
-  --ink-1: #f2efe7;
-  --ink-0: #fffdf6;
-  --primaria: var(--petroleo-300);
-  --primaria-hover: var(--petroleo-200);
-  --primaria-ativa: var(--petroleo-400);
-  --primaria-sobre: var(--petroleo-900);
-  --primaria-fundo-sutil: #12242a;
-  --foco: var(--petroleo-300);
-  --receita: #4fb98a;
-  --receita-fundo: #12241c;
-  --despesa: #ef8577;
-  --despesa-fundo: #2a1714;
-  --atencao: #e0a63c;
-  --dado-1: #3e92ce;
-  --dado-2: #a85830;
-  --dado-3: #1dae80;
-  --dado-4: #b33470;
-  --dado-5: #b08c10;
-  --dado-6: #b85084;
-  --dado-outros: #8e887a;
-  --elev-1: 0 8px 20px rgb(0 0 0 / 55%);
-  --elev-2: 0 16px 40px rgb(0 0 0 / 70%);
-  --elev-borda: var(--line-forte);
-}
-
 :root {
   /* ---------------------------------------------------------------------
    * Tipografia. Archivo para números e títulos, Public Sans para o corpo.
@@ -218,8 +201,8 @@
    * completamente anônimos, e num produto em que o número é o protagonista o
    * numeral é o rosto da marca (`docs/design.md` §1).
    *
-   * As métricas de fallback ficam no `@font-face` de `fontes.css`, para que a
-   * troca da fonte não mexa na altura das linhas do extrato.
+   * O `@font-face` mora em cada aplicação: no web é CSS, no mobile é
+   * `expo-font`. Aqui ficam só os nomes das famílias, que os dois usam.
    * ------------------------------------------------------------------- */
   --fonte-numero: 'Archivo', 'Archivo Fallback', system-ui, sans-serif;
   --fonte-corpo: 'Public Sans', 'Public Sans Fallback', system-ui, sans-serif;

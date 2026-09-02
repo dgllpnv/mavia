@@ -4,6 +4,7 @@ import { ContasController, POOL } from './contas/contas.controller.js'
 import { LancamentosController } from './lancamentos/lancamentos.controller.js'
 import { CartoesController } from './cartoes/cartoes.controller.js'
 import { SessoesController } from './autenticacao/sessoes.controller.js'
+import { CategoriasController } from './categorias/categorias.controller.js'
 
 @Module({})
 export class AppModule {
@@ -13,6 +14,7 @@ export class AppModule {
       controllers: [
         SessoesController,
         ContasController,
+        CategoriasController,
         LancamentosController,
         CartoesController,
       ],

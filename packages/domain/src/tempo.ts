@@ -155,6 +155,15 @@ export function competenciaSeguinte(c: Competencia): Competencia {
   return c.mes === 12 ? { ano: c.ano + 1, mes: 1 } : { ano: c.ano, mes: c.mes + 1 }
 }
 
+/**
+ * O mês anterior. Existe como função porque estava reescrito à mão em três
+ * lugares — e "menos um mês" com a virada de ano é justamente o tipo de conta
+ * que a quarta cópia erra.
+ */
+export function competenciaAnterior(c: Competencia): Competencia {
+  return c.mes === 1 ? { ano: c.ano - 1, mes: 12 } : { ano: c.ano, mes: c.mes - 1 }
+}
+
 /** O instante da meia-noite daquele dia civil, no fuso. */
 export function inicioDoDiaCivil(data: DataCivil, fuso: string = FUSO_PADRAO): Date {
   return instanteDoRelogio(

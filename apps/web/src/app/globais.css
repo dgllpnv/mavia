@@ -1,0 +1,360 @@
+@import 'tailwindcss';
+@import './fontes.css';
+@import '@mavia/ui/tokens.css';
+
+/**
+ * O tema do Tailwind **lê** os tokens; não os redefine.
+ *
+ * `@theme inline` faz cada utilitário apontar para a variável de
+ * `@mavia/ui/tokens.css`, que é a fonte única. Um `tailwind.config.ts` com a
+ * paleta escrita de novo criaria duas paletas, e duas paletas divergem: a do
+ * mobile ficaria com a cor certa e a da web com a antiga.
+ *
+ * A escala de espaçamento entra **inteira e só ela**. Os buracos são
+ * deliberados: não existem 40 nem 48, porque separação dentro de um bloco vai
+ * até 24 e separação entre blocos começa em 44. `p-10` não compila, e é isso
+ * que substitui o card.
+ */
+@theme inline {
+  --color-paper: var(--paper-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-forte: var(--line-forte);
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-primaria: var(--primaria);
+  --color-primaria-hover: var(--primaria-hover);
+  --color-primaria-sobre: var(--primaria-sobre);
+  --color-primaria-sutil: var(--primaria-fundo-sutil);
+  --color-receita: var(--receita);
+  --color-despesa: var(--despesa);
+  --color-atencao: var(--atencao);
+
+  --font-numero: var(--fonte-numero);
+  --font-corpo: var(--fonte-corpo);
+
+  --text-heroi: var(--text-heroi);
+  --text-heroi--line-height: var(--lh-heroi);
+  --text-4: var(--text-4);
+  --text-4--line-height: var(--lh-4);
+  --text-3: var(--text-3);
+  --text-3--line-height: var(--lh-3);
+  --text-2: var(--text-2);
+  --text-2--line-height: var(--lh-2);
+  --text-1: var(--text-1);
+  --text-1--line-height: var(--lh-1);
+  --text-corpo: var(--text-corpo);
+  --text-corpo--line-height: var(--lh-corpo);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--lh-sm);
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: var(--lh-xs);
+
+  --spacing-2: var(--s-2);
+  --spacing-4: var(--s-4);
+  --spacing-6: var(--s-6);
+  --spacing-8: var(--s-8);
+  --spacing-12: var(--s-12);
+  --spacing-16: var(--s-16);
+  --spacing-20: var(--s-20);
+  --spacing-24: var(--s-24);
+  --spacing-32: var(--s-32);
+  --spacing-44: var(--s-44);
+  --spacing-64: var(--s-64);
+  --spacing-96: var(--s-96);
+
+  --radius-0: var(--r-0);
+  --radius-1: var(--r-1);
+  --radius-2: var(--r-2);
+  --radius-3: var(--r-3);
+}
+
+/* --------------------------------------------------------------------------
+ * Base
+ * ----------------------------------------------------------------------- */
+html {
+  background: var(--paper-0);
+  color: var(--ink-1);
+  font-family: var(--fonte-corpo);
+  font-size: 16px;
+  /* O corpo do produto é 15px, não 16: a interface é densa, e a leitura é de
+     rótulo e valor, não de parágrafo. */
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-size: var(--text-corpo);
+  line-height: var(--lh-corpo);
+  margin: 0;
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--fonte-numero);
+  font-weight: var(--peso-realizado);
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--text-3);
+  line-height: var(--lh-3);
+  letter-spacing: var(--tracking-3);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Anel duplo: o de fora carrega o contraste, o de dentro separa da superfície
+   para o anel funcionar mesmo sobre a linha de uma tabela. */
+:focus-visible {
+  outline: 2px solid var(--foco);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--surface-1);
+}
+
+::selection {
+  background: var(--primaria-fundo-sutil);
+  color: var(--ink-0);
+}
+
+/* --------------------------------------------------------------------------
+ * Rótulo de seção — o que substitui o cabeçalho de card
+ * ----------------------------------------------------------------------- */
+.rotulo {
+  font-family: var(--fonte-corpo);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-xs);
+  text-transform: uppercase;
+  font-weight: var(--peso-rotulo);
+  color: var(--ink-3);
+}
+
+/* --------------------------------------------------------------------------
+ * Valor monetário
+ *
+ * `tabular-nums` **só em coluna**. Em 56px cada dígito recebe a largura de um
+ * zero e um `121` fica frouxo; número isolado usa as figuras proporcionais da
+ * Archivo. Regra da skill `dataviz`, e vale aqui inteira.
+ * ----------------------------------------------------------------------- */
+.valor {
+  font-family: var(--fonte-numero);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  white-space: nowrap;
+}
+
+.valor--isolado {
+  font-variant-numeric: proportional-nums lining-nums slashed-zero;
+}
+
+/* O sinal ocupa posição própria e reservada, à esquerda do `R$`, com a largura
+   de um dígito. É o que faz positivos e negativos alinharem pelo `R$`. */
+.valor__sinal {
+  display: inline-block;
+  width: 1ch;
+  text-align: left;
+}
+
+.valor__simbolo {
+  font-size: 0.72em;
+  color: var(--ink-3);
+  margin-right: 0.18em;
+}
+
+.valor--isolado .valor__simbolo {
+  font-size: 0.42em;
+  vertical-align: 0.9em;
+  margin-right: 0.12em;
+}
+
+/* Em coluna os decimais são tamanho cheio: reduzi-los quebra o alinhamento
+   tabular que a coluna existe para preservar, e o extrato é onde se confere
+   centavo. Isolado eles caem para 0.55em — num saldo de 56px o par ocupa ~30%
+   da massa visual para 1% da informação. */
+.valor--isolado .valor__decimais {
+  font-size: 0.55em;
+  color: var(--ink-2);
+  vertical-align: 0.75em;
+}
+
+.valor--receita {
+  color: var(--receita);
+}
+.valor--despesa {
+  color: var(--despesa);
+}
+.valor--transferencia {
+  color: var(--transferencia);
+}
+
+/* Peso separa a certeza, sem gastar cor: realizado 600, previsto 400. */
+.valor--realizado {
+  font-weight: var(--peso-realizado);
+}
+.valor--previsto {
+  font-weight: var(--peso-corpo);
+}
+
+/* --------------------------------------------------------------------------
+ * O trilho — o elemento-assinatura
+ *
+ * Três partes e uma gramática só: quanto disto já é fato, e onde estava
+ * previsto terminar. A geometria vem de `@mavia/ui`; aqui é só a pintura.
+ * ----------------------------------------------------------------------- */
+.trilho {
+  position: relative;
+  width: 100%;
+  height: var(--trilho-altura);
+  background: var(--line);
+  border-radius: var(--r-0);
+  overflow: hidden;
+}
+
+.trilho--heroi {
+  height: var(--trilho-altura-heroi);
+}
+
+.trilho--ciclo {
+  height: var(--trilho-altura-ciclo);
+}
+
+.trilho__carga {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Tinta, e nunca verde nem vermelho: o trilho é estrutura, não dado
+     categórico. Pintá-lo faria a cor parecer significar alguma coisa. */
+  background: var(--ink-1);
+  transition: width var(--transicao-carga), inset-inline-start var(--transicao-carga);
+}
+
+/* Direção codifica sinal: despesa carrega da direita para a esquerda. Segundo
+   canal, gratuito, independente de cor. */
+.trilho__carga--esquerda {
+  left: 0;
+}
+.trilho__carga--direita {
+  right: 0;
+}
+
+/* Estouro é textura, não cor. Cor sozinha nunca carrega isto. */
+.trilho__estouro {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--despesa) 0,
+    var(--despesa) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+}
+
+.trilho__marca {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--ink-2);
+}
+
+/* --------------------------------------------------------------------------
+ * Extrato — 36px de altura, sem ícone em círculo, sem card
+ * ----------------------------------------------------------------------- */
+.linha {
+  display: grid;
+  align-items: center;
+  height: var(--altura-linha);
+  border-bottom: 1px solid var(--line);
+  padding: 0 var(--s-8);
+}
+
+.linha:hover {
+  background: var(--surface-2);
+}
+
+.cabecalho-dia {
+  height: var(--altura-cabecalho-dia);
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+  padding: 0 var(--s-8);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Categoria é um quadrado de 8px, não um ícone em círculo colorido de 32px.
+   Carrega a mesma informação e custa 24px a menos de altura de linha. */
+.marca-categoria {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-0);
+  flex: none;
+}
+
+/* --------------------------------------------------------------------------
+ * Controles
+ * ----------------------------------------------------------------------- */
+.botao {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-8);
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  padding: var(--s-8) var(--s-16);
+  font-size: var(--text-corpo);
+  font-weight: var(--peso-rotulo);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-1);
+}
+
+.botao--primario {
+  background: var(--primaria);
+  color: var(--primaria-sobre);
+}
+
+.botao--primario:hover {
+  background: var(--primaria-hover);
+}
+
+.botao--discreto {
+  border-color: var(--line-forte);
+}
+
+.botao--discreto:hover {
+  background: var(--surface-2);
+}
+
+.botao:disabled {
+  color: var(--ink-4);
+  cursor: not-allowed;
+  background: var(--surface-2);
+}
+
+.campo {
+  width: 100%;
+  border: 1px solid var(--line-forte);
+  border-radius: var(--r-1);
+  background: var(--paper-0);
+  padding: var(--s-8) var(--s-12);
+  font-size: var(--text-1);
+}
+
+.campo:hover {
+  border-color: var(--ink-4);
+}

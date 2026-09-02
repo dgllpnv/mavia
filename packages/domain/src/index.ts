@@ -36,6 +36,7 @@ export {
 
 export {
   competencia,
+  competenciaAnterior,
   competenciaDe,
   competenciaSeguinte,
   contem,

@@ -1,4 +1,5 @@
 import {
+  competenciaAnterior,
   competenciaSeguinte,
   inicioDoDiaCivil,
   type Competencia,
@@ -59,13 +60,8 @@ export function janelaDaFatura(
   ciclo: CicloDeFaturamento,
   mesDeFechamento: Competencia,
 ): Janela {
-  const anterior =
-    mesDeFechamento.mes === 1
-      ? { ano: mesDeFechamento.ano - 1, mes: 12 }
-      : { ano: mesDeFechamento.ano, mes: mesDeFechamento.mes - 1 }
-
   return {
-    inicio: diaSeguinteAoFechamento(ciclo, anterior),
+    inicio: diaSeguinteAoFechamento(ciclo, competenciaAnterior(mesDeFechamento)),
     fim: diaSeguinteAoFechamento(ciclo, mesDeFechamento),
   }
 }

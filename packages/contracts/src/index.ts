@@ -90,7 +90,16 @@ export const zCategoria = z.object({
   nivel: z.union([z.literal(1), z.literal(2)]),
   parentId: zUuid.nullable(),
   analitica: z.boolean(),
+  /**
+   * Arquivada continua sendo devolvida, e é por isso que o campo existe.
+   * Lançamento antigo aponta para categoria arquivada; omiti-la da resposta
+   * deixaria a linha do extrato sem nome. O cliente a esconde do seletor, não
+   * do dicionário.
+   */
   arquivada: z.boolean(),
+  /** Categoria que o espaço não criou e não pode apagar. */
+  sistema: z.boolean(),
+  cor: z.string().nullable(),
 })
 
 // ---------------------------------------------------------------------------

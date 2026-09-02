@@ -44,6 +44,8 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // espaço, e `membro` não decide isso pelos outros.
   ['DELETE /v1/contas/:id', { papeis: SO_DONO }],
 
+  ['GET /v1/categorias', { papeis: TODOS }],
+
   ['GET /v1/lancamentos', { papeis: TODOS }],
   ['GET /v1/lancamentos/resumo', { papeis: TODOS }],
   ['GET /v1/lancamentos/:id', { papeis: TODOS }],

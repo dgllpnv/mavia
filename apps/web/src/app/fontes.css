@@ -18,11 +18,18 @@
  * intrínseca da fonte, o que resolve o mesmo problema de forma estrutural em
  * vez de por número calibrado — que envelheceria na primeira atualização da
  * fonte. O `swap` continua, com `preload` no documento para encurtar a janela.
+ * Ver P-5 em `docs/pendencias.md`.
+ *
+ * Este arquivo mora no app web, e não em `@mavia/ui`, porque `@font-face` é
+ * um mecanismo de CSS: o Expo carrega fonte por `expo-font`, e um `@font-face`
+ * no pacote compartilhado seria código que só metade dos consumidores executa.
+ * Os tokens tipográficos — família, escala, pesos — continuam em `@mavia/ui`,
+ * porque esses os dois lados usam.
  */
 
 @font-face {
   font-family: 'Archivo';
-  src: url('../fontes/archivo.woff2') format('woff2-variations');
+  src: url('/fontes/archivo.woff2') format('woff2-variations');
   font-weight: 100 900;
   font-stretch: 62% 125%;
   font-style: normal;
@@ -35,7 +42,7 @@
 
 @font-face {
   font-family: 'Public Sans';
-  src: url('../fontes/public-sans.woff2') format('woff2-variations');
+  src: url('/fontes/public-sans.woff2') format('woff2-variations');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
