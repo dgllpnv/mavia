@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { dinheiro } from './money.js'
+import { faturaAlvo } from './fatura.js'
 import { gerarParcelas } from './parcelamento.js'
 import { dataCivilDe, formatarDataCivil } from './tempo.js'
 
@@ -146,5 +147,63 @@ describe('gerarParcelas — numeração', () => {
 
     expect(valores(r)).toEqual([-10000n])
     expect(r.ok && r.valor[0]?.numero).toBe(1)
+  })
+})
+
+describe('CT-2 — as parcelas caem em faturas consecutivas', () => {
+  const fecha30 = { closingDay: 30, dueDay: 10 }
+
+  it('12x nunca colide, mesmo com fechamento perto do fim do mês', () => {
+    // O contraexemplo da auditoria: compra em 31/01 num cartão que fecha dia
+    // 30. Derivando a fatura da data da parcela, a 1 (31/jan) e a 2 (28/fev)
+    // caíam ambas em fevereiro — 12 parcelas em 7 faturas, uma cobrando o
+    // dobro e outra nada.
+    const r = gerarParcelas(brl(-120000n), 12, emSaoPaulo('2026-01-31'), fecha30)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+
+    const faturas = r.valor.map((p) => `${p.competenciaDaFatura.ano}-${p.competenciaDaFatura.mes}`)
+    expect(new Set(faturas).size).toBe(12)
+  })
+
+  it('as faturas são consecutivas, uma por parcela', () => {
+    const r = gerarParcelas(brl(-30000n), 3, emSaoPaulo('2026-01-31'), fecha30)
+    if (!r.ok) return
+
+    const faturas = r.valor.map((p) => p.competenciaDaFatura)
+    for (let i = 1; i < faturas.length; i++) {
+      const anterior = faturas[i - 1]!
+      const atual = faturas[i]!
+      const distancia = (atual.ano - anterior.ano) * 12 + (atual.mes - anterior.mes)
+      expect(distancia).toBe(1)
+    }
+  })
+
+  it('a primeira parcela cai na fatura da compra', () => {
+    const compra = emSaoPaulo('2026-03-10')
+    const r = gerarParcelas(brl(-30000n), 3, compra, fecha30)
+    if (!r.ok) return
+
+    expect(r.valor[0]?.competenciaDaFatura).toEqual(faturaAlvo(fecha30, compra))
+  })
+
+  it('sem ciclo, a competência é a do mês da compra — parcelamento em conta', () => {
+    const r = gerarParcelas(brl(-30000n), 3, emSaoPaulo('2026-03-10'))
+    if (!r.ok) return
+
+    expect(r.valor.map((p) => p.competenciaDaFatura.mes)).toEqual([3, 4, 5])
+  })
+
+  it('nenhum fechamento de 1 a 31 produz colisão em 24x', () => {
+    // A propriedade que fecha o buraco inteiro, em vez do caso conhecido.
+    for (let closingDay = 1; closingDay <= 31; closingDay++) {
+      const r = gerarParcelas(brl(-240000n), 24, emSaoPaulo('2026-01-31'), {
+        closingDay,
+        dueDay: 10,
+      })
+      if (!r.ok) continue
+      const faturas = r.valor.map((p) => `${p.competenciaDaFatura.ano}-${p.competenciaDaFatura.mes}`)
+      expect(new Set(faturas).size).toBe(24)
+    }
   })
 })

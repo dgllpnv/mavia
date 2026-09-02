@@ -1,8 +1,8 @@
-import { ancorarDiaNoMes } from './fatura.js'
+import { ancorarDiaNoMes, faturaAlvo, type CicloDeFaturamento } from './fatura.js'
 import type { Money } from './money.js'
 import { ratear } from './ratear.js'
 import { falha, ok, type Result } from './result.js'
-import { dataCivilDe, inicioDoDiaCivil } from './tempo.js'
+import { competenciaSeguinte, dataCivilDe, inicioDoDiaCivil, type Competencia } from './tempo.js'
 
 /**
  * Parcelamento — `docs/adr/0007` §2 e ADR 0005.
@@ -15,8 +15,21 @@ export interface Parcela {
   readonly numero: number
   readonly total: number
   readonly valor: Money
-  /** Competência da parcela — é ela que decide a fatura. */
+  /** Competência da parcela — a data que aparece no extrato. */
   readonly postedAt: Date
+  /**
+   * A fatura desta parcela, **atribuída por construção**.
+   *
+   * Não é derivada de `postedAt`: com `closingDay` perto do fim do mês, a
+   * ancoragem de dia faz parcelas consecutivas caírem na mesma janela. Compra
+   * em 31/01 num cartão que fecha dia 30, em 12x: a parcela 1 (31/jan) e a
+   * parcela 2 (28/fev) caem **ambas** na fatura de fevereiro — e as 12
+   * parcelas acabam em 7 faturas, com uma cobrando o dobro e outra nada.
+   *
+   * "12x" significa doze faturas. A atribuição é sequencial a partir da
+   * fatura da compra, e é isso que o usuário espera e que o extrato mostra.
+   */
+  readonly competenciaDaFatura: Competencia
 }
 
 export type ErroDeParcelamento =
@@ -28,6 +41,8 @@ export function gerarParcelas(
   valorTotal: Money,
   parcelas: number,
   dataCompra: Date,
+  /** O ciclo do cartão. Ausente para parcelamento em conta, que não tem fatura. */
+  ciclo?: CicloDeFaturamento,
 ): Result<Parcela[], ErroDeParcelamento> {
   if (!Number.isInteger(parcelas) || parcelas < 1) {
     return falha({ tipo: 'parcelas-invalidas', parcelas })
@@ -48,14 +63,24 @@ export function gerarParcelas(
 
   const compra = dataCivilDe(dataCompra)
 
-  return ok(
-    partes.valor.map((valor, i) => ({
+  // A fatura da parcela 1 é a da compra; as seguintes são as consecutivas.
+  // Derivar cada uma de `postedAt` colidiria — ver `competenciaDaFatura`.
+  let competencia: Competencia = ciclo
+    ? faturaAlvo(ciclo, dataCompra)
+    : { ano: compra.ano, mes: compra.mes }
+
+  const saida: Parcela[] = []
+  for (const [i, valor] of partes.valor.entries()) {
+    saida.push({
       numero: i + 1,
       total: parcelas,
       valor,
       postedAt: dataDaParcela(compra, i),
-    })),
-  )
+      competenciaDaFatura: competencia,
+    })
+    competencia = competenciaSeguinte(competencia)
+  }
+  return ok(saida)
 }
 
 /**
