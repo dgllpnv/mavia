@@ -48,3 +48,23 @@ export {
   type FatosDaEntrada,
   type MotivoDeRecusa,
 } from './identidade.js'
+
+export {
+  ehEfetivado,
+  ehRealizado,
+  resumoDoPeriodo,
+  saldoDerivado,
+  saldoGeral,
+  statusDeLancamento,
+  type BaldesDoPeriodo,
+  type MarcasDeTempo,
+  type ResumoDoPeriodo,
+  type StatusDeLancamento,
+} from './saldo.js'
+
+export {
+  estornar,
+  estornoAcumulado,
+  saldoDoOriginal,
+  type ErroDeEstorno,
+} from './estorno.js'
