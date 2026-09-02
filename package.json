@@ -9,9 +9,13 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "test:domain": "pnpm --filter @mavia/domain test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "dev": "turbo run dev",
+    "db:migrate": "pnpm --filter @mavia/api db:migrate",
+    "db:seed": "pnpm --filter @mavia/api db:seed"
   },
   "devDependencies": {
+    "tsx": "^4.23.13",
     "turbo": "^2",
     "typescript": "^5.7"
   }
