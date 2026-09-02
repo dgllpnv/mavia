@@ -52,11 +52,27 @@ export async function chamar<T>(caminho: string, opcoes: Opcoes = {}): Promise<T
     ...(opcoes.corpo !== undefined ? { body: JSON.stringify(opcoes.corpo) } : {}),
   })
 
-  if (r.status === 401) throw new SemSessao()
   if (r.status === 204) return undefined as T
 
   const texto = await r.text()
   const dados: unknown = texto ? JSON.parse(texto) : null
+
+  /**
+   * 401 significa duas coisas diferentes, e confundi-las mostra a frase errada
+   * na hora errada.
+   *
+   * Numa rota autenticada é "sua sessão acabou", e a interface leva para a
+   * entrada. Em `POST /sessoes` é "esta credencial não serve" — e mostrar
+   * "sua sessão expirou" a quem está justamente tentando entrar é dizer que o
+   * problema é outro. A mensagem do servidor é uma só, de propósito; o que
+   * varia é qual das duas situações estamos tratando.
+   */
+  if (r.status === 401) {
+    if (caminho === '/sessoes' && opcoes.metodo === 'POST') {
+      throw new ErroDaApi(401, mensagemDoErro(dados) ?? 'E-mail ou senha inválidos.')
+    }
+    throw new SemSessao()
+  }
 
   if (!r.ok) {
     throw new ErroDaApi(r.status, mensagemDoErro(dados) ?? 'Não foi possível concluir.')

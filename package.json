@@ -12,9 +12,11 @@
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev",
     "db:migrate": "pnpm --filter @mavia/api db:migrate",
-    "db:seed": "pnpm --filter @mavia/api db:seed"
+    "db:seed": "pnpm --filter @mavia/api db:seed",
+    "e2e": "pnpm --filter @mavia/web e2e"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "tsx": "^4.23.13",
     "turbo": "^2",
     "typescript": "^5.7"
