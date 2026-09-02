@@ -1,0 +1,20 @@
+{
+  "name": "@mavia/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@mavia/domain": "workspace:*",
+    "vitest": "^2"
+  }
+}

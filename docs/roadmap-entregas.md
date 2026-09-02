@@ -12,16 +12,16 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 | | |
 |---|---|
-| **Pronto** | Monorepo · `packages/domain` com `Money`, `ratear` e base temporal · tenancy com RLS provada · CI · ambiente Docker local |
-| **Testes** | 84 passando — 73 de domínio, 11 de integração contra Postgres real |
+| **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local |
+| **Testes** | 148 passando — 88 de domínio, 12 de contrato, 48 de integração contra Postgres real |
 | **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
-| **Em código** | Épico 1, parcialmente |
+| **Em código** | Épico 1: 1B e 1C entregues. 1D (deploy) adiado por decisão do dono |
 
 ---
 
 ## Épico 1 — Fundação *(em andamento)*
 
-### 1B · Autenticação — **a etapa atual**
+### 1B · Autenticação — ✅ **entregue**
 
 **Entrega:** cadastro e login funcionando, por Google e por e-mail e senha.
 
@@ -35,7 +35,7 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 **Ao fim disto você consegue:** criar sua conta e entrar. Nada mais — ainda não há o que ver dentro.
 
-### 1C · Primeira rota e o seam S2
+### 1C · Primeira rota e o seam S2 — ✅ **entregue**
 
 **Entrega:** a API HTTP de pé, com uma rota real de contas.
 

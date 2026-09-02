@@ -5,7 +5,10 @@
     "noEmit": true,
     "types": [
       "node"
-    ]
+    ],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "verbatimModuleSyntax": false
   },
   "include": [
     "src",

@@ -7,6 +7,7 @@ packages:
 #   esbuild ................. binário do vitest
 #   ssh2, cpu-features ...... cadeia do testcontainers (dockerode)
 #   protobufjs .............. idem
+#   @nestjs/core ............ postinstall do Nest
 # O binding nativo do ssh2 é opcional e falha sem toolchain de C++; o
 # testcontainers funciona com o fallback em JS.
 allowBuilds:
@@ -14,3 +15,4 @@ allowBuilds:
   ssh2: true
   cpu-features: true
   protobufjs: true
+  "@nestjs/core": true
