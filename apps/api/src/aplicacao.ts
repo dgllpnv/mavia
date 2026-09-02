@@ -3,7 +3,12 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import type { Pool } from 'pg'
 import { AppModule } from './app.module.js'
-import { verificarCoberturaDaMatriz, type Rota } from './autorizacao/politica-acesso.js'
+import {
+  chaveDaRota,
+  ROTAS_SEM_TENANT,
+  verificarCoberturaDaMatriz,
+  type Rota,
+} from './autorizacao/politica-acesso.js'
 import { TenantNaoInformado, TenantNaoPertence, type Autenticador } from './autenticacao/autenticador.js'
 
 /**
@@ -30,9 +35,18 @@ export async function criarAplicacao(
   // verdade. O processo passa o autenticador de sessão; um teste passa outro.
   // Nenhum código só-de-teste vive na aplicação por causa disso.
   instancia.addHook('preHandler', async (req, resposta) => {
+    // A resolução do espaço depende da rota: `GET /v1/eu` existe para
+    // descobrir quais espaços o usuário tem, e exigir o cabeçalho ali seria
+    // pedir a resposta como pergunta.
+    const chave = chaveDaRota({
+      metodo: req.method as Rota['metodo'],
+      caminho: req.routeOptions.url ?? '',
+    })
+
     try {
-      const autenticado = await autenticar(req)
-      if (autenticado) req.autenticado = autenticado
+      const r = await autenticar(req, { exigeTenant: !ROTAS_SEM_TENANT.has(chave) })
+      if (r.sessao) req.sessao = r.sessao
+      if (r.autenticado) req.autenticado = r.autenticado
     } catch (erro) {
       if (erro instanceof TenantNaoInformado) {
         await resposta.status(400).send({ erro: erro.message })

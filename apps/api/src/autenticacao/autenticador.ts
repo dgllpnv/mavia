@@ -3,6 +3,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool } from 'pg'
 import type { Autenticado } from '../autorizacao/autorizacao.guard.js'
 import { comUsuario, resolverTenant } from '../tenancy/tenancy.js'
+import { tokenDoCookie } from './cookie.js'
 
 /**
  * Autenticação de requisição — a resolução em quatro etapas do
@@ -14,7 +15,34 @@ import { comUsuario, resolverTenant } from '../tenancy/tenancy.js'
  * precisasse de revisão.
  */
 
-export type Autenticador = (req: FastifyRequest) => Promise<Autenticado | null>
+/**
+ * A sessão, **sem** espaço escolhido.
+ *
+ * Existe separada de `Autenticado` porque há rotas legítimas que não têm
+ * espaço: `GET /v1/eu` é justamente a pergunta "quais espaços eu tenho", e
+ * exigir a resposta como cabeçalho da pergunta seria circular.
+ */
+export interface SessaoAtiva {
+  readonly sessaoId: string
+  readonly usuarioId: string
+}
+
+export interface ResultadoDaAutenticacao {
+  readonly sessao: SessaoAtiva | null
+  /** Preenchido só quando a rota pede espaço e o vínculo existe. */
+  readonly autenticado: Autenticado | null
+}
+
+export type Autenticador = (
+  req: FastifyRequest,
+  opcoes: { readonly exigeTenant: boolean },
+) => Promise<ResultadoDaAutenticacao>
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    sessao?: SessaoAtiva
+  }
+}
 
 export class TenantNaoInformado extends Error {
   constructor() {
@@ -35,22 +63,31 @@ function hashDoToken(token: string): Buffer {
   return createHash('sha256').update(token, 'utf8').digest()
 }
 
-function tokenDoCabecalho(req: FastifyRequest): string | null {
+/**
+ * O token, do cabeçalho ou do cookie.
+ *
+ * `Authorization` primeiro porque é o caminho do mobile, que não tem cookie
+ * jar. No web o token viaja em cookie `HttpOnly` e nunca passa pelo JavaScript
+ * da página — é a diferença entre um XSS que rouba a sessão e um que não.
+ */
+function tokenDaRequisicao(req: FastifyRequest): string | null {
   const cabecalho = req.headers.authorization
-  if (typeof cabecalho !== 'string') return null
-  const [esquema, valor] = cabecalho.split(' ')
-  if (esquema?.toLowerCase() !== 'bearer' || !valor) return null
-  return valor
+  if (typeof cabecalho === 'string') {
+    const [esquema, valor] = cabecalho.split(' ')
+    if (esquema?.toLowerCase() === 'bearer' && valor) return valor
+  }
+  return tokenDoCookie(req.headers.cookie)
 }
 
 export function autenticadorDeSessao(pool: Pool): Autenticador {
-  return async (req) => {
+  return async (req, opcoes) => {
     // Etapa 1 — quem é o usuário, a partir do token.
-    const token = tokenDoCabecalho(req)
-    if (!token) return null
+    const token = tokenDaRequisicao(req)
+    if (!token) return VAZIO
 
     const sessao = await comUsuario(pool, { usuarioId: SEM_USUARIO }, async (cliente) => {
       const r = await cliente.query<{
+        sessao_id: string
         usuario_id: string
         expira_em: Date
         expira_absoluto_em: Date
@@ -59,12 +96,18 @@ export function autenticadorDeSessao(pool: Pool): Autenticador {
       return r.rows[0] ?? null
     })
 
-    if (!sessao || sessao.revogada_em !== null) return null
+    if (!sessao || sessao.revogada_em !== null) return VAZIO
 
     const agora = Date.now()
-    if (sessao.expira_em.getTime() <= agora) return null
+    if (sessao.expira_em.getTime() <= agora) return VAZIO
     // Teto absoluto: uma sessão renovada indefinidamente é uma sessão eterna.
-    if (sessao.expira_absoluto_em.getTime() <= agora) return null
+    if (sessao.expira_absoluto_em.getTime() <= agora) return VAZIO
+
+    const ativa: SessaoAtiva = { sessaoId: sessao.sessao_id, usuarioId: sessao.usuario_id }
+    // Rota sem espaço para em quem é o usuário. Ir adiante exigiria o
+    // cabeçalho de tenant em `GET /v1/eu`, que é a rota que existe para
+    // descobrir quais tenants pedir.
+    if (!opcoes.exigeTenant) return { sessao: ativa, autenticado: null }
 
     // Etapa 2 e 3 — o tenant é pedido explicitamente, e o pertencimento é
     // consultado sob a policy de `app.usuario_id`, antes de `app.tenant_id`
@@ -82,12 +125,17 @@ export function autenticadorDeSessao(pool: Pool): Autenticador {
     if (!pertencimento) throw new TenantNaoPertence()
 
     return {
-      usuarioId: sessao.usuario_id,
-      tenantId: pertencimento.tenantId,
-      papel: pertencimento.papel,
+      sessao: ativa,
+      autenticado: {
+        usuarioId: sessao.usuario_id,
+        tenantId: pertencimento.tenantId,
+        papel: pertencimento.papel,
+      },
     }
   }
 }
+
+const VAZIO: ResultadoDaAutenticacao = { sessao: null, autenticado: null }
 
 /**
  * A resolução de sessão precisa de uma transação, mas ainda não sabemos quem é

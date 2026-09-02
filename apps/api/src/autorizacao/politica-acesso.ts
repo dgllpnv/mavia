@@ -64,6 +64,25 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['POST /v1/cartoes/faturas/:faturaId/pagamentos', { papeis: QUEM_ESCREVE }],
 ])
 
+/**
+ * Rotas que **não** são de um espaço.
+ *
+ * Papel é propriedade do vínculo com um tenant; perguntar "seu papel permite?"
+ * numa rota sem tenant não tem resposta. Por isso elas não entram na matriz —
+ * entram aqui, numa lista fechada e curta que se lê de uma vez.
+ *
+ * `POST /v1/sessoes` é a única pública: é a rota pela qual a sessão nasce.
+ * As outras duas exigem sessão, e o `SessaoGuard` cuida disso.
+ */
+export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
+  'POST /v1/sessoes',
+  'GET /v1/eu',
+  'DELETE /v1/sessoes/atual',
+])
+
+/** Dispensa até a sessão. Uma entrada a mais aqui é uma porta a mais. */
+export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set(['POST /v1/sessoes'])
+
 export function chaveDaRota(rota: Rota): string {
   return `${rota.metodo} ${rota.caminho}`
 }
@@ -97,6 +116,9 @@ export class RotaSemRegra extends Error {
 export function verificarCoberturaDaMatriz(rotasRegistradas: readonly Rota[]): void {
   const faltantes = rotasRegistradas
     .map(chaveDaRota)
-    .filter((chave) => !MATRIZ.has(chave))
+    // Uma rota está coberta se tem papel declarado OU se é declaradamente sem
+    // espaço. As duas listas juntas são a política inteira; nenhuma rota pode
+    // faltar nas duas.
+    .filter((chave) => !MATRIZ.has(chave) && !ROTAS_SEM_TENANT.has(chave))
   if (faltantes.length > 0) throw new RotaSemRegra(faltantes)
 }
