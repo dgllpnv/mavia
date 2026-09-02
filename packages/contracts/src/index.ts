@@ -232,6 +232,53 @@ export const zPagarFatura = z.object({
   contaId: zUuid.optional(),
 })
 
+// ---------------------------------------------------------------------------
+// Compra no cartão
+// ---------------------------------------------------------------------------
+/**
+ * O que o formulário envia. **Uma compra**, não N lançamentos: quem gera as
+ * parcelas é o servidor, a partir do ciclo do cartão. Deixar o cliente montar
+ * as N linhas seria a segunda implementação do rateio, e ela divergiria.
+ */
+export const zCriarCompraNoCartao = z.object({
+  categoriaId: zUuid,
+  /**
+   * Com sinal, como todo lançamento: despesa é negativa. O servidor confere
+   * contra a natureza da categoria e recusa a discordância — inferir o sinal
+   * de um enum `tipo` é exatamente o que a regra 6 proíbe.
+   */
+  valorCentavos: zCentavos,
+  postedAt: z.string().datetime(),
+  /**
+   * Teto de 72 porque existe: o que não existe é limite implícito. Sem ele,
+   * "1000x" gera mil lançamentos e mil faturas numa requisição só.
+   */
+  parcelas: z.number().int().min(1).max(72).default(1),
+  descricao: z.string().trim().min(1).max(140),
+  observacao: z.string().trim().max(1000).optional(),
+})
+
+export const zParcelaCriada = z.object({
+  id: zUuid,
+  numero: z.number().int(),
+  total: z.number().int(),
+  valorCentavos: zCentavos,
+  postedAt: z.string().datetime(),
+  faturaId: zUuid,
+  /** `AAAA-MM`. Nomeia a fatura, não um instante. */
+  competenciaDaFatura: z.string().regex(/^\d{4}-\d{2}$/),
+})
+
+export const zCompraNoCartao = z.object({
+  /** Nulo à vista: um grupo de uma parcela não parcela nada. */
+  parcelamentoId: zUuid.nullable(),
+  itens: z.array(zParcelaCriada),
+})
+
+export type CriarCompraNoCartao = z.infer<typeof zCriarCompraNoCartao>
+export type ParcelaCriada = z.infer<typeof zParcelaCriada>
+export type CompraNoCartao = z.infer<typeof zCompraNoCartao>
+
 export type CriarCartao = z.infer<typeof zCriarCartao>
 export type Cartao = z.infer<typeof zCartao>
 export type EstadoDeFatura = z.infer<typeof zEstadoDeFatura>

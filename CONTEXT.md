@@ -179,6 +179,10 @@ A função `baldeDe(lancamento)` vive em `packages/domain` e é **total**: ela n
 
 **Fatura** — Ciclo de cobrança de um Cartao. Tem `periodo_inicio` e `periodo_fim` (instantes), `data_fechamento`, `data_vencimento` e `competencia` (datas civis), e um estado. **Agrega os Lancamentos que apontam para ela por `fatura_id`** — a pertinência é um vínculo explícito, não uma consulta por janela.
 
+**Mes de fechamento** — O mês cujo `closing_day` encerra a janela de uma Fatura. É a chave pela qual o domínio identifica um ciclo: `janelaDaFatura`, `vencimentoDaFatura` e `faturaAlvo` falam todos em mês de fechamento.
+
+> **Não confundir com `competencia`.** A competência de uma Fatura é o mês do **vencimento**. Num ciclo 25/5, a fatura de mês de fechamento **março** fecha em 25/mar, vence em 05/abr e tem competência **abril** — dois meses diferentes para a mesma fatura. Chamar os dois de "competência" foi o que produziu, no épico 3, um teste que conferia o mês errado sem que nada falhasse. O termo existe para que a colisão não volte.
+
 **Regra de atribuição** — Um Lancamento novo vai para a Fatura cuja janela contém seu `posted_at`; se essa Fatura não estiver `aberta`, vai para a **Fatura aberta mais antiga** do Cartao e é marcado `retroativo`. Separar a regra da definição é o que permite o retroativo sem que a definição de Fatura passe a mentir.
 
 > **Invariantes**

@@ -18,7 +18,11 @@ export interface Parcela {
   /** Competência da parcela — a data que aparece no extrato. */
   readonly postedAt: Date
   /**
-   * A fatura desta parcela, **atribuída por construção**.
+   * A fatura desta parcela, pelo **mês de fechamento**, atribuída por
+   * construção.
+   *
+   * Mês de fechamento, e não competência: a competência de uma Fatura é o mês
+   * do vencimento (`CONTEXT.md`), e num ciclo 25/5 os dois diferem.
    *
    * Não é derivada de `postedAt`: com `closingDay` perto do fim do mês, a
    * ancoragem de dia faz parcelas consecutivas caírem na mesma janela. Compra
@@ -29,7 +33,7 @@ export interface Parcela {
    * "12x" significa doze faturas. A atribuição é sequencial a partir da
    * fatura da compra, e é isso que o usuário espera e que o extrato mostra.
    */
-  readonly competenciaDaFatura: Competencia
+  readonly mesDeFechamentoDaFatura: Competencia
 }
 
 export type ErroDeParcelamento =
@@ -64,8 +68,8 @@ export function gerarParcelas(
   const compra = dataCivilDe(dataCompra)
 
   // A fatura da parcela 1 é a da compra; as seguintes são as consecutivas.
-  // Derivar cada uma de `postedAt` colidiria — ver `competenciaDaFatura`.
-  let competencia: Competencia = ciclo
+  // Derivar cada uma de `postedAt` colidiria — ver `mesDeFechamentoDaFatura`.
+  let mes: Competencia = ciclo
     ? faturaAlvo(ciclo, dataCompra)
     : { ano: compra.ano, mes: compra.mes }
 
@@ -76,9 +80,9 @@ export function gerarParcelas(
       total: parcelas,
       valor,
       postedAt: dataDaParcela(compra, i),
-      competenciaDaFatura: competencia,
+      mesDeFechamentoDaFatura: mes,
     })
-    competencia = competenciaSeguinte(competencia)
+    mes = competenciaSeguinte(mes)
   }
   return ok(saida)
 }

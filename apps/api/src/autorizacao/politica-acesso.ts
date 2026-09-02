@@ -57,6 +57,7 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['POST /v1/cartoes', { papeis: QUEM_ESCREVE }],
   ['GET /v1/cartoes/:id/faturas', { papeis: TODOS }],
   ['POST /v1/cartoes/:id/faturas', { papeis: QUEM_ESCREVE }],
+  ['POST /v1/cartoes/:id/compras', { papeis: QUEM_ESCREVE }],
   // Fechar trava o total que o usuário vai pagar, e não tem desfazer simples.
   ['POST /v1/cartoes/faturas/:faturaId/fechar', { papeis: QUEM_ESCREVE }],
   // Pagar move dinheiro para fora da conta.

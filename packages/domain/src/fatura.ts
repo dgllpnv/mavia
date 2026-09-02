@@ -39,7 +39,12 @@ export function ancorarDiaNoMes(ano: number, mes: number, dia: number): DataCivi
 }
 
 /**
- * A janela da fatura de uma competência: `[inicio, fim)`.
+ * A janela da fatura de um **mês de fechamento**: `[inicio, fim)`.
+ *
+ * `mesDeFechamento`, e não "competência": a competência de uma Fatura é o mês
+ * do **vencimento** (`CONTEXT.md`), que num ciclo 25/5 é o mês seguinte. Uma
+ * fatura que fecha em 25/mar tem competência abril. Chamar os dois de
+ * competência já custou caro neste projeto uma vez, com `effective_at`.
  *
  * `fim` é a meia-noite do dia **seguinte** ao fechamento, no fuso. Isso é o que
  * faz uma compra no dia exato do fechamento, a qualquer hora, entrar na fatura
@@ -50,21 +55,24 @@ export function ancorarDiaNoMes(ano: number, mes: number, dia: number): DataCivi
  * seguinte ao fechamento fica fora de ambas as faturas, ou o dia do fechamento
  * cai em duas — e a compra é cobrada duas vezes.
  */
-export function janelaDaFatura(ciclo: CicloDeFaturamento, competencia: Competencia): Janela {
+export function janelaDaFatura(
+  ciclo: CicloDeFaturamento,
+  mesDeFechamento: Competencia,
+): Janela {
   const anterior =
-    competencia.mes === 1
-      ? { ano: competencia.ano - 1, mes: 12 }
-      : { ano: competencia.ano, mes: competencia.mes - 1 }
+    mesDeFechamento.mes === 1
+      ? { ano: mesDeFechamento.ano - 1, mes: 12 }
+      : { ano: mesDeFechamento.ano, mes: mesDeFechamento.mes - 1 }
 
   return {
     inicio: diaSeguinteAoFechamento(ciclo, anterior),
-    fim: diaSeguinteAoFechamento(ciclo, competencia),
+    fim: diaSeguinteAoFechamento(ciclo, mesDeFechamento),
   }
 }
 
-/** Meia-noite do dia seguinte ao fechamento daquela competência. */
-function diaSeguinteAoFechamento(ciclo: CicloDeFaturamento, competencia: Competencia): Date {
-  const fechamento = ancorarDiaNoMes(competencia.ano, competencia.mes, ciclo.closingDay)
+/** Meia-noite do dia seguinte ao fechamento daquele mês. */
+function diaSeguinteAoFechamento(ciclo: CicloDeFaturamento, mes: Competencia): Date {
+  const fechamento = ancorarDiaNoMes(mes.ano, mes.mes, ciclo.closingDay)
   const seguinte = new Date(Date.UTC(fechamento.ano, fechamento.mes - 1, fechamento.dia + 1))
   return inicioDoDiaCivil({
     ano: seguinte.getUTCFullYear(),
@@ -80,7 +88,7 @@ function diaSeguinteAoFechamento(ciclo: CicloDeFaturamento, competencia: Compete
  * existe compra que some ou que é cobrada duas vezes. O teste amarra as duas.
  */
 export function faturaAlvo(ciclo: CicloDeFaturamento, postedAt: Date): Competencia {
-  // Começa pela competência do próprio instante e caminha até achar a janela
+  // Começa pelo mês do próprio instante e caminha até achar a janela
   // que o contém. O laço percorre no máximo duas posições, porque a janela de
   // uma competência sempre cobre parte do mês anterior e parte do próprio.
   const emUtc = { ano: postedAt.getUTCFullYear(), mes: postedAt.getUTCMonth() + 1 }
@@ -114,10 +122,10 @@ export function faturaAlvo(ciclo: CicloDeFaturamento, postedAt: Date): Competenc
  */
 export function vencimentoDaFatura(
   ciclo: CicloDeFaturamento,
-  competencia: Competencia,
+  mesDeFechamento: Competencia,
 ): DataCivil {
   const mesDoVencimento =
-    ciclo.dueDay > ciclo.closingDay ? competencia : competenciaSeguinte(competencia)
+    ciclo.dueDay > ciclo.closingDay ? mesDeFechamento : competenciaSeguinte(mesDeFechamento)
 
   return ancorarDiaNoMes(mesDoVencimento.ano, mesDoVencimento.mes, ciclo.dueDay)
 }

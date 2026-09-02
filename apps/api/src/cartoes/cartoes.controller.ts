@@ -12,13 +12,21 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common'
-import { zCriarCartao, zPagarFatura, type Cartao, type Fatura } from '@mavia/contracts'
-import { faturaAlvo, janelaDaFatura, vencimentoDaFatura, type Competencia } from '@mavia/domain'
+import {
+  zCriarCartao,
+  zCriarCompraNoCartao,
+  zPagarFatura,
+  type Cartao,
+  type CompraNoCartao,
+  type Fatura,
+} from '@mavia/contracts'
+import { faturaAlvo, type Competencia } from '@mavia/domain'
 import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { comTenant } from '../tenancy/tenancy.js'
+import { abrirFatura, registrarCompra, type CartaoDaCompra } from './compras.js'
 
 interface LinhaCartao {
   readonly id: string
@@ -41,7 +49,19 @@ interface LinhaFatura {
   readonly pago_centavos: string
 }
 
-const dia = (d: Date): string => d.toISOString().slice(0, 10)
+/**
+ * Colunas `DATE` voltam do driver como `Date` à meia-noite **UTC**: o dia já é
+ * civil e só precisa ser lido de volta. Formatá-las com o conversor de fuso as
+ * jogaria para o dia anterior.
+ *
+ * O caminho de escrita é o oposto e mora em `compras.ts`: lá o valor é um
+ * instante, e `toISOString().slice(0,10)` lia o dia em UTC — gravando 26 num
+ * cartão que fecha dia 25. Ressalva 1 da auditoria do épico 3.
+ */
+const diaCivil = (d: Date): string =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    d.getUTCDate(),
+  ).padStart(2, '0')}`
 
 @Controller('v1/cartoes')
 @UseGuards(AutorizacaoGuard)
@@ -128,76 +148,88 @@ export class CartoesController {
           ORDER BY competencia DESC`,
         [ctx.tenantId, cartaoId],
       )
-      return r.rows.map(
-        (l): Fatura => ({
-          id: l.id,
-          cartaoId: l.cartao_id,
-          competencia: dia(l.competencia),
-          dataFechamento: dia(l.data_fechamento),
-          dataVencimento: dia(l.data_vencimento),
-          estado: l.estado,
-          totalCentavos: l.total_centavos,
-          pagoCentavos: l.pago_centavos,
-        }),
-      )
+      return r.rows.map((l) => this.paraContrato(l))
     })
     return { itens }
   }
 
   /**
-   * Abre a fatura de uma competência, se ainda não existir.
+   * Abre a fatura de um mês de fechamento, se ainda não existir.
    *
-   * A janela vem do domínio — `janelaDaFatura` —, e não de aritmética escrita
-   * aqui. Se as duas divergissem, existiria compra que some ou que é cobrada
-   * duas vezes, e a divergência só apareceria no mês seguinte.
+   * A janela vem do domínio, por `abrirFatura`. Aritmética de ciclo escrita
+   * aqui seria a segunda implementação da regra, e a divergência entre as duas
+   * só apareceria no mês seguinte, como compra que some.
    */
   @Post(':id/faturas')
   @HttpCode(201)
-  async abrirFatura(
+  async abrirFaturaDoCiclo(
     @Req() req: FastifyRequest,
     @Param('id') cartaoId: string,
     @Body() corpo: unknown,
   ): Promise<Fatura> {
     const ctx = this.contexto(req)
-    const competencia = this.competenciaDoCorpo(corpo)
+    const mesDeFechamento = this.mesDeFechamentoDoCorpo(corpo)
 
     return comTenant(this.pool, ctx, async (c) => {
       const cartao = await this.carregarCartao(c, ctx.tenantId, cartaoId)
-      const janela = janelaDaFatura(cartao, competencia)
-      const venc = vencimentoDaFatura(cartao, competencia)
-      const fecha = new Date(janela.fim.getTime() - 1)
+
+      // Uma implementação só da janela e do vencimento, compartilhada com a
+      // compra. Duas divergiriam, e a divergência só apareceria num extrato.
+      const antes = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM faturas
+          WHERE tenant_id = $1 AND cartao_id = $2 AND deleted_at IS NULL`,
+        [ctx.tenantId, cartaoId],
+      )
+      const id = await abrirFatura(c, ctx.tenantId, cartao, mesDeFechamento)
+      const depois = await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM faturas
+          WHERE tenant_id = $1 AND cartao_id = $2 AND deleted_at IS NULL`,
+        [ctx.tenantId, cartaoId],
+      )
+      // A rota explícita é idempotente-hostil de propósito: quem pede para
+      // abrir uma fatura que já existe está enganado sobre o estado, e um 201
+      // silencioso esconderia isso. A compra, que abre por conveniência, não
+      // passa por aqui.
+      if (antes.rows[0]!.n === depois.rows[0]!.n) {
+        throw new ConflictException('Esta fatura já existe.')
+      }
 
       const r = await c.query<LinhaFatura>(
-        `INSERT INTO faturas (tenant_id, cartao_id, periodo_inicio, periodo_fim,
-                              data_fechamento, data_vencimento, competencia, conta_pagamento_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT DO NOTHING
-         RETURNING id, cartao_id, competencia, data_fechamento, data_vencimento,
-                   estado, total_centavos, pago_centavos`,
-        [
-          ctx.tenantId,
-          cartaoId,
-          janela.inicio,
-          janela.fim,
-          dia(fecha),
-          `${venc.ano}-${String(venc.mes).padStart(2, '0')}-${String(venc.dia).padStart(2, '0')}`,
-          `${venc.ano}-${String(venc.mes).padStart(2, '0')}-01`,
-          cartao.contaPagamentoId,
-        ],
+        `SELECT id, cartao_id, competencia, data_fechamento, data_vencimento,
+                estado, total_centavos, pago_centavos
+           FROM faturas WHERE tenant_id = $1 AND id = $2`,
+        [ctx.tenantId, id],
       )
-      const l = r.rows[0]
-      if (!l) throw new ConflictException('Esta fatura já existe.')
-      return {
-        id: l.id,
-        cartaoId: l.cartao_id,
-        competencia: dia(l.competencia),
-        dataFechamento: dia(l.data_fechamento),
-        dataVencimento: dia(l.data_vencimento),
-        estado: l.estado,
-        totalCentavos: l.total_centavos,
-        pagoCentavos: l.pago_centavos,
-      }
+      return this.paraContrato(r.rows[0]!)
     })
+  }
+
+  /**
+   * Compra no cartão, à vista ou parcelada.
+   *
+   * Uma requisição, N lançamentos, N faturas — abertas por conveniência se
+   * ainda não existirem, porque ninguém abre fatura à mão. Tudo numa transação:
+   * seis parcelas de doze é pior do que compra nenhuma.
+   */
+  @Post(':id/compras')
+  @HttpCode(201)
+  async comprar(
+    @Req() req: FastifyRequest,
+    @Param('id') cartaoId: string,
+    @Body() corpo: unknown,
+  ): Promise<CompraNoCartao> {
+    const ctx = this.contexto(req)
+    const analise = zCriarCompraNoCartao.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    try {
+      return await comTenant(this.pool, ctx, async (c) => {
+        const cartao = await this.carregarCartao(c, ctx.tenantId, cartaoId)
+        return registrarCompra(c, ctx, cartao, analise.data)
+      })
+    } catch (erro) {
+      throw this.traduzir(erro)
+    }
   }
 
   @Post('faturas/:faturaId/fechar')
@@ -291,12 +323,16 @@ export class CartoesController {
     }
   }
 
-  private competenciaDoCorpo(corpo: unknown): Competencia {
+  /**
+   * `{ ano, mes }` é o **mês de fechamento**, não a competência: a competência
+   * de uma fatura é o mês do vencimento, e num ciclo 25/5 os dois diferem.
+   */
+  private mesDeFechamentoDoCorpo(corpo: unknown): Competencia {
     const c = corpo as { ano?: unknown; mes?: unknown }
     const ano = Number(c?.ano)
     const mes = Number(c?.mes)
     if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12) {
-      throw new BadRequestException('Informe `ano` e `mes` da competência.')
+      throw new BadRequestException('Informe `ano` e `mes` do fechamento da fatura.')
     }
     return { ano, mes }
   }
@@ -305,22 +341,42 @@ export class CartoesController {
     c: PoolClient,
     tenantId: string,
     cartaoId: string,
-  ): Promise<{ closingDay: number; dueDay: number; contaPagamentoId: string | null }> {
+  ): Promise<CartaoDaCompra> {
     const r = await c.query<{
+      id: string
       closing_day: number
       due_day: number
       conta_pagamento_id: string | null
+      moeda: Cartao['moeda']
     }>(
-      `SELECT closing_day, due_day, conta_pagamento_id FROM cartoes
+      `SELECT id, closing_day, due_day, conta_pagamento_id, moeda FROM cartoes
         WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
       [tenantId, cartaoId],
     )
     const l = r.rows[0]
+    // 404 e não 403: dizer "existe, mas não é seu" já entrega a existência do
+    // cartão de outro cliente. A RLS é quem faz a linha não aparecer.
     if (!l) throw new NotFoundException('Cartão não encontrado.')
     return {
+      id: l.id,
       closingDay: l.closing_day,
       dueDay: l.due_day,
       contaPagamentoId: l.conta_pagamento_id,
+      moeda: l.moeda,
+    }
+  }
+
+  /** Uma tradução só de `LinhaFatura` para o contrato. */
+  private paraContrato(l: LinhaFatura): Fatura {
+    return {
+      id: l.id,
+      cartaoId: l.cartao_id,
+      competencia: diaCivil(l.competencia),
+      dataFechamento: diaCivil(l.data_fechamento),
+      dataVencimento: diaCivil(l.data_vencimento),
+      estado: l.estado,
+      totalCentavos: l.total_centavos,
+      pagoCentavos: l.pago_centavos,
     }
   }
 
@@ -336,6 +392,17 @@ export class CartoesController {
     if (t.includes('PAGAMENTO_EXCEDE_A_FATURA'))
       return new BadRequestException('O pagamento passa do valor da fatura.')
     if (t.includes('FATURA_INEXISTENTE')) return new NotFoundException('Fatura não encontrada.')
+    // As mesmas restrições de `lancamentos`: uma compra de cartão é um
+    // lançamento, e o usuário merece a mesma frase nas duas rotas.
+    if (t.includes('DESPESA_TEM_SINAL_NEGATIVO'))
+      return new BadRequestException('Categoria de despesa exige valor negativo.')
+    if (t.includes('RECEITA_TEM_SINAL_POSITIVO'))
+      return new BadRequestException('Categoria de receita exige valor positivo.')
+    if (t.includes('CATEGORIA_NAO_ANALITICA'))
+      return new BadRequestException(
+        'Escolha uma subcategoria — categorias-mãe não recebem lançamento.',
+      )
+    if (t.includes('valor_nao_zero')) return new BadRequestException('O valor não pode ser zero.')
     if (t.includes('FATURA_FECHADA_NAO_RECEBE'))
       return new ConflictException('Esta fatura já fechou e não recebe lançamento novo.')
     return erro as Error

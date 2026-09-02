@@ -162,7 +162,7 @@ describe('CT-2 — as parcelas caem em faturas consecutivas', () => {
     expect(r.ok).toBe(true)
     if (!r.ok) return
 
-    const faturas = r.valor.map((p) => `${p.competenciaDaFatura.ano}-${p.competenciaDaFatura.mes}`)
+    const faturas = r.valor.map((p) => `${p.mesDeFechamentoDaFatura.ano}-${p.mesDeFechamentoDaFatura.mes}`)
     expect(new Set(faturas).size).toBe(12)
   })
 
@@ -170,7 +170,7 @@ describe('CT-2 — as parcelas caem em faturas consecutivas', () => {
     const r = gerarParcelas(brl(-30000n), 3, emSaoPaulo('2026-01-31'), fecha30)
     if (!r.ok) return
 
-    const faturas = r.valor.map((p) => p.competenciaDaFatura)
+    const faturas = r.valor.map((p) => p.mesDeFechamentoDaFatura)
     for (let i = 1; i < faturas.length; i++) {
       const anterior = faturas[i - 1]!
       const atual = faturas[i]!
@@ -184,14 +184,14 @@ describe('CT-2 — as parcelas caem em faturas consecutivas', () => {
     const r = gerarParcelas(brl(-30000n), 3, compra, fecha30)
     if (!r.ok) return
 
-    expect(r.valor[0]?.competenciaDaFatura).toEqual(faturaAlvo(fecha30, compra))
+    expect(r.valor[0]?.mesDeFechamentoDaFatura).toEqual(faturaAlvo(fecha30, compra))
   })
 
   it('sem ciclo, a competência é a do mês da compra — parcelamento em conta', () => {
     const r = gerarParcelas(brl(-30000n), 3, emSaoPaulo('2026-03-10'))
     if (!r.ok) return
 
-    expect(r.valor.map((p) => p.competenciaDaFatura.mes)).toEqual([3, 4, 5])
+    expect(r.valor.map((p) => p.mesDeFechamentoDaFatura.mes)).toEqual([3, 4, 5])
   })
 
   it('nenhum fechamento de 1 a 31 produz colisão em 24x', () => {
@@ -202,7 +202,7 @@ describe('CT-2 — as parcelas caem em faturas consecutivas', () => {
         dueDay: 10,
       })
       if (!r.ok) continue
-      const faturas = r.valor.map((p) => `${p.competenciaDaFatura.ano}-${p.competenciaDaFatura.mes}`)
+      const faturas = r.valor.map((p) => `${p.mesDeFechamentoDaFatura.ano}-${p.mesDeFechamentoDaFatura.mes}`)
       expect(new Set(faturas).size).toBe(24)
     }
   })

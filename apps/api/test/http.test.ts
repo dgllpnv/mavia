@@ -328,8 +328,13 @@ describe('cartão pelo HTTP', () => {
     })
 
     expect(r.statusCode).toBe(201)
-    // Fecha 25, vence 5: a fatura de novembro vence em 05/dez.
-    expect(r.json()).toMatchObject({ estado: 'aberta', dataVencimento: '2026-12-05' })
+    // Fecha 25, vence 5: a fatura de novembro fecha em 25/nov e vence em
+    // 05/dez. O fechamento é lido no fuso do tenant — em UTC daria 26.
+    expect(r.json()).toMatchObject({
+      estado: 'aberta',
+      dataFechamento: '2026-11-25',
+      dataVencimento: '2026-12-05',
+    })
     faturaId = r.json().id
   })
 
