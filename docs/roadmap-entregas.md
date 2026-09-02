@@ -13,9 +13,9 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 | | |
 |---|---|
 | **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local |
-| **Testes** | 148 passando — 88 de domínio, 12 de contrato, 48 de integração contra Postgres real |
+| **Testes** | 275 passando — 155 de domínio, 12 de contrato, 108 de integração contra Postgres real |
 | **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
-| **Em código** | Épico 1: 1B e 1C entregues. 1D (deploy) adiado por decisão do dono |
+| **Em código** | Épicos 1 (menos deploy), 2 e 3. O deploy foi adiado por decisão do dono |
 
 ---
 
@@ -73,7 +73,7 @@ A decisão é boa e economiza trabalho real: ambiente de produção mantido dura
 
 ---
 
-## Épico 3 — Cartão
+## Épico 3 — Cartão *(implementado, em auditoria)*
 
 **Entrega:** o cartão de crédito com ciclo, que é a parte mais difícil do domínio.
 
