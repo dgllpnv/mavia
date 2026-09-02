@@ -70,3 +70,109 @@ export type ListaDeContas = z.infer<typeof zListaDeContas>
 export function incluiNoSaldoGeralPorPadrao(tipo: TipoDeConta): boolean {
   return tipo !== 'investimento'
 }
+
+// ---------------------------------------------------------------------------
+// Categorias
+// ---------------------------------------------------------------------------
+export const zNatureza = z.enum(['receita', 'despesa'])
+
+export const zCriarCategoria = z.object({
+  nome: z.string().trim().min(1).max(60),
+  natureza: zNatureza,
+  parentId: zUuid.optional(),
+  cor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+})
+
+export const zCategoria = z.object({
+  id: zUuid,
+  nome: z.string(),
+  natureza: zNatureza,
+  nivel: z.union([z.literal(1), z.literal(2)]),
+  parentId: zUuid.nullable(),
+  analitica: z.boolean(),
+  arquivada: z.boolean(),
+})
+
+// ---------------------------------------------------------------------------
+// Lançamentos
+// ---------------------------------------------------------------------------
+export const zStatus = z.enum(['previsto', 'pendente', 'efetivado'])
+
+export const zCriarLancamento = z.object({
+  contaId: zUuid,
+  categoriaId: zUuid,
+  // Com sinal: despesa é negativa, receita é positiva. O servidor confere
+  // contra a natureza da categoria e recusa a discordância.
+  valorCentavos: zCentavos,
+  postedAt: z.string().datetime(),
+  /** Marcar como já compensado no ato — o "lançamento pago" do formulário. */
+  compensado: z.boolean().default(false),
+  descricao: z.string().trim().min(1).max(140),
+  observacao: z.string().trim().max(1000).optional(),
+})
+
+export const zLancamento = z.object({
+  id: zUuid,
+  contaId: zUuid.nullable(),
+  categoriaId: zUuid.nullable(),
+  valorCentavos: zCentavos,
+  moeda: zMoeda,
+  postedAt: z.string().datetime(),
+  settledAt: z.string().datetime().nullable(),
+  status: zStatus,
+  descricao: z.string(),
+  transferGroupId: zUuid.nullable(),
+  estornoDeLancamentoId: zUuid.nullable(),
+})
+
+// ---------------------------------------------------------------------------
+// Transferência — sempre as duas pernas juntas
+// ---------------------------------------------------------------------------
+export const zCriarTransferencia = z
+  .object({
+    deContaId: zUuid,
+    paraContaId: zUuid,
+    /** Magnitude, sempre positiva. O sinal de cada perna é derivado. */
+    valorCentavos: zCentavos.regex(/^\d+$/, 'o valor da transferência é positivo'),
+    postedAt: z.string().datetime(),
+    compensado: z.boolean().default(false),
+    descricao: z.string().trim().min(1).max(140),
+  })
+  .refine((t) => t.deContaId !== t.paraContaId, {
+    message: 'origem e destino precisam ser contas diferentes',
+  })
+
+// ---------------------------------------------------------------------------
+// Estorno
+// ---------------------------------------------------------------------------
+export const zCriarEstorno = z.object({
+  /** Magnitude do que se desfaz. O sinal vem do original. */
+  valorCentavos: zCentavos.regex(/^\d+$/, 'a magnitude do estorno é positiva'),
+  postedAt: z.string().datetime(),
+  descricao: z.string().trim().min(1).max(140).optional(),
+})
+
+// ---------------------------------------------------------------------------
+// Resumo do período — os sete baldes mais os dois totais
+// ---------------------------------------------------------------------------
+export const zResumo = z.object({
+  saldoAnterior: zCentavos,
+  receitaRealizada: zCentavos,
+  receitaPrevista: zCentavos,
+  despesaRealizada: zCentavos,
+  despesaPrevista: zCentavos,
+  transferenciaLiquidaRealizada: zCentavos,
+  transferenciaLiquidaPrevista: zCentavos,
+  saldo: zCentavos,
+  projetado: zCentavos,
+})
+
+export type Natureza = z.infer<typeof zNatureza>
+export type CriarCategoria = z.infer<typeof zCriarCategoria>
+export type Categoria = z.infer<typeof zCategoria>
+export type StatusDoLancamento = z.infer<typeof zStatus>
+export type CriarLancamento = z.infer<typeof zCriarLancamento>
+export type Lancamento = z.infer<typeof zLancamento>
+export type CriarTransferencia = z.infer<typeof zCriarTransferencia>
+export type CriarEstorno = z.infer<typeof zCriarEstorno>
+export type Resumo = z.infer<typeof zResumo>

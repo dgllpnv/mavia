@@ -19,7 +19,26 @@ import type { PoolClient } from 'pg'
  * em JavaScript daria o total da página em vez do total do recorte.
  */
 
+/**
+ * O eixo, e por que ele é obrigatório.
+ *
+ * `realizado` **não** tem o mesmo significado nos dois eixos, e foi aplicar a
+ * definição de um ao outro que produziu o achado RP-4: uma despesa pendente
+ * entrava em `despesa_realizada` mas não no `saldo`, e a tela mostrava três
+ * números que não fechavam por R$ 100,00.
+ *
+ * - **competência** — realizado é o que **aconteceu**: `settled_at` presente
+ *   ou `posted_at` já passado. É o eixo dos relatórios.
+ * - **caixa** — realizado é o que **se moveu**: `settled_at` presente, e nada
+ *   mais. É o eixo do saldo e do rodapé do extrato.
+ *
+ * Não tem valor padrão de propósito: escolher o eixo é decisão de quem
+ * pergunta, e um padrão silencioso é o caminho de volta para o defeito.
+ */
+export type EixoDeAgregacao = 'competencia' | 'caixa'
+
 export interface FiltroDeAgregacao {
+  readonly eixo: EixoDeAgregacao
   readonly tenantId: string
   /** Semiaberto `[de, ate)`, como toda janela do domínio. */
   readonly de: Date
@@ -47,45 +66,72 @@ interface LinhaDeBaldes {
  * não há float, não há cast. O que continua proibido é o SQL **decidir** o que
  * conta como realizado: isso é o `FILTER` explícito abaixo, e nada mais.
  */
+function sqlBaldes(eixo: EixoDeAgregacao): string {
+  // O único ponto onde os dois eixos divergem. Escrito uma vez, e o resto da
+  // consulta é idêntico — o que impede as duas versões de divergirem por
+  // manutenção.
+  const realizado =
+    eixo === 'caixa'
+      ? 'settled_at IS NOT NULL'
+      : '(settled_at IS NOT NULL OR posted_at <= $2)'
+  const previsto = eixo === 'caixa' ? 'settled_at IS NULL' : '(settled_at IS NULL AND posted_at > $2)'
+  return SQL_BALDES.replaceAll('/*REALIZADO*/', realizado).replaceAll('/*PREVISTO*/', previsto)
+}
+
 const SQL_BALDES = `
   SELECT
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NULL AND valor_centavos > 0
-        AND (settled_at IS NOT NULL OR posted_at <= $2)), 0)::text AS receita_realizada,
+        AND /*REALIZADO*/), 0)::text AS receita_realizada,
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NULL AND valor_centavos > 0
-        AND settled_at IS NULL AND posted_at > $2), 0)::text        AS receita_prevista,
+        AND /*PREVISTO*/), 0)::text AS receita_prevista,
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NULL AND valor_centavos < 0
-        AND (settled_at IS NOT NULL OR posted_at <= $2)), 0)::text  AS despesa_realizada,
+        AND /*REALIZADO*/), 0)::text AS despesa_realizada,
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NULL AND valor_centavos < 0
-        AND settled_at IS NULL AND posted_at > $2), 0)::text        AS despesa_prevista,
+        AND /*PREVISTO*/), 0)::text AS despesa_prevista,
     -- Transferência tem balde próprio. Não é receita nem despesa, mas move o
     -- saldo da conta filtrada — e foi ignorar isso que fez o rodapé mentir.
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NOT NULL
-        AND (settled_at IS NOT NULL OR posted_at <= $2)), 0)::text  AS transferencia_realizada,
+        AND /*REALIZADO*/), 0)::text AS transferencia_realizada,
     coalesce(sum(valor_centavos) FILTER (
       WHERE transfer_group_id IS NOT NULL
-        AND settled_at IS NULL AND posted_at > $2), 0)::text        AS transferencia_prevista
+        AND /*PREVISTO*/), 0)::text AS transferencia_prevista
   FROM lancamentos
   WHERE tenant_id = $1
     AND deleted_at IS NULL
+    -- Âncora de tipo: no eixo caixa o predicado não menciona $2, e sem esta
+    -- linha o Postgres não consegue inferir o tipo do parâmetro. A alternativa
+    -- seria montar duas listas de parâmetros — e duas listas divergem.
+    AND $2::timestamptz IS NOT NULL
     AND posted_at >= $3 AND posted_at < $4
     AND ($5::uuid IS NULL OR conta_id = $5)
     AND ($6::uuid IS NULL OR categoria_id = $6)
 `
 
-/** Tudo que já se moveu antes do início da janela. */
+/**
+ * Tudo que já se moveu antes do início da janela, **mais o saldo inicial das
+ * contas no escopo**.
+ *
+ * O saldo inicial não é lançamento e não aparece no extrato, mas é dinheiro
+ * que estava lá. Omiti-lo fazia o rodapé começar do zero numa conta com saldo
+ * — e a identidade fechava com o número errado, que é pior que não fechar.
+ */
 const SQL_SALDO_ANTERIOR = `
-  SELECT coalesce(sum(valor_centavos), 0)::text AS anterior
-    FROM lancamentos
-   WHERE tenant_id = $1
-     AND deleted_at IS NULL
-     AND settled_at IS NOT NULL
-     AND posted_at < $2
-     AND ($3::uuid IS NULL OR conta_id = $3)
+  SELECT (
+    coalesce((SELECT sum(c.saldo_inicial_centavos) FROM contas c
+               WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+                 AND ($3::uuid IS NULL OR c.id = $3)), 0)
+    +
+    coalesce((SELECT sum(l.valor_centavos) FROM lancamentos l
+               WHERE l.tenant_id = $1 AND l.deleted_at IS NULL
+                 AND l.settled_at IS NOT NULL
+                 AND l.posted_at < $2
+                 AND ($3::uuid IS NULL OR l.conta_id = $3)), 0)
+  )::text AS anterior
 `
 
 export async function baldesDoPeriodo(
@@ -100,7 +146,7 @@ export async function baldesDoPeriodo(
     filtro.contaId ?? null,
   ])
 
-  const baldes = await cliente.query<LinhaDeBaldes>(SQL_BALDES, [
+  const baldes = await cliente.query<LinhaDeBaldes>(sqlBaldes(filtro.eixo), [
     filtro.tenantId,
     filtro.agora,
     filtro.de,

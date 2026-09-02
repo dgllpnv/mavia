@@ -18,7 +18,7 @@ import {
 
 describe('nega por padrão', () => {
   it('rota que não está na matriz é negada para todos os papéis', () => {
-    const desconhecida: Rota = { metodo: 'GET', caminho: '/v1/lancamentos' }
+    const desconhecida: Rota = { metodo: 'GET', caminho: '/v1/rota-que-nao-existe' }
 
     expect(pode(desconhecida, 'proprietario')).toBe(false)
     expect(pode(desconhecida, 'membro')).toBe(false)

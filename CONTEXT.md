@@ -61,6 +61,18 @@ Quatro entidades a usam e nenhuma pode divergir: `Cartao` (`closing_day`, `due_d
 
 > Este campo se chamava `effective_at`. O nome foi **aposentado**: "efetivação" é lido como *fato* por metade dos leitores e como *previsão* pela outra metade, e a ambiguidade produziu dois modelos de dados incompatíveis entre dois arquitetos trabalhando em paralelo. `settled_at` — compensação, liquidação — só tem uma leitura.
 
+**Realizado depende do eixo.** A palavra tem significados diferentes nos dois eixos, e aplicar a definição de um ao outro produz uma tela em que três números não fecham:
+
+> - No eixo **competência**, realizado é o que **aconteceu**: `settled_at` presente **ou** `posted_at` já passado.
+> - No eixo **caixa**, realizado é o que **se moveu**: `settled_at` presente, e nada mais.
+
+> **Invariantes**
+> - Toda agregação nomeia o eixo. Não há padrão implícito — escolher o eixo é de quem pergunta.
+> - Dentro de um eixo, a identidade fecha: `saldo anterior + receita + despesa + transferência líquida = saldo`.
+> - Os dois eixos **nunca** aparecem na mesma linha de resposta. Uma despesa pendente é *realizada* na competência e *prevista* no caixa, e as duas leituras estão certas — no eixo delas.
+>
+> Encontrado pelo `validador-financeiro` (bateria do épico 2, cenário RP-4) depois de o código já estar escrito: uma despesa pendente de R$ 100,00 entrava em `despesa_realizada` e não no `saldo`, e o rodapé exibia `1.000 + (−100) = 1.000`.
+
 **Eixo caixa** — Como se responde "quanto há, e quanto haverá, na conta". Soma **duas** coisas, e nenhuma delas é lançamento de cartão:
 
 1. Lancamentos de `Conta`, por `settled_at` (realizado) ou por `posted_at` (agendados ainda não compensados).

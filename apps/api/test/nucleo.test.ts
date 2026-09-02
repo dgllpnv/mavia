@@ -238,6 +238,7 @@ describe('o rodapé não mente', () => {
     // transferidos para fora. O rodapé mostrava R$ 1.000,00; o real é R$ 700,00.
     const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
       baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        eixo: 'caixa',
         tenantId: TENANT_A,
         de: DE,
         ate: ATE,
@@ -255,6 +256,7 @@ describe('o rodapé não mente', () => {
   it('a identidade fecha: anterior + receita + despesa + transferência = saldo', async () => {
     const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
       baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        eixo: 'caixa',
         tenantId: TENANT_A,
         de: DE,
         ate: ATE,
@@ -337,5 +339,156 @@ describe('estorno no banco', () => {
     await expect(
       banco.cliente.query('UPDATE lancamentos SET estorno_de_lancamento_id = id WHERE id = $1', [id]),
     ).rejects.toThrow(/estorno_nao_e_o_proprio/)
+  })
+})
+
+describe('RP-4 — a identidade do eixo caixa com lançamento pendente', () => {
+  it('despesa pendente não pode entrar no realizado do eixo caixa', async () => {
+    // Achado do `validador-financeiro`, cenário RP-4. `realizado = efetivado +
+    // pendente` é a definição do eixo COMPETÊNCIA, e foi aplicada ao SQL sem
+    // qualificar o eixo — enquanto `saldo` conta só `efetivado`. O resultado
+    // são três números na mesma tela que não fecham.
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome, saldo_inicial_centavos)
+       VALUES ($1,'RP4',100000) RETURNING id`,
+      [TENANT_A],
+    )
+    const id = conta.rows[0]!.id
+
+    // Único movimento: despesa de R$ 100,00 que ainda não compensou.
+    await lancar({
+      conta: id,
+      categoria: catDespesa,
+      centavos: -10000n,
+      postedAt: new Date('2026-09-10T12:00:00Z'),
+      settledAt: null,
+    })
+
+    const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
+      baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        tenantId: TENANT_A,
+        de: DE,
+        ate: ATE,
+        contaId: id,
+        moeda: 'BRL',
+        agora: new Date('2026-09-30T23:00:00Z'),
+        eixo: 'caixa',
+      }),
+    )
+
+    // No eixo caixa, o que não se moveu é PREVISTO.
+    expect(baldes.despesaRealizada.centavos).toBe(0n)
+    expect(baldes.despesaPrevista.centavos).toBe(-10000n)
+
+    const resumo = resumoDoPeriodo(baldes)
+    if (!resumo.ok) return
+    expect(resumo.valor.saldo.centavos).toBe(100000n)
+    expect(resumo.valor.projetado.centavos).toBe(90000n)
+  })
+
+  it('no eixo competência, a mesma despesa pendente é realizada', async () => {
+    // A outra leitura, igualmente correta — no eixo dela. O que não pode é
+    // misturar as duas na mesma resposta.
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome, saldo_inicial_centavos)
+       VALUES ($1,'RP4-comp',0) RETURNING id`,
+      [TENANT_A],
+    )
+    const id = conta.rows[0]!.id
+    await lancar({
+      conta: id,
+      categoria: catDespesa,
+      centavos: -10000n,
+      postedAt: new Date('2026-09-10T12:00:00Z'),
+      settledAt: null,
+    })
+
+    const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
+      baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        tenantId: TENANT_A,
+        de: DE,
+        ate: ATE,
+        contaId: id,
+        moeda: 'BRL',
+        agora: new Date('2026-09-30T23:00:00Z'),
+        eixo: 'competencia',
+      }),
+    )
+
+    expect(baldes.despesaRealizada.centavos).toBe(-10000n)
+    expect(baldes.despesaPrevista.centavos).toBe(0n)
+  })
+})
+
+describe('as invariantes que a bateria encontrou', () => {
+  it('ES-5 — excluir o original de um estorno criaria dinheiro, e é recusado', async () => {
+    const conta = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO contas (tenant_id, nome) VALUES ($1,'ES5') RETURNING id`,
+      [TENANT_A],
+    )
+    const id = conta.rows[0]!.id
+    const original = await lancar({
+      conta: id,
+      categoria: catDespesa,
+      centavos: -10000n,
+      postedAt: AGORA,
+      settledAt: AGORA,
+    })
+    await banco.cliente.query(
+      `INSERT INTO lancamentos (tenant_id, conta_id, categoria_id, valor_centavos, moeda,
+                                posted_at, settled_at, descricao, estorno_de_lancamento_id, criado_por)
+       VALUES ($1,$2,$3,10000,'BRL',$4,$4,'estorno',$5,$6)`,
+      [TENANT_A, id, catDespesa, AGORA, original, USUARIO_A],
+    )
+
+    // O par soma zero. Excluir só o original deixaria +R$ 100,00 do nada.
+    await expect(
+      banco.cliente.query('UPDATE lancamentos SET deleted_at = now() WHERE id = $1', [original]),
+    ).rejects.toThrow(/ORIGINAL_TEM_ESTORNO_VIVO/)
+  })
+
+  it('TR-7 — as duas pernas compensam juntas, ou nenhuma compensa', async () => {
+    // Entre contas próprias a transferência é instantânea por definição. Uma
+    // perna compensada e outra não faz o Saldo geral perder o valor por um dia,
+    // e a tela diz que a pessoa empobreceu.
+    const g = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO transferencias (tenant_id, descricao, criado_por)
+       VALUES ($1,'Meia compensada',$2) RETURNING id`,
+      [TENANT_A, USUARIO_A],
+    )
+    await banco.cliente.query('BEGIN')
+    await lancar({
+      conta: contaA,
+      centavos: -50000n,
+      postedAt: AGORA,
+      settledAt: AGORA,
+      transferGroup: g.rows[0]!.id,
+    })
+    await lancar({
+      conta: contaB,
+      centavos: 50000n,
+      postedAt: AGORA,
+      settledAt: null,
+      transferGroup: g.rows[0]!.id,
+    })
+    await expect(banco.cliente.query('COMMIT')).rejects.toThrow(/TRANSFERENCIA_COMPENSA_JUNTO/)
+  })
+
+  it('duas pernas ambas não compensadas são coerentes', async () => {
+    const g = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO transferencias (tenant_id, descricao, criado_por)
+       VALUES ($1,'Agendada',$2) RETURNING id`,
+      [TENANT_A, USUARIO_A],
+    )
+    await banco.cliente.query('BEGIN')
+    await lancar({ conta: contaA, centavos: -1000n, postedAt: AGORA, transferGroup: g.rows[0]!.id })
+    await lancar({ conta: contaB, centavos: 1000n, postedAt: AGORA, transferGroup: g.rows[0]!.id })
+    await banco.cliente.query('COMMIT')
+
+    const r = await banco.cliente.query<{ n: string }>(
+      'SELECT count(*) AS n FROM lancamentos WHERE transfer_group_id = $1',
+      [g.rows[0]!.id],
+    )
+    expect(Number(r.rows[0]?.n)).toBe(2)
   })
 })

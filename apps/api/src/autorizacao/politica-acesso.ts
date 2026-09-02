@@ -43,6 +43,15 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // Excluir conta é do proprietário: some com o histórico da vista de todo o
   // espaço, e `membro` não decide isso pelos outros.
   ['DELETE /v1/contas/:id', { papeis: SO_DONO }],
+
+  ['GET /v1/lancamentos', { papeis: TODOS }],
+  ['GET /v1/lancamentos/resumo', { papeis: TODOS }],
+  ['GET /v1/lancamentos/:id', { papeis: TODOS }],
+  ['POST /v1/lancamentos', { papeis: QUEM_ESCREVE }],
+  ['POST /v1/lancamentos/transferencias', { papeis: QUEM_ESCREVE }],
+  // Estornar é operação de escrita comum: desfaz sem apagar, e fica no log.
+  // Ver a decisão DP-4 — o dado é do espaço, e a correção é rastreável.
+  ['POST /v1/lancamentos/:id/estornos', { papeis: QUEM_ESCREVE }],
 ])
 
 export function chaveDaRota(rota: Rota): string {
