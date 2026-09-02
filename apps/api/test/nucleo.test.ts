@@ -206,7 +206,7 @@ describe('transferência de duas pernas', () => {
     await lancar({ conta: contaA, centavos: -1000n, postedAt: AGORA, transferGroup: g.rows[0]!.id })
     await lancar({ conta: contaA, centavos: 1000n, postedAt: AGORA, transferGroup: g.rows[0]!.id })
     await expect(banco.cliente.query('COMMIT')).rejects.toThrow(
-      /TRANSFERENCIA_ENTRE_CONTAS_DISTINTAS/,
+      /TRANSFERENCIA_ENTRE_RECIPIENTES_DISTINTOS/,
     )
   })
 

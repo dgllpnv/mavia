@@ -212,8 +212,8 @@ export class LancamentosController {
       return new BadRequestException('Categoria de receita exige valor positivo.')
     if (texto.includes('CATEGORIA_NAO_ANALITICA'))
       return new BadRequestException('Escolha uma subcategoria — categorias-mãe não recebem lançamento.')
-    if (texto.includes('TRANSFERENCIA_ENTRE_CONTAS_DISTINTAS'))
-      return new BadRequestException('Origem e destino precisam ser contas diferentes.')
+    if (texto.includes('TRANSFERENCIA_ENTRE_RECIPIENTES_DISTINTOS'))
+      return new BadRequestException('Origem e destino precisam ser diferentes.')
     if (texto.includes('valor_nao_zero'))
       return new BadRequestException('O valor não pode ser zero.')
 

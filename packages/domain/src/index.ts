@@ -68,3 +68,17 @@ export {
   saldoDoOriginal,
   type ErroDeEstorno,
 } from './estorno.js'
+
+export {
+  ancorarDiaNoMes,
+  faturaAlvo,
+  janelaDaFatura,
+  vencimentoDaFatura,
+  type CicloDeFaturamento,
+} from './fatura.js'
+
+export {
+  gerarParcelas,
+  type ErroDeParcelamento,
+  type Parcela,
+} from './parcelamento.js'

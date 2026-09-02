@@ -68,7 +68,8 @@ Quatro entidades a usam e nenhuma pode divergir: `Cartao` (`closing_day`, `due_d
 
 > **Invariantes**
 > - Toda agregação nomeia o eixo. Não há padrão implícito — escolher o eixo é de quem pergunta.
-> - Dentro de um eixo, a identidade fecha: `saldo anterior + receita + despesa + transferência líquida = saldo`.
+> - **`agora` é entrada da consulta, não o relógio lido dentro dela.** O instante que separa realizado de previsto é parâmetro do recorte, fixado uma vez pelo servidor e ecoado na resposta. Duas respostas comparadas entre si — a listagem e o resumo, uma página e a seguinte — usam **o mesmo `agora`**; sem isso, um lançamento cuja competência cruza o instante da leitura aparece em dois baldes ao mesmo tempo, sem nenhuma escrita entre as duas requisições, e a igualdade "soma das páginas = resumo" deixa de ser bem definida. O transporte desse instante entre requisições é decisão de arquitetura; que ele seja entrada é decisão de domínio.
+> - Dentro de um eixo, a identidade fecha: `saldo anterior + Σ baldes = saldo`. Ela **decorre** da exaustividade da partição de `Balde`, e é a exaustividade que se testa.
 > - Os dois eixos **nunca** aparecem na mesma linha de resposta. Uma despesa pendente é *realizada* na competência e *prevista* no caixa, e as duas leituras estão certas — no eixo delas.
 >
 > Encontrado pelo `validador-financeiro` (bateria do épico 2, cenário RP-4) depois de o código já estar escrito: uma despesa pendente de R$ 100,00 entrava em `despesa_realizada` e não no `saldo`, e o rodapé exibia `1.000 + (−100) = 1.000`.
@@ -146,10 +147,31 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 
 > `Saldo` **não** é Realizado. Saldo conta só `efetivado` — dinheiro que se moveu. Realizado conta o que aconteceu, movido ou não. Uma compra de cartão da fatura aberta está no Realizado do mês e não no Saldo. São perguntas diferentes e a UI precisa rotular as duas.
 
+**Balde** — A classe de um `Lancamento` numa agregação monetária. **Enum fechado de quatro valores**, e todo Lancamento cai em **exatamente um**:
+
+| Balde | Quem cai nele |
+|---|---|
+| `receita` | `Categoria.natureza = receita` |
+| `despesa` | `Categoria.natureza = despesa` |
+| `transferencia` | `transfer_group_id IS NOT NULL` (perna) |
+| `nao_analitica` | `Categoria.analitica = false` |
+
+A função `baldeDe(lancamento)` vive em `packages/domain` e é **total**: ela não tem caminho que devolva nulo, e não tem `default`. Que ela seja total decorre de duas invariantes já escritas do `Lancamento` — `categoria_id` é obrigatório fora de perna, e obrigatoriamente nulo na perna. Um Lancamento sem balde tem de ser **erro de tipo**, não divergência descoberta em produção. Ver ADR 0022.
+
+> **Invariantes**
+> - **A partição é por `Categoria.natureza`, nunca pelo sinal do `valor`.** Pelo sinal, um `Estorno` de despesa (positivo) viraria receita, e o mês fecharia com receita inventada e despesa maior do que foi gasta. O sinal governa a soma; a natureza governa o balde.
+> - Os baldes são **disjuntos e exaustivos** sobre o universo da consulta. `Σ dos baldes = Σ dos lançamentos do recorte`, exatamente — e é esta a propriedade a testar, não a identidade do rodapé, que decorre dela.
+> - O **universo** é `(eixo, escopo)` e é definido *antes* da partição. Lancamento com `deleted_at` e Lancamento de `Cartao` no eixo caixa estão **fora do universo** — não são baldes. Transformá-los em balde permitiria somá-los por engano; a exclusão precisa acontecer um passo antes.
+> - No eixo caixa, a `Fatura` em aberto entra pelo total, no vencimento. Ela **não é Lancamento e não tem balde** — é um segundo somatório, disjunto do primeiro. Ver **Eixo caixa**.
+> - Todo Balde tem o par `realizada`/`prevista`, separado pelo predicado do eixo. O resumo é **indexado pelo enum**, nunca por campos nomeados à mão: foi uma lista escrita à mão que perdeu o quarto balde por uma revisão inteira.
+> - Toda grandeza que altera o `Saldo` tem um Balde. É a regra que faltava quando `Ajuste de saldo` movia o saldo em −R$ 300,00 e não aparecia em lugar nenhum do rodapé.
+
 **Transferencia** — Movimento entre duas Contas próprias. **Materializada como dois Lancamentos** (uma perna negativa, uma positiva) unidos por `transfer_group_id`. Não é receita nem despesa — não aparece em relatório de gastos nem em `Planejamento`. A soma das pernas é sempre zero.
 
 > **Invariantes**
 > - Um `transfer_group_id` tem exatamente duas pernas não excluídas, e a soma delas é zero.
+> - **As duas Contas são distintas.** `origem ≠ destino`, recusado na construção com `ORIGEM_IGUAL_DESTINO`. A definição diz *entre duas Contas* — duas, não a mesma duas vezes. A → A não move dinheiro e passa em toda invariante aritmética: as pernas somam zero, o saldo não muda, o Saldo geral não muda. É por isso que a proibição precisa ser de tipo e não de teste — nenhuma soma a encontraria, e o Usuario receberia um extrato com R$ 500,00 entrando e saindo da mesma conta no mesmo dia, que ele não consegue explicar.
+> - **As duas pernas compartilham `settled_at`.** Entre contas próprias a transferência é instantânea por definição: as duas compensam juntas ou nenhuma compensa, e `criarTransferencia` grava um só instante nas duas. Pernas com compensação divergente fazem o Saldo geral perder o valor transferido por um dia — a tela diz que o Usuario empobreceu R$ 500,00 enquanto o dinheiro está entre duas contas dele. Dinheiro em trânsito é um conceito de TED interbancária; se um dia for preciso, é entidade própria com ADR, nunca duas datas soltas.
 > - **Excluir uma perna isolada é proibido.** A exclusão é da Transferencia inteira e marca as duas pernas na mesma transação. Uma perna solta cria dinheiro do nada: o saldo do destino sobe e nada o compensa.
 > - Editar o valor de uma perna edita as duas. Não existe caminho que altere uma só.
 > - A soma-zero é verificada considerando apenas pernas com `deleted_at IS NULL`.
@@ -180,8 +202,13 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 **Estorno** — Lançamento **novo**, de sinal oposto, que desfaz total ou parcialmente um lançamento anterior. Aponta para o original por `estorno_de_lancamento_id`. Nunca é edição nem exclusão do original — o fato aconteceu e depois foi desfeito, e as duas coisas ficam registradas.
 
 > **Invariantes**
-> - Sinal oposto ao do original, mesma Conta ou Cartao, mesma Categoria e mesma moeda.
+> - Sinal oposto ao do original, mesma Conta ou Cartao, mesma Categoria e mesma moeda. **As duas Categorias são iguais e nenhuma é nula** — escrita como igualdade simples, a regra é vacuamente satisfeita por dois nulos.
+> - **O original não é perna de Transferencia.** `transfer_group_id IS NULL` e `categoria_id IS NOT NULL` no original, recusado com `ESTORNO_DE_PERNA_PROIBIDO`. Estornar uma perna produziria uma perna de crédito sem par, com `transfer_group_id` nulo: a soma-zero do grupo continua valendo, ninguém reclama, e o saldo do destino sobe R$ 500,00 do nada. Desfazer uma Transferencia é excluir a Transferencia inteira.
+> - **O original não é `previsto`.** Estornar exige que o fato tenha acontecido: `pendente` e `efetivado` podem ser estornados, `previsto` é recusado com `ESTORNO_DE_PREVISTO_PROIBIDO`. Desfazer o que ainda não aconteceu é excluir ou editar, e as duas operações estão disponíveis porque não há fato consumado a preservar. Exigir `settled_at` no original seria estrito demais na direção oposta: uma compra de cartão na fatura aberta é `pendente` até a fatura ser paga, e o reembolso do lojista antes disso é o estorno mais comum que existe.
+> - **O `settled_at` do estorno é fato próprio**, nunca copiado do original: nulo até o dinheiro voltar. Num Cartao, é o pagamento da Fatura que o escreve, como em qualquer lançamento dela — o estorno de uma compra da fatura aberta cai na mesma Fatura e compensa junto com ela.
+> - **Estorno de estorno é proibido** (`ESTORNO_DE_ESTORNO_PROIBIDO`): o original de um Estorno tem `estorno_de_lancamento_id IS NULL`. Uma recobrança depois de um reembolso é **fato econômico novo**, não desfazimento — o caminho é um Lancamento comum, na mesma Categoria, com o sinal do original. Os números são os mesmos e a guarda continua sendo uma soma de um nível só: permitir a cadeia obrigaria `estornoAcumulado` a uma recursão de profundidade ilimitada sob `FOR UPDATE`, no caminho de escrita.
 > - `|valor do estorno| <= |valor do original|`, somado a estornos anteriores do mesmo original.
+> - **Excluir o original exclui a cadeia inteira**, na mesma transação. Uma despesa de R$ 100,00 estornada em R$ 100,00 soma zero; excluindo só o original sobra `+10000` solto, o saldo sobe R$ 100,00 do nada e o mês fecha com despesa positiva. É o mesmo defeito da perna solta, numa estrutura que ninguém protegeu. O caminho inverso é livre: **excluir um estorno isolado é permitido** — o estorno registrado por engano some, o original volta a valer inteiro e o acumulado é liberado.
 > - Um estorno **nunca** altera o `valor` do original nem o `valor_total` de um `GrupoDeParcelamento`. O grupo continua dizendo o que a compra custou; o estorno diz o que voltou.
 > - Estorno de compra parcelada é um lançamento único na competência em que o dinheiro voltou. As parcelas futuras **não** encolhem — encolhê-las quebraria `Σ filhos = valor_total` e produziria parcela de valor zero.
 > - Sob a base `data_compra`, o estorno de uma compra parcelada é atribuído à competência da **`data_compra` do grupo estornado**, não à sua própria. É a única forma de o relatório de julho deixar de mostrar um gasto que foi desfeito.
@@ -211,6 +238,21 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 **Categoria** — Classificação de Lancamento. Hierarquia de dois níveis (categoria → subcategoria). Tem `natureza` (`receita` ou `despesa`), `analitica`, cor, ícone e `arquivada_em`.
 
 - `analitica` — Booleano, padrão `true`. Categoria **não analítica** classifica lançamentos que não são fato econômico e é excluída de todo relatório de gasto e de todo `Planejamento`, exatamente como a Transferencia. Hoje há uma: **`Ajuste de saldo`**. Ajustar saldo é correção de registro, não gasto — sem isso, um ajuste de −R$ 300,00 vira R$ 300,00 de despesa no relatório e consome o teto global.
+
+  > **`analitica` não é "é folha", e a confusão entre as duas leituras é um defeito.** `analitica = false` diz *isto não é um fato econômico*; ela **não** diz nada sobre a posição na árvore. Uma categoria não analítica **recebe** lançamento — se não recebesse, `Ajuste de saldo` seria inalcançável e a única razão do campo existir desapareceria. Ver ADR 0021.
+
+**Categoria-raiz recebe lançamento.** Uma raiz com subcategorias continua aceitando lançamento direto. Não existe regra de folha, não existe `422 CATEGORIA_NAO_E_FOLHA`, e nenhuma restrição do banco deriva o direito de lançar da presença de filhas.
+
+O motivo é a operação mais comum de uma árvore de categorias pessoal: *"uso `Casa` há seis meses e agora quero separar `Luz` e `Água`"*. Sob a leitura estrita, criar a primeira subcategoria tornaria ilegal todo o histórico da raiz, e as três saídas possíveis são ruins — recusar a criação da subcategoria, reclassificar o passado do Usuario sozinho, ou admitir que a invariante não vale para linhas antigas, que é o pior dos três. **A raiz precisa poder guardar o que estava lá antes de os galhos existirem.**
+
+**Realizado próprio** — A soma dos Lancamentos que apontam **para a própria Categoria**, sem descer a árvore. **Realizado agregado** — o próprio mais o de todas as subcategorias. Toda superfície que exibe categoria hierárquica nomeia qual das duas está mostrando.
+
+Na UI, o realizado próprio de uma raiz com filhas aparece como uma linha irmã das subcategorias, rotulada **"Casa (direto)"**. Sem essa linha, o dinheiro lançado na raiz desaparece da árvore ou — pior — a raiz aparece duas vezes na mesma lista, uma com o agregado e outra com o próprio, e os R$ 50,00 são contados duas vezes.
+
+> **Invariantes**
+> - `total_agregado(c) = realizado_proprio(c) + Σ total_agregado(filhas de c)`, exatamente, para qualquer recorte.
+> - **Nenhuma superfície soma `realizado_proprio` e `total_agregado` da mesma Categoria.** Elas nunca são linhas irmãs somáveis: ou a lista é de agregados (raízes), ou é de próprios (a raiz "(direto)" e suas filhas). Esta é a única forma de contagem dupla que a hierarquia permite, e é ela que a linha "(direto)" fecha.
+> - A soma dos `total_agregado` das raízes de uma natureza **é igual** ao balde correspondente do rodapé, para o mesmo recorte. Duas superfícies, um número.
 - **Categorias de sistema** — `Sem categoria` (uma por natureza) e `Ajuste de saldo`. Podem ser renomeadas, nunca excluídas e nunca arquivadas: são o destino obrigatório de lançamentos que precisam de Categoria e não têm uma escolhida.
 
 - `arquivada_em` — Timestamp de arquivamento. **Arquivar não é excluir.** Categoria arquivada some dos seletores e da cópia de `Planejamento`, mas continua classificando todo o histórico e continua aparecendo em relatórios do passado. `deleted_at` continua existindo e continua sendo o mecanismo de exclusão — os dois campos coexistem e significam coisas diferentes.
@@ -218,9 +260,11 @@ Uma compra de cartão **não sai do bolso** — quem sai é a fatura. Projetar p
 > **Invariantes**
 > - Subcategoria tem a mesma `natureza` da categoria-pai.
 > - Hierarquia tem no máximo dois níveis: uma subcategoria não tem filhas.
+> - **A posição na árvore não restringe quem recebe Lancamento.** Raiz com filhas recebe; raiz sem filhas recebe; subcategoria recebe. Nenhum `CHECK`, nenhum gatilho e nenhuma rota derivam o direito de lançar da presença de subcategorias.
+> - `analitica = false` **não** impede o Lancamento — impede a entrada nos baldes de receita e despesa, no relatório de gasto e no `Planejamento`. Um gatilho que recusa lançamento em categoria não analítica torna `Ajuste de saldo` inalcançável.
 > - Arquivar uma categoria-pai arquiva as subcategorias.
 > - Categoria arquivada não pode receber Lancamento novo; os existentes permanecem intactos.
-> - Categorias do sistema podem ser renomeadas e arquivadas, nunca excluídas.
+> - Categorias do sistema podem ser renomeadas, **nunca excluídas e nunca arquivadas**: são o destino obrigatório de lançamentos que precisam de Categoria, e um destino obrigatório indisponível não é destino.
 
 **Etiqueta (Tag)** — Classificação transversal e livre, ortogonal à Categoria. Um Lancamento tem uma Categoria e N Etiquetas. **Chama-se Etiqueta na UI e `Tag` no código, sempre — nunca "marcador".**
 
@@ -480,6 +524,17 @@ Não use — geram ambiguidade e bugs reais:
 | `lancamentos.fatura_id` na perna do pagamento | `transferencias.fatura_id` | A perna de crédito dentro da fatura zera o total dela |
 | editar ou excluir o lançamento original | `Estorno` | O fato aconteceu e depois foi desfeito; os dois ficam registrados |
 | `categoria_id` nulo em receita ou despesa | Categoria de sistema `Sem categoria` | Nulo escapa de todo agregado por natureza, em silêncio |
+| `analitica` como "é folha" | `analitica` = não é fato econômico | Duas regras ortogonais sob um booleano; a leitura errada torna `Ajuste de saldo` inalcançável |
+| `CATEGORIA_NAO_E_FOLHA` | — | Não existe regra de folha: a raiz recebe lançamento |
+| recusar lançamento em categoria `analitica = false` | recusá-lo nos **baldes** de receita e despesa | O gatilho impede exatamente o único uso do campo |
+| raiz e "(direto)" como linhas somáveis | `realizado_proprio` × `total_agregado`, nomeados | É a única contagem dupla que a hierarquia permite |
+| balde decidido pelo **sinal** do valor | balde decidido por `Categoria.natureza` | Pelo sinal, um estorno de despesa vira receita inventada |
+| lista de baldes escrita à mão | resumo indexado pelo enum `Balde` | Foi uma lista à mão que perdeu um balde por uma revisão inteira |
+| `Transferencia` de uma Conta para ela mesma | `ORIGEM_IGUAL_DESTINO` | Passa em toda invariante aritmética e produz extrato inexplicável |
+| pernas de `Transferencia` com `settled_at` distintos | um `settled_at` para as duas | O Saldo geral perde o valor transferido por um dia |
+| `Estorno` de um `Estorno` | Lancamento comum, mesma Categoria | Recobrança é fato novo; a cadeia torna a guarda recursiva e ilimitada |
+| excluir o original deixando o estorno | excluir a cadeia inteira | Sobra o estorno solto e o saldo sobe do nada |
+| `agora` lido dentro da consulta | `agora` como parâmetro do recorte | Listagem e resumo discordam de um balde sem nenhuma escrita |
 | resto do rateio "na primeira parcela" | `ratear`: nas primeiras partes | Duas regras que somam certo e divergem R$ 0,03 em 7x |
 | `consumo` obtido multiplicando por `valor` | `razaoEmBp`, uma divisão só | Multiplicar por `valor` negativo inverte a desigualdade do alerta |
 | percentual formatado como gatilho de alerta | `consumo_bp` inteiro | Um centavo decide o alerta, e o número exibido tem de ser o mesmo que dispara |
