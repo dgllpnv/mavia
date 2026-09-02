@@ -10,6 +10,7 @@ import { mesAnterior, mesSeguinte, periodoDe } from '../../../api/periodo'
 import { useEspaco } from '../../../componentes/provedores'
 import { Trilho } from '../../../componentes/trilho'
 import { Valor } from '../../../componentes/valor'
+import { FormularioDeLancamento } from '../../../componentes/formulario-de-lancamento'
 
 /**
  * Extrato.
@@ -30,6 +31,7 @@ export default function Lancamentos() {
     'todas',
   )
   const [estado, setEstado] = useState<'todos' | 'previsto' | 'pendente' | 'efetivado'>('todos')
+  const [lancando, setLancando] = useState(false)
 
   const periodo = periodoDe(mes.ano, mes.mes)
 
@@ -58,6 +60,12 @@ export default function Lancamentos() {
     staleTime: 5 * 60_000,
   })
 
+  const cartoes = useQuery({
+    queryKey: ['cartoes', espaco.id],
+    queryFn: () => api.cartoes(espaco.id),
+    staleTime: 5 * 60_000,
+  })
+
   const dicionarios = useMemo(
     () => montarDicionarios(categorias.data?.itens ?? [], contas.data?.itens ?? []),
     [categorias.data, contas.data],
@@ -77,6 +85,9 @@ export default function Lancamentos() {
       <div className="flex items-baseline justify-between gap-24">
         <h1>Lançamentos</h1>
         <div className="flex items-center gap-12">
+          <button className="botao botao--primario" onClick={() => setLancando(true)}>
+            + lançar
+          </button>
           <button className="botao botao--discreto" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
             ‹
           </button>
@@ -183,6 +194,16 @@ export default function Lancamentos() {
             </span>
           </div>
         </div>
+      )}
+
+      {lancando && (
+        <FormularioDeLancamento
+          tenantId={espaco.id}
+          contas={contas.data?.itens ?? []}
+          cartoes={cartoes.data?.itens ?? []}
+          categorias={categorias.data?.itens ?? []}
+          aoFechar={() => setLancando(false)}
+        />
       )}
     </div>
   )
