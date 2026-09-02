@@ -356,8 +356,11 @@ describe('lançamento de cartão fora do eixo caixa', () => {
 
 describe('fechar e pagar a fatura', () => {
   it('fechar trava o total com a soma dos lançamentos da fatura', async () => {
-    const fatura = await criarFatura({ ano: 2028, mes: 3 })
-    const dentro = new Date('2028-02-10T12:00:00Z')
+    // Ciclo no **passado**: desde a 0015, quem fecha uma fatura é o calendário,
+    // e fechar uma fatura de 2028 hoje seria justamente o estado incoerente que
+    // aquela migration passou a proibir.
+    const fatura = await criarFatura({ ano: 2024, mes: 3 })
+    const dentro = new Date('2024-02-10T12:00:00Z')
     await comprarNoCartao({ fatura, centavos: -30000n, postedAt: dentro })
     await comprarNoCartao({ fatura, centavos: -20000n, postedAt: dentro })
 
@@ -372,7 +375,7 @@ describe('fechar e pagar a fatura', () => {
   it('fechar duas vezes é recusado, e não silenciosamente idempotente', async () => {
     // Idempotente seria pior: recalcularia o total de uma fatura que já pode
     // ter sido paga, e esconderia o erro de quem chamou.
-    const fatura = await criarFatura({ ano: 2028, mes: 4 })
+    const fatura = await criarFatura({ ano: 2024, mes: 4 })
     await banco.cliente.query('SELECT fechar_fatura($1,$2)', [TENANT_A, fatura])
 
     await expect(

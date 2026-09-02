@@ -140,10 +140,13 @@ async function principal(): Promise<void> {
       moeda: 'BRL' as const,
     }
 
+    // Um ciclo **já encerrado** (fecha 25/jul) e o ciclo corrente. Sem o
+    // primeiro, não há fatura que se possa fechar nem pagar — e desde a 0015
+    // quem fecha uma fatura é o calendário, não um botão.
     await registrarCompra(comoCliente, { tenantId: TENANT, usuarioId: USUARIO }, cartaoDaCompra, {
       categoriaId: mercado,
       valorCentavos: '-31890',
-      postedAt: meioDia('2026-09-12'),
+      postedAt: meioDia('2026-07-08'),
       parcelas: 1,
       descricao: 'Mercado no cartão',
     })
@@ -153,9 +156,18 @@ async function principal(): Promise<void> {
       // R$ 1.000,00 em 6x não divide: 166,66… O resto vai para as primeiras
       // parcelas, uma unidade por parcela, e a soma bate no centavo.
       valorCentavos: '-100000',
-      postedAt: meioDia('2026-09-14'),
+      postedAt: meioDia('2026-07-14'),
       parcelas: 6,
       descricao: 'Pneus',
+    })
+
+    // E uma compra no ciclo corrente, para a fatura aberta ter conteúdo.
+    await registrarCompra(comoCliente, { tenantId: TENANT, usuarioId: USUARIO }, cartaoDaCompra, {
+      categoriaId: mercado,
+      valorCentavos: '-14270',
+      postedAt: meioDia('2026-08-30'),
+      parcelas: 1,
+      descricao: 'Feira no cartão',
     })
 
     await c.query('COMMIT')

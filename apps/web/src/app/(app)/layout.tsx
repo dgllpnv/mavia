@@ -21,6 +21,7 @@ const DESTINOS = [
   { href: '/', rotulo: 'visão geral' },
   { href: '/lancamentos', rotulo: 'lançamentos' },
   { href: '/cartoes', rotulo: 'cartões' },
+  { href: '/contas', rotulo: 'contas' },
 ] as const
 
 export default function LayoutDoApp({ children }: { children: ReactNode }) {

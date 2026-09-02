@@ -3,9 +3,10 @@
 import type { Categoria, Conta } from '@mavia/contracts'
 import { dataCivilDe, formatarDataCivil, inicioDoDiaCivil } from '@mavia/domain'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { ErroDaApi, chamar } from '../api/cliente'
 import { CampoDeValor } from './campo-de-valor'
+import { Modal } from './modal'
 import { PrevisaoDoRateio } from './previsao-do-rateio'
 
 /**
@@ -34,10 +35,25 @@ export interface FormularioDeLancamentoProps {
   aoFechar(): void
 }
 
-type Natureza = 'despesa' | 'receita'
+/**
+ * Três naturezas no mesmo formulário, e não duas mais uma tela à parte.
+ *
+ * Transferência **não** é receita nem despesa (`CONTEXT.md`) — mas, para quem
+ * lança, é a mesma pergunta: quanto, quando, de onde para onde. Escondê-la num
+ * segundo lugar faria a pessoa aprender dois formulários para uma operação que
+ * ela pensa como uma só, e é assim que "pagar a fatura" acaba lançada como
+ * despesa, duplicando o gasto do mês.
+ */
+type Natureza = 'despesa' | 'receita' | 'transferencia'
 type Estado = 'previsto' | 'pendente' | 'efetivado'
 
 /** O dia de hoje em São Paulo, para o valor inicial do campo de data. */
+const TITULOS: Record<Natureza, string> = {
+  despesa: 'Nova despesa',
+  receita: 'Nova receita',
+  transferencia: 'Nova transferência',
+}
+
 function hojeCivil(): string {
   return formatarDataCivil(dataCivilDe(new Date()))
 }
@@ -50,7 +66,6 @@ export function FormularioDeLancamento({
   aoFechar,
 }: FormularioDeLancamentoProps) {
   const fila = useQueryClient()
-  const dialogo = useRef<HTMLDivElement>(null)
 
   const [natureza, setNatureza] = useState<Natureza>('despesa')
   const [descricao, setDescricao] = useState('')
@@ -58,11 +73,13 @@ export function FormularioDeLancamento({
   const [dia, setDia] = useState(hojeCivil)
   const [estado, setEstado] = useState<Estado>('efetivado')
   const [origem, setOrigem] = useState(() => contas[0]?.id ?? '')
+  const [destino, setDestino] = useState(() => contas[1]?.id ?? contas[0]?.id ?? '')
   const [categoriaId, setCategoriaId] = useState('')
   const [parcelas, setParcelas] = useState(1)
   const [erro, setErro] = useState<string | null>(null)
 
   const ehCartao = cartoes.some((c) => c.id === origem)
+  const ehTransferencia = natureza === 'transferencia'
 
   /**
    * As categorias que cabem nesta natureza, com as de sistema por último.
@@ -77,7 +94,7 @@ export function FormularioDeLancamento({
    * antigo, não para receber lançamento novo.
    */
   const disponiveis = [...categorias]
-    .filter((c) => c.natureza === natureza && !c.arquivada)
+    .filter((c) => c.natureza === (ehTransferencia ? 'despesa' : natureza) && !c.arquivada)
     .sort((a, b) => {
       if (a.analitica !== b.analitica) return a.analitica ? -1 : 1
       if (a.sistema !== b.sistema) return a.sistema ? 1 : -1
@@ -91,21 +108,22 @@ export function FormularioDeLancamento({
   }, [natureza, categorias])
 
   useEffect(() => {
-    // `Escape` fecha, e o foco entra no diálogo: sem isso o teclado continua na
-    // página de trás, que é o erro clássico de modal.
-    const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') aoFechar()
+    // Origem e destino iguais não é transferência: é um lançamento que cria e
+    // destrói o mesmo dinheiro. O banco recusa, e o formulário não deve chegar
+    // lá com o botão habilitado.
+    if (ehTransferencia && destino === origem) {
+      setDestino(contas.find((c) => c.id !== origem)?.id ?? '')
     }
-    document.addEventListener('keydown', aoTeclar)
-    dialogo.current?.focus()
-    return () => document.removeEventListener('keydown', aoTeclar)
-  }, [aoFechar])
+  }, [ehTransferencia, origem, destino, contas])
 
   const salvar = useMutation({
     async mutationFn(): Promise<void> {
       const magnitude = BigInt(centavos)
       if (magnitude === 0n) throw new ErroDaApi(400, 'Informe um valor.')
-      if (!categoriaId) throw new ErroDaApi(400, 'Escolha uma categoria.')
+      if (!ehTransferencia && !categoriaId) throw new ErroDaApi(400, 'Escolha uma categoria.')
+      if (ehTransferencia && (!destino || destino === origem)) {
+        throw new ErroDaApi(400, 'Escolha duas contas diferentes.')
+      }
 
       // O instante é a meia-noite do dia civil **em São Paulo**. Montá-lo com
       // `new Date(dia)` daria meia-noite UTC, que aqui é 21h do dia anterior —
@@ -117,6 +135,29 @@ export function FormularioDeLancamento({
       // confere contra a natureza da categoria. Três guardas para a mesma
       // regra, porque errar o sinal inverte o mês inteiro.
       const valorCentavos = (natureza === 'despesa' ? -magnitude : magnitude).toString()
+
+      if (ehTransferencia) {
+        // A transferência nasce **inteira**, com as duas pernas, numa
+        // requisição só. Não existe rota que crie uma perna: perna isolada
+        // cria ou destrói dinheiro do nada.
+        //
+        // O valor vai como magnitude positiva — o sinal de cada perna é
+        // derivado pelo servidor, e mandá-lo daqui seria a interface decidindo
+        // a direção do dinheiro.
+        await chamar('/lancamentos/transferencias', {
+          metodo: 'POST',
+          tenantId,
+          corpo: {
+            deContaId: origem,
+            paraContaId: destino,
+            valorCentavos: magnitude.toString(),
+            postedAt,
+            compensado: estado === 'efetivado',
+            descricao,
+          },
+        })
+        return
+      }
 
       if (ehCartao) {
         await chamar(`/cartoes/${origem}/compras`, {
@@ -173,29 +214,8 @@ export function FormularioDeLancamento({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-[rgb(28_26_22/40%)] p-24"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) aoFechar()
-      }}
-    >
-      <div
-        ref={dialogo}
-        role="dialog"
-        aria-modal="true"
-        aria-label={natureza === 'despesa' ? 'Nova despesa' : 'Nova receita'}
-        tabIndex={-1}
-        className="mt-64 w-full max-w-[560px] rounded-3 bg-surface-1 p-24 shadow-[var(--elev-2)] outline-none"
-      >
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-numero text-3 font-semibold tracking-tight">
-            {natureza === 'despesa' ? 'Nova despesa' : 'Nova receita'}
-          </h2>
-          <button className="botao" onClick={aoFechar} aria-label="Fechar">
-            ✕
-          </button>
-        </div>
-
+    <Modal titulo={TITULOS[natureza]} aoFechar={aoFechar}>
+      <>
         <div className="mt-16">
           <Segmentado<Natureza>
             rotulo="Natureza"
@@ -203,6 +223,7 @@ export function FormularioDeLancamento({
             opcoes={[
               ['despesa', 'despesa'],
               ['receita', 'receita'],
+              ['transferencia', 'transferência'],
             ]}
             aoMudar={setNatureza}
           />
@@ -254,50 +275,87 @@ export function FormularioDeLancamento({
               : {})}
           />
 
-          {/* Conta 2fr | Categoria 3fr — a categoria pesa mais. */}
-          <div className="grid grid-cols-[2fr_3fr] gap-16">
-            <label className="flex flex-col gap-6">
-              <span className="rotulo">Conta ou cartão</span>
-              <select
-                className="campo"
-                value={origem}
-                onChange={(e) => setOrigem(e.target.value)}
-              >
-                <optgroup label="Contas">
+          {ehTransferencia ? (
+            /* De 1fr | Para 1fr: as duas pontas pesam igual, porque a pergunta
+               é simétrica — nenhuma das contas é mais importante que a outra. */
+            <div className="grid grid-cols-2 gap-16">
+              <label className="flex flex-col gap-6">
+                <span className="rotulo">De</span>
+                <select className="campo" value={origem} onChange={(e) => setOrigem(e.target.value)}>
                   {contas.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome}
                     </option>
                   ))}
-                </optgroup>
-                {cartoes.length > 0 && (
-                  <optgroup label="Cartões">
-                    {cartoes.map((c) => (
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-6">
+                <span className="rotulo">Para</span>
+                <select
+                  className="campo"
+                  value={destino}
+                  onChange={(e) => setDestino(e.target.value)}
+                >
+                  {contas
+                    .filter((c) => c.id !== origem)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+          ) : (
+            /* Conta 2fr | Categoria 3fr — a categoria pesa mais que a conta. */
+            <div className="grid grid-cols-[2fr_3fr] gap-16">
+              <label className="flex flex-col gap-6">
+                <span className="rotulo">Conta ou cartão</span>
+                <select className="campo" value={origem} onChange={(e) => setOrigem(e.target.value)}>
+                  <optgroup label="Contas">
+                    {contas.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nome}
                       </option>
                     ))}
                   </optgroup>
-                )}
-              </select>
-            </label>
+                  {cartoes.length > 0 && (
+                    <optgroup label="Cartões">
+                      {cartoes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </label>
 
-            <label className="flex flex-col gap-6">
-              <span className="rotulo">Categoria</span>
-              <select
-                className="campo"
-                value={categoriaId}
-                onChange={(e) => setCategoriaId(e.target.value)}
-                required
-              >
-                {disponiveis.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+              <label className="flex flex-col gap-6">
+                <span className="rotulo">Categoria</span>
+                <select
+                  className="campo"
+                  value={categoriaId}
+                  onChange={(e) => setCategoriaId(e.target.value)}
+                  required
+                >
+                  {disponiveis.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+
+          {ehTransferencia && (
+            <p className="text-sm text-ink-3">
+              Transferência não é receita nem despesa: ela sai de um total e entra
+              noutro, e fica fora da soma do mês nos dois lados.
+            </p>
+          )}
 
           {ehCartao && natureza === 'despesa' && (
             <div className="flex flex-col gap-12 border-t border-line pt-16">
@@ -343,8 +401,8 @@ export function FormularioDeLancamento({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </>
+    </Modal>
   )
 }
 

@@ -91,18 +91,37 @@ test.describe('o extrato do mês', () => {
   })
 
   test('compra de cartão não mexe no saldo em caixa', async ({ page }) => {
-    // Regra 8b, atravessando a pilha: a compra aparece na listagem e o saldo do
-    // dia dela é igual ao do dia anterior. Se a compra entrasse no eixo caixa,
+    // Regra 8b, atravessando a pilha inteira.
+    //
+    // A asserção não é "a linha aparece" — é que **o saldo do dia da parcela é
+    // igual ao do dia anterior**. Se a compra de cartão entrasse no eixo caixa,
     // o usuário veria o dinheiro sumir no dia da compra e sumir de novo no dia
-    // do pagamento da fatura.
+    // em que a fatura fosse paga: o mesmo dinheiro, duas vezes.
     await entrar(page)
     await page.goto('/lancamentos')
 
-    await expect(page.getByText('Pneus 1/6')).toBeVisible()
-    // A parcela do cartão fica em `cartão`, não numa conta: é o que a torna
-    // invisível para o eixo caixa.
-    await expect(page.getByText('cartão', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('saldo no dia').first()).toBeVisible()
+    const parcela = page.getByText(/^Pneus \d\/6$/)
+    await expect(parcela).toBeVisible()
+
+    // A parcela fica em `cartão`, e não numa conta: é isso que a mantém fora do
+    // universo do eixo caixa.
+    const linha = page.locator('.linha').filter({ has: parcela })
+    await expect(linha.getByText('cartão', { exact: true })).toBeVisible()
+
+    // Os dias vêm do mais recente para o mais antigo. O saldo do dia da parcela
+    // e o do dia imediatamente anterior são o mesmo número.
+    const dias = page.locator('section').filter({ hasText: 'saldo no dia' })
+    const textos = await dias.allInnerTexts()
+    const indice = textos.findIndex((t) => /Pneus \d\/6/.test(t))
+
+    expect(indice, 'a parcela precisa estar num grupo de dia').toBeGreaterThanOrEqual(0)
+    expect(indice, 'e precisa existir um dia anterior para comparar').toBeLessThan(
+      textos.length - 1,
+    )
+
+    const saldoDoDia = (i: number) => centavosDe(textos[i]!.split('saldo no dia')[1] ?? '')
+
+    expect(saldoDoDia(indice)).toBe(saldoDoDia(indice + 1))
   })
 
   test('o filtro de natureza esconde as transferências', async ({ page }) => {

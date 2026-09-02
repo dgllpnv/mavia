@@ -20,10 +20,18 @@ interface Linha {
   readonly descricao: string
   readonly transfer_group_id: string | null
   readonly estorno_de_lancamento_id: string | null
+  readonly cartao_id: string | null
+  readonly fatura_id: string | null
+  readonly installment_group_id: string | null
+  readonly installment_number: number | null
+  readonly installment_total: number | null
+  readonly origem: Lancamento['origem']
 }
 
-const COLUNAS = `id, conta_id, categoria_id, valor_centavos, moeda, posted_at,
-                 settled_at, descricao, transfer_group_id, estorno_de_lancamento_id`
+const COLUNAS = `id, conta_id, cartao_id, categoria_id, valor_centavos, moeda, posted_at,
+                 settled_at, descricao, transfer_group_id, estorno_de_lancamento_id,
+                 fatura_id, installment_group_id, installment_number, installment_total,
+                 origem`
 
 function paraContrato(l: Linha, agora: Date): Lancamento {
   const status: StatusDeLancamento = statusDeLancamento(
@@ -44,6 +52,12 @@ function paraContrato(l: Linha, agora: Date): Lancamento {
     descricao: l.descricao,
     transferGroupId: l.transfer_group_id,
     estornoDeLancamentoId: l.estorno_de_lancamento_id,
+    cartaoId: l.cartao_id,
+    faturaId: l.fatura_id,
+    installmentGroupId: l.installment_group_id,
+    installmentNumero: l.installment_number,
+    installmentTotal: l.installment_total,
+    origem: l.origem,
   }
 }
 
@@ -80,6 +94,31 @@ export async function listar(
         AND posted_at >= $2 AND posted_at < $3
       ORDER BY posted_at DESC, id DESC`,
     [tenantId, janela.de, janela.ate],
+  )
+  return r.rows.map((l) => paraContrato(l, agora))
+}
+
+/**
+ * Os lançamentos de uma fatura.
+ *
+ * Sem janela de tempo, e é o ponto: a fatura **é** a janela. Um parcelamento
+ * põe na fatura de dezembro uma parcela cujo `posted_at` é de maio, e filtrar
+ * por período aqui esconderia justamente as parcelas que compõem o total.
+ *
+ * A ordenação é por data crescente, ao contrário do extrato: uma fatura se lê
+ * do começo do ciclo para o fim, como um comprovante.
+ */
+export async function listarDaFatura(
+  cliente: PoolClient,
+  tenantId: string,
+  faturaId: string,
+  agora: Date,
+): Promise<Lancamento[]> {
+  const r = await cliente.query<Linha>(
+    `SELECT ${COLUNAS} FROM lancamentos
+      WHERE tenant_id = $1 AND fatura_id = $2 AND deleted_at IS NULL
+      ORDER BY posted_at ASC, id ASC`,
+    [tenantId, faturaId],
   )
   return r.rows.map((l) => paraContrato(l, agora))
 }

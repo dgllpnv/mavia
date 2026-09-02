@@ -50,6 +50,16 @@ interface LinhaFatura {
 }
 
 /**
+ * As mensagens nomeadas do banco carregam o dado útil depois de `: `.
+ * Sem ele, "esta fatura ainda não fechou" não diz quando, e a pessoa fica sem
+ * saber se é amanhã ou daqui a três semanas.
+ */
+function depoisDosDoisPontos(mensagem: string): string {
+  const partes = mensagem.split(': ')
+  return partes.length > 1 ? partes[partes.length - 1]!.trim() : 'uma data futura'
+}
+
+/**
  * Colunas `DATE` voltam do driver como `Date` à meia-noite **UTC**: o dia já é
  * civil e só precisa ser lido de volta. Formatá-las com o conversor de fuso as
  * jogaria para o dia anterior.
@@ -392,6 +402,29 @@ export class CartoesController {
     if (t.includes('PAGAMENTO_EXCEDE_A_FATURA'))
       return new BadRequestException('O pagamento passa do valor da fatura.')
     if (t.includes('FATURA_INEXISTENTE')) return new NotFoundException('Fatura não encontrada.')
+    // As mensagens carregam a data depois de `:` — ela vai para a frase, porque
+    // "ainda não fechou" sem dizer quando não ajuda ninguém a decidir o que fazer.
+    if (t.includes('FATURA_AINDA_NAO_FECHOU')) {
+      return new ConflictException(
+        `Esta fatura fecha em ${depoisDosDoisPontos(t)} — quem fecha uma fatura é o ` +
+          'ciclo do cartão, não um botão. Antes disso, ela ainda recebe compras.',
+      )
+    }
+    if (t.includes('PAGAMENTO_ANTES_DA_COMPRA')) {
+      return new BadRequestException(
+        `O pagamento não pode ser anterior à última compra da fatura, de ${depoisDosDoisPontos(t)}.`,
+      )
+    }
+    if (t.includes('FATURA_CREDORA_NAO_SE_PAGA')) {
+      return new ConflictException(
+        'Esta fatura está a seu favor: o cartão é que deve. O saldo entra como ' +
+          'crédito na próxima fatura, e não há o que pagar.',
+      )
+    }
+    if (t.includes('PAGAMENTO_NAO_ACONTECE_NO_FUTURO'))
+      return new BadRequestException('O pagamento não pode ter data futura.')
+    if (t.includes('PAGAMENTO_TEM_MAGNITUDE_POSITIVA'))
+      return new BadRequestException('Informe o valor pago.')
     // As mesmas restrições de `lancamentos`: uma compra de cartão é um
     // lançamento, e o usuário merece a mesma frase nas duas rotas.
     if (t.includes('DESPESA_TEM_SINAL_NEGATIVO'))

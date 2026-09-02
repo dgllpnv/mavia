@@ -164,6 +164,32 @@ export function competenciaAnterior(c: Competencia): Competencia {
   return c.mes === 1 ? { ano: c.ano - 1, mes: 12 } : { ano: c.ano, mes: c.mes - 1 }
 }
 
+/**
+ * O **último** instante daquele dia civil, no fuso.
+ *
+ * Existe porque uma data sem hora precisa virar um instante, e a escolha do
+ * instante muda o resultado. Um pagamento informado como "05/07" com a
+ * meia-noite daquele dia **antecede** uma compra feita às 15h do mesmo dia — e
+ * pagar antes de comprar é estado que o banco recusa, com razão.
+ *
+ * Meia-noite serve para o **início** de uma janela; para um fato datado sem
+ * hora, o fim do dia é o instante que não inventa uma ordem que não existe.
+ */
+export function fimDoDiaCivil(data: DataCivil, fuso: string = FUSO_PADRAO): Date {
+  // Meia-noite do dia seguinte, menos um milissegundo. `Date.UTC` cuida da
+  // virada de mês e de ano sem tabela de meses.
+  const seguinte = new Date(Date.UTC(data.ano, data.mes - 1, data.dia + 1))
+  const inicioDoSeguinte = inicioDoDiaCivil(
+    {
+      ano: seguinte.getUTCFullYear(),
+      mes: seguinte.getUTCMonth() + 1,
+      dia: seguinte.getUTCDate(),
+    },
+    fuso,
+  )
+  return new Date(inicioDoSeguinte.getTime() - 1)
+}
+
 /** O instante da meia-noite daquele dia civil, no fuso. */
 export function inicioDoDiaCivil(data: DataCivil, fuso: string = FUSO_PADRAO): Date {
   return instanteDoRelogio(

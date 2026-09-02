@@ -41,6 +41,7 @@ export {
   competenciaSeguinte,
   contem,
   dataCivilDe,
+  fimDoDiaCivil,
   formatarDataCivil,
   inicioDoDiaCivil,
   janelaDaCompetencia,

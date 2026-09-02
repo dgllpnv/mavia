@@ -138,6 +138,16 @@ export const api = {
   faturas: (tenantId: string, cartaoId: string) =>
     chamar<{ itens: Fatura[] }>(`/cartoes/${cartaoId}/faturas`, { tenantId }),
 
+  /**
+   * Os lançamentos de uma fatura, sem janela de tempo.
+   *
+   * A fatura **é** a janela. Um parcelamento põe na fatura de dezembro uma
+   * parcela com `posted_at` de maio, e filtrar por período aqui esconderia
+   * justamente as parcelas que compõem o total.
+   */
+  lancamentosDaFatura: (tenantId: string, faturaId: string) =>
+    chamar<{ itens: Lancamento[] }>(`/lancamentos?faturaId=${faturaId}`, { tenantId }),
+
   lancamentos: (tenantId: string, janela: Janela) =>
     chamar<{ itens: Lancamento[] }>(
       `/lancamentos?de=${encodeURIComponent(janela.de)}&ate=${encodeURIComponent(janela.ate)}`,

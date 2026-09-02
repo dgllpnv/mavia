@@ -324,16 +324,19 @@ describe('cartão pelo HTTP', () => {
       url: `/v1/cartoes/${cartaoId}/faturas`,
       usuario: USUARIO_A,
       tenant: TENANT_A,
-      corpo: { ano: 2026, mes: 11 },
+      corpo: { ano: 2025, mes: 11 },
     })
 
     expect(r.statusCode).toBe(201)
     // Fecha 25, vence 5: a fatura de novembro fecha em 25/nov e vence em
     // 05/dez. O fechamento é lido no fuso do tenant — em UTC daria 26.
+    //
+    // Ano no passado de propósito: o teste seguinte fecha esta fatura, e desde
+    // a 0015 uma fatura só fecha a partir da própria data de fechamento.
     expect(r.json()).toMatchObject({
       estado: 'aberta',
-      dataFechamento: '2026-11-25',
-      dataVencimento: '2026-12-05',
+      dataFechamento: '2025-11-25',
+      dataVencimento: '2025-12-05',
     })
     faturaId = r.json().id
   })
@@ -345,7 +348,7 @@ describe('cartão pelo HTTP', () => {
       url: `/v1/cartoes/${cartaoId}/faturas`,
       usuario: USUARIO_A,
       tenant: TENANT_A,
-      corpo: { ano: 2026, mes: 11 },
+      corpo: { ano: 2025, mes: 11 },
     })
 
     expect(r.statusCode).toBe(409)

@@ -5,6 +5,7 @@ import {
   competenciaSeguinte,
   contem,
   dataCivilDe,
+  fimDoDiaCivil,
   formatarDataCivil,
   inicioDoDiaCivil,
   janelaDaCompetencia,
@@ -157,5 +158,42 @@ describe('inicioDoDiaCivil', () => {
 describe('formatarDataCivil', () => {
   it('formata como AAAA-MM-DD, com zero à esquerda', () => {
     expect(formatarDataCivil({ ano: 2026, mes: 9, dia: 5 })).toBe('2026-09-05')
+  })
+})
+
+describe('fimDoDiaCivil', () => {
+  it('é um milissegundo antes da meia-noite do dia seguinte', () => {
+    const fim = fimDoDiaCivil({ ano: 2026, mes: 7, dia: 5 })
+    const inicioDoSeguinte = inicioDoDiaCivil({ ano: 2026, mes: 7, dia: 6 })
+
+    expect(inicioDoSeguinte.getTime() - fim.getTime()).toBe(1)
+  })
+
+  it('não antecede nenhuma hora do próprio dia', () => {
+    // A razão de existir: um pagamento datado de 05/07 não pode ficar antes de
+    // uma compra feita às 15h de 05/07.
+    const fim = fimDoDiaCivil({ ano: 2026, mes: 7, dia: 5 })
+    const tarde = new Date('2026-07-05T23:00:00Z') // 20h em São Paulo
+
+    expect(fim.getTime()).toBeGreaterThan(tarde.getTime())
+  })
+
+  it('vira o mês e o ano sem tabela de meses', () => {
+    expect(fimDoDiaCivil({ ano: 2026, mes: 1, dia: 31 }).toISOString()).toBe(
+      new Date(inicioDoDiaCivil({ ano: 2026, mes: 2, dia: 1 }).getTime() - 1).toISOString(),
+    )
+    expect(fimDoDiaCivil({ ano: 2026, mes: 12, dia: 31 }).toISOString()).toBe(
+      new Date(inicioDoDiaCivil({ ano: 2027, mes: 1, dia: 1 }).getTime() - 1).toISOString(),
+    )
+  })
+
+  it('sobrevive ao dia em que o horário de verão começa', () => {
+    // Num dia de 23 horas, "fim do dia" continua sendo o instante anterior à
+    // meia-noite seguinte — que é o que a definição diz, e não 23:59:59,999
+    // calculado por aritmética de relógio.
+    const fim = fimDoDiaCivil({ ano: 2018, mes: 11, dia: 4 })
+    const inicioDoSeguinte = inicioDoDiaCivil({ ano: 2018, mes: 11, dia: 5 })
+
+    expect(inicioDoSeguinte.getTime() - fim.getTime()).toBe(1)
   })
 })

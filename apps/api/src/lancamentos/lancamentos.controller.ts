@@ -53,14 +53,30 @@ export class LancamentosController {
     return { de, ate }
   }
 
+  /**
+   * O extrato de um período, **ou** os lançamentos de uma fatura.
+   *
+   * `faturaId` dispensa `de`/`ate` porque a fatura já é a janela — e uma
+   * janela de tempo aqui esconderia as parcelas, que têm `posted_at` de meses
+   * atrás. Sem nenhum dos dois, é 400: listar sem recorte traria a base toda.
+   */
   @Get()
   async listar(
     @Req() req: FastifyRequest,
     @Query() query: Record<string, unknown>,
   ): Promise<{ itens: Lancamento[] }> {
     const ctx = this.contexto(req)
-    const janela = this.janela(query)
     const agora = new Date()
+
+    const faturaId = typeof query['faturaId'] === 'string' ? query['faturaId'] : null
+    if (faturaId) {
+      const itens = await comTenant(this.pool, ctx, (c) =>
+        repositorio.listarDaFatura(c, ctx.tenantId, faturaId, agora),
+      )
+      return { itens }
+    }
+
+    const janela = this.janela(query)
     const itens = await comTenant(this.pool, ctx, (c) =>
       repositorio.listar(c, ctx.tenantId, janela, agora),
     )

@@ -132,6 +132,27 @@ export const zLancamento = z.object({
   descricao: z.string(),
   transferGroupId: zUuid.nullable(),
   estornoDeLancamentoId: zUuid.nullable(),
+
+  /**
+   * Conta **ou** cartão, nunca os dois: `uma_origem_de_dinheiro` é `CHECK` no
+   * banco, e o contrato reflete a restrição em vez de inventar um dos dois.
+   */
+  cartaoId: zUuid.nullable(),
+  /** A fatura à qual o lançamento pertence. Nulo fora do cartão. */
+  faturaId: zUuid.nullable(),
+
+  /**
+   * Numeração da parcela — nula quando não há parcelamento.
+   *
+   * Nula, e não `1/1`: um "1/1" no extrato afirma um parcelamento que não
+   * existe, e o usuário sairia procurando as outras parcelas.
+   */
+  installmentGroupId: zUuid.nullable(),
+  installmentNumero: z.number().int().nullable(),
+  installmentTotal: z.number().int().nullable(),
+
+  /** Terceiro eixo de filtro do extrato: o que o usuário digitou e o que veio. */
+  origem: zOrigem,
 })
 
 // ---------------------------------------------------------------------------
