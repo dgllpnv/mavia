@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { dinheiro } from './money.js'
+import { BALDES, type Balde } from './balde.js'
 import {
   ehRealizado,
   resumoDoPeriodo,
@@ -65,28 +66,33 @@ describe('ehRealizado', () => {
   })
 })
 
-const zerado: BaldesDoPeriodo = {
-  saldoAnterior: brl(0n),
-  receitaRealizada: brl(0n),
-  receitaPrevista: brl(0n),
-  despesaRealizada: brl(0n),
-  despesaPrevista: brl(0n),
-  transferenciaLiquidaRealizada: brl(0n),
-  transferenciaLiquidaPrevista: brl(0n),
-}
+/** Monta um resumo indexado pelo enum, preenchendo o que não foi informado. */
+const comBaldes = (
+  saldoAnterior: bigint,
+  parciais: Partial<Record<Balde, { realizada?: bigint; prevista?: bigint }>> = {},
+): BaldesDoPeriodo => ({
+  saldoAnterior: brl(saldoAnterior),
+  baldes: Object.fromEntries(
+    BALDES.map((b) => [
+      b,
+      {
+        realizada: brl(parciais[b]?.realizada ?? 0n),
+        prevista: brl(parciais[b]?.prevista ?? 0n),
+      },
+    ]),
+  ) as Record<Balde, { realizada: ReturnType<typeof brl>; prevista: ReturnType<typeof brl> }>,
+})
 
 describe('resumoDoPeriodo', () => {
-  it('soma os baldes realizados no saldo, e os previstos no projetado', () => {
+  it('soma os realizados no saldo, e os previstos no projetado', () => {
     // Saldo anterior R$ 1.000,00; recebeu R$ 200,00; gastou R$ 50,00.
     // Ainda vai receber R$ 30,00 e gastar R$ 10,00.
-    const r = resumoDoPeriodo({
-      ...zerado,
-      saldoAnterior: brl(100000n),
-      receitaRealizada: brl(20000n),
-      despesaRealizada: brl(-5000n),
-      receitaPrevista: brl(3000n),
-      despesaPrevista: brl(-1000n),
-    })
+    const r = resumoDoPeriodo(
+      comBaldes(100000n, {
+        receita: { realizada: 20000n, prevista: 3000n },
+        despesa: { realizada: -5000n, prevista: -1000n },
+      }),
+    )
 
     expect(r.ok).toBe(true)
     if (!r.ok) return
@@ -98,51 +104,56 @@ describe('resumoDoPeriodo', () => {
     // O defeito B1: filtrando por uma conta, o rodapé mostrava R$ 1.000,00
     // quando o real era R$ 700,00, porque a transferência de R$ 300,00 saía
     // da soma e continuava na lista.
-    const r = resumoDoPeriodo({
-      ...zerado,
-      saldoAnterior: brl(100000n),
-      transferenciaLiquidaRealizada: brl(-30000n),
-    })
+    const r = resumoDoPeriodo(comBaldes(100000n, { transferencia: { realizada: -30000n } }))
 
     expect(r.ok && r.valor.saldo.centavos).toBe(70000n)
   })
 
-  it('a identidade fecha: anterior + receita + despesa + transferência = saldo', () => {
-    const baldes: BaldesDoPeriodo = {
-      ...zerado,
-      saldoAnterior: brl(121200n),
-      receitaRealizada: brl(720000n),
-      despesaRealizada: brl(-49030n),
-      transferenciaLiquidaRealizada: brl(-50000n),
-    }
+  it('o balde não analítico entra no saldo — é ele que faz a identidade fechar', () => {
+    // "Ajuste de saldo" altera o saldo e não é gasto nem ganho. Sem balde
+    // próprio, ele move o saldo sem aparecer no rodapé.
+    const r = resumoDoPeriodo(comBaldes(100000n, { nao_analitica: { realizada: 5000n } }))
 
-    const r = resumoDoPeriodo(baldes)
+    expect(r.ok && r.valor.saldo.centavos).toBe(105000n)
+  })
+
+  it('a identidade decorre da exaustividade: anterior + todos os baldes = saldo', () => {
+    const entrada = comBaldes(121200n, {
+      receita: { realizada: 720000n },
+      despesa: { realizada: -49030n },
+      transferencia: { realizada: -50000n },
+      nao_analitica: { realizada: 300n },
+    })
+
+    const r = resumoDoPeriodo(entrada)
     if (!r.ok) return
 
     const soma =
-      baldes.saldoAnterior.centavos +
-      baldes.receitaRealizada.centavos +
-      baldes.despesaRealizada.centavos +
-      baldes.transferenciaLiquidaRealizada.centavos
+      entrada.saldoAnterior.centavos +
+      BALDES.reduce((acc, b) => acc + entrada.baldes[b].realizada.centavos, 0n)
 
     expect(r.valor.saldo.centavos).toBe(soma)
   })
 
   it('período sem movimento devolve o saldo anterior intacto', () => {
-    const r = resumoDoPeriodo({ ...zerado, saldoAnterior: brl(42n) })
+    const r = resumoDoPeriodo(comBaldes(42n))
 
     expect(r.ok && r.valor.saldo.centavos).toBe(42n)
     expect(r.ok && r.valor.projetado.centavos).toBe(42n)
   })
 
   it('recusa baldes em moedas diferentes em vez de somar', () => {
-    const r = resumoDoPeriodo({ ...zerado, receitaRealizada: dinheiro(100n, 'USD') })
+    const base = comBaldes(0n)
+    const r = resumoDoPeriodo({
+      ...base,
+      baldes: { ...base.baldes, receita: { realizada: dinheiro(100n, 'USD'), prevista: brl(0n) } },
+    })
 
     expect(r.ok).toBe(false)
   })
 
   it('o projetado nunca é menor que o saldo quando só há receita prevista', () => {
-    const r = resumoDoPeriodo({ ...zerado, receitaPrevista: brl(500n) })
+    const r = resumoDoPeriodo(comBaldes(0n, { receita: { prevista: 500n } }))
 
     expect(r.ok && r.valor.projetado.centavos > r.valor.saldo.centavos).toBe(true)
   })

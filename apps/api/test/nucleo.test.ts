@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PoolClient } from 'pg'
-import { resumoDoPeriodo } from '@mavia/domain'
+import { BALDES, resumoDoPeriodo } from '@mavia/domain'
 import { baldesDoPeriodo, saldoDerivadoDaConta } from '../src/agregacao/agregacao.js'
 import { comoApp, semearDoisTenants, subirPostgres, TENANT_A, USUARIO_A, type BancoDeTeste } from './postgres.js'
 
@@ -114,20 +114,22 @@ describe('categoria — árvore de dois níveis', () => {
     ).rejects.toThrow(/ARVORE_TEM_DOIS_NIVEIS/)
   })
 
-  it('só categoria analítica recebe lançamento', async () => {
+  it('categoria não analítica RECEBE lançamento — a regra de folha não existe', async () => {
+    // Revertido pelo ADR 0021. `analitica` significa "não é fato econômico",
+    // não "é folha da árvore". Quem mantém o lançamento fora do relatório de
+    // gasto é o balde `nao_analitica`, não uma recusa na escrita.
     const sintetica = await banco.cliente.query<{ id: string }>(
       `INSERT INTO categorias (tenant_id, nivel, nome, natureza, analitica)
        VALUES ($1,1,'Sintética','despesa',false) RETURNING id`,
       [TENANT_A],
     )
-    await expect(
-      lancar({
-        conta: contaA,
-        categoria: sintetica.rows[0]!.id,
-        centavos: -1000n,
-        postedAt: AGORA,
-      }),
-    ).rejects.toThrow(/CATEGORIA_NAO_ANALITICA/)
+    const id = await lancar({
+      conta: contaA,
+      categoria: sintetica.rows[0]!.id,
+      centavos: -1000n,
+      postedAt: AGORA,
+    })
+    expect(id).toBeTruthy()
   })
 })
 
@@ -248,9 +250,9 @@ describe('o rodapé não mente', () => {
       }),
     )
 
-    expect(baldes.receitaRealizada.centavos).toBe(0n)
-    expect(baldes.despesaRealizada.centavos).toBe(0n)
-    expect(baldes.transferenciaLiquidaRealizada.centavos).toBe(-30000n)
+    expect(baldes.baldes.receita.realizada.centavos).toBe(0n)
+    expect(baldes.baldes.despesa.realizada.centavos).toBe(0n)
+    expect(baldes.baldes.transferencia.realizada.centavos).toBe(-30000n)
   })
 
   it('a identidade fecha: anterior + receita + despesa + transferência = saldo', async () => {
@@ -270,11 +272,11 @@ describe('o rodapé não mente', () => {
     expect(resumo.ok).toBe(true)
     if (!resumo.ok) return
 
+    // Percorre o enum em vez de listar campos: um balde novo entra sozinho,
+    // e é isso que impede o defeito de voltar.
     const soma =
       baldes.saldoAnterior.centavos +
-      baldes.receitaRealizada.centavos +
-      baldes.despesaRealizada.centavos +
-      baldes.transferenciaLiquidaRealizada.centavos
+      BALDES.reduce((acc, b) => acc + baldes.baldes[b].realizada.centavos, 0n)
     expect(resumo.valor.saldo.centavos).toBe(soma)
   })
 })
@@ -377,8 +379,8 @@ describe('RP-4 — a identidade do eixo caixa com lançamento pendente', () => {
     )
 
     // No eixo caixa, o que não se moveu é PREVISTO.
-    expect(baldes.despesaRealizada.centavos).toBe(0n)
-    expect(baldes.despesaPrevista.centavos).toBe(-10000n)
+    expect(baldes.baldes.despesa.realizada.centavos).toBe(0n)
+    expect(baldes.baldes.despesa.prevista.centavos).toBe(-10000n)
 
     const resumo = resumoDoPeriodo(baldes)
     if (!resumo.ok) return
@@ -415,8 +417,8 @@ describe('RP-4 — a identidade do eixo caixa com lançamento pendente', () => {
       }),
     )
 
-    expect(baldes.despesaRealizada.centavos).toBe(-10000n)
-    expect(baldes.despesaPrevista.centavos).toBe(0n)
+    expect(baldes.baldes.despesa.realizada.centavos).toBe(-10000n)
+    expect(baldes.baldes.despesa.prevista.centavos).toBe(0n)
   })
 })
 
@@ -490,5 +492,89 @@ describe('as invariantes que a bateria encontrou', () => {
       [g.rows[0]!.id],
     )
     expect(Number(r.rows[0]?.n)).toBe(2)
+  })
+})
+
+describe('o balde que faltava — "Ajuste de saldo"', () => {
+  it('categoria não analítica agora recebe lançamento', async () => {
+    // Era inalcançável: o gatilho da 0006 recusava lançamento em categoria não
+    // analítica, e o sétimo balde nunca foi escrito porque nada podia cair
+    // nele. A regra passou a ser "não é fato econômico", não "é folha".
+    const ajuste = await banco.cliente.query<{ id: string }>(
+      `SELECT id FROM categorias
+        WHERE tenant_id = $1 AND nome = 'Ajuste de saldo' AND natureza = 'receita'`,
+      [TENANT_A],
+    )
+    expect(ajuste.rows[0]?.id).toBeTruthy()
+
+    const id = await lancar({
+      conta: contaA,
+      categoria: ajuste.rows[0]!.id,
+      centavos: 500n,
+      postedAt: AGORA,
+      settledAt: AGORA,
+    })
+    expect(id).toBeTruthy()
+  })
+
+  it('a categoria-raiz com filhas recebe lançamento', async () => {
+    // "Uso Casa há seis meses, agora quero separar Luz e Água." A raiz precisa
+    // poder guardar o que estava lá antes de os galhos existirem.
+    const raiz = await banco.cliente.query<{ id: string }>(
+      `INSERT INTO categorias (tenant_id, nivel, nome, natureza)
+       VALUES ($1,1,'Casa','despesa') RETURNING id`,
+      [TENANT_A],
+    )
+    await banco.cliente.query(
+      `INSERT INTO categorias (tenant_id, parent_id, nivel, nome, natureza)
+       VALUES ($1,$2,2,'Luz','despesa')`,
+      [TENANT_A, raiz.rows[0]!.id],
+    )
+
+    const id = await lancar({
+      conta: contaA,
+      categoria: raiz.rows[0]!.id,
+      centavos: -4000n,
+      postedAt: AGORA,
+    })
+    expect(id).toBeTruthy()
+  })
+
+  it('o ajuste vai para o balde próprio, e não para receita', async () => {
+    const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
+      baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        eixo: 'caixa',
+        tenantId: TENANT_A,
+        de: DE,
+        ate: ATE,
+        contaId: contaA,
+        moeda: 'BRL',
+        agora: AGORA,
+      }),
+    )
+
+    expect(baldes.baldes.nao_analitica.realizada.centavos).toBe(500n)
+    // E não contaminou a receita.
+    expect(baldes.baldes.receita.realizada.centavos).toBe(0n)
+  })
+
+  it('todo balde do enum aparece na resposta, mesmo zerado', async () => {
+    // Balde que some da resposta é o defeito original: a grandeza existe, move
+    // o saldo, e não tem linha no rodapé.
+    const baldes = await comoApp(banco.cliente, { tenantId: TENANT_A, usuarioId: USUARIO_A }, () =>
+      baldesDoPeriodo(banco.cliente as unknown as PoolClient, {
+        eixo: 'competencia',
+        tenantId: TENANT_A,
+        de: new Date('2035-01-01T03:00:00Z'),
+        ate: new Date('2035-02-01T03:00:00Z'),
+        moeda: 'BRL',
+        agora: AGORA,
+      }),
+    )
+
+    for (const b of BALDES) {
+      expect(baldes.baldes[b].realizada.centavos).toBe(0n)
+      expect(baldes.baldes[b].prevista.centavos).toBe(0n)
+    }
   })
 })

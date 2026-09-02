@@ -111,12 +111,16 @@ export class LancamentosController {
     const c = (m: { centavos: bigint }) => m.centavos.toString()
     return {
       saldoAnterior: c(r.valor.saldoAnterior),
-      receitaRealizada: c(r.valor.receitaRealizada),
-      receitaPrevista: c(r.valor.receitaPrevista),
-      despesaRealizada: c(r.valor.despesaRealizada),
-      despesaPrevista: c(r.valor.despesaPrevista),
-      transferenciaLiquidaRealizada: c(r.valor.transferenciaLiquidaRealizada),
-      transferenciaLiquidaPrevista: c(r.valor.transferenciaLiquidaPrevista),
+      receitaRealizada: c(r.valor.baldes.receita.realizada),
+      receitaPrevista: c(r.valor.baldes.receita.prevista),
+      despesaRealizada: c(r.valor.baldes.despesa.realizada),
+      despesaPrevista: c(r.valor.baldes.despesa.prevista),
+      transferenciaLiquidaRealizada: c(r.valor.baldes.transferencia.realizada),
+      transferenciaLiquidaPrevista: c(r.valor.baldes.transferencia.prevista),
+      // O balde que faltava. Sem ele na resposta, "Ajuste de saldo" moveria o
+      // saldo sem aparecer em linha nenhuma do rodapé.
+      naoAnaliticaRealizada: c(r.valor.baldes.nao_analitica.realizada),
+      naoAnaliticaPrevista: c(r.valor.baldes.nao_analitica.prevista),
       saldo: c(r.valor.saldo),
       projetado: c(r.valor.projetado),
     }

@@ -163,6 +163,10 @@ export const zResumo = z.object({
   despesaPrevista: zCentavos,
   transferenciaLiquidaRealizada: zCentavos,
   transferenciaLiquidaPrevista: zCentavos,
+  // Lançamento que altera o saldo sem ser gasto nem ganho — "Ajuste de saldo".
+  // Tem linha própria porque sem ela a identidade do rodapé não fecha.
+  naoAnaliticaRealizada: zCentavos,
+  naoAnaliticaPrevista: zCentavos,
   saldo: zCentavos,
   projetado: zCentavos,
 })

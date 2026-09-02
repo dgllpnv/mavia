@@ -1,3 +1,4 @@
+import { BALDES, type Balde } from './balde.js'
 import { dinheiro, somarLista, type ErroMonetario, type Money } from './money.js'
 import { ok, type Result } from './result.js'
 
@@ -47,27 +48,28 @@ export function ehEfetivado(marcas: MarcasDeTempo, agora: Date): boolean {
 }
 
 /**
- * Os sete baldes do resumo do período.
+ * O resumo, **indexado pelo enum de baldes**.
  *
- * Transferência tem balde **próprio**. Foi a ausência dele que produziu o
- * defeito B1: filtrando por uma conta, a transferência saía da soma e
- * continuava na lista, e o rodapé mostrava R$ 1.000,00 onde o real era
- * R$ 700,00. Ela não é receita nem despesa, mas move o saldo daquela conta.
+ * Não são campos soltos, e a diferença não é estilo: com campos nomeados à
+ * mão, `baldeDe` seria exaustiva e o resumo continuaria podendo esquecer um
+ * balde — que é exatamente o defeito que a exaustividade existe para impedir.
+ * Indexando por `Balde`, acrescentar um valor ao enum quebra o typecheck em
+ * todos os lugares que constroem um resumo (ADR 0022, emenda 2).
  */
+export interface Valores {
+  readonly realizada: Money
+  readonly prevista: Money
+}
+
 export interface BaldesDoPeriodo {
   readonly saldoAnterior: Money
-  readonly receitaRealizada: Money
-  readonly receitaPrevista: Money
-  readonly despesaRealizada: Money
-  readonly despesaPrevista: Money
-  readonly transferenciaLiquidaRealizada: Money
-  readonly transferenciaLiquidaPrevista: Money
+  readonly baldes: Readonly<Record<Balde, Valores>>
 }
 
 export interface ResumoDoPeriodo extends BaldesDoPeriodo {
-  /** Anterior + realizados. É o que o usuário tem. */
+  /** Anterior + tudo que foi realizado. É o que o usuário tem. */
   readonly saldo: Money
-  /** Saldo + previstos. É o que ele terá se nada mudar. */
+  /** Saldo + tudo que está previsto. É o que ele terá se nada mudar. */
   readonly projetado: Money
 }
 
@@ -77,35 +79,29 @@ export interface ResumoDoPeriodo extends BaldesDoPeriodo {
  * A soma acontece em SQL sobre `BIGINT` — a página não é o período, e somar em
  * JavaScript daria o total da página em vez do total do recorte. O que
  * acontece aqui é interpretação, não aritmética de agregação.
+ *
+ * A identidade do rodapé deixa de ser uma verificação e passa a **decorrer da
+ * exaustividade**: o saldo é o anterior mais todos os baldes, e não há como
+ * esquecer um sem o compilador reclamar.
  */
 export function resumoDoPeriodo(
-  baldes: BaldesDoPeriodo,
+  entrada: BaldesDoPeriodo,
 ): Result<ResumoDoPeriodo, ErroMonetario> {
-  const moeda = baldes.saldoAnterior.moeda
+  const moeda = entrada.saldoAnterior.moeda
 
   const realizado = somarLista(
-    [
-      baldes.saldoAnterior,
-      baldes.receitaRealizada,
-      baldes.despesaRealizada,
-      baldes.transferenciaLiquidaRealizada,
-    ],
+    [entrada.saldoAnterior, ...BALDES.map((b) => entrada.baldes[b].realizada)],
     moeda,
   )
   if (!realizado.ok) return realizado
 
   const projetado = somarLista(
-    [
-      realizado.valor,
-      baldes.receitaPrevista,
-      baldes.despesaPrevista,
-      baldes.transferenciaLiquidaPrevista,
-    ],
+    [realizado.valor, ...BALDES.map((b) => entrada.baldes[b].prevista)],
     moeda,
   )
   if (!projetado.ok) return projetado
 
-  return ok({ ...baldes, saldo: realizado.valor, projetado: projetado.valor })
+  return ok({ ...entrada, saldo: realizado.valor, projetado: projetado.valor })
 }
 
 /** Saldo de uma conta a partir dos lançamentos que já se moveram. */

@@ -58,6 +58,7 @@ export {
   statusDeLancamento,
   type BaldesDoPeriodo,
   type MarcasDeTempo,
+  type Valores,
   type ResumoDoPeriodo,
   type StatusDeLancamento,
 } from './saldo.js'
@@ -82,3 +83,5 @@ export {
   type ErroDeParcelamento,
   type Parcela,
 } from './parcelamento.js'
+
+export { BALDES, baldeDe, type Balde, type LancamentoClassificavel } from './balde.js'
