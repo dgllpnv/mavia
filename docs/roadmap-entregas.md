@@ -19,7 +19,7 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 ---
 
-## Épico 1 — Fundação *(em andamento)*
+## Épico 1 — Fundação — **entregue, menos o deploy (1D)**
 
 ### 1B · Autenticação — ✅ **entregue**
 
@@ -45,7 +45,7 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 **O que prova:** o seam S2 como o arquiteto exigiu — **dois tenants em toda rota**, e uma transação sem contexto lança erro em vez de retornar linha.
 
-### 1D · Deploy na VPS — **movido para o fim de tudo, por decisão do dono do produto**
+### 1D · Deploy na VPS — **o único passo que falta em todo o roadmap**
 
 > **Atualização.** A decisão original adiava o deploy para dentro do épico 5.
 > O dono do produto o moveu para **depois de todos os épicos**: a aplicação sobe
@@ -65,7 +65,7 @@ A decisão é boa e economiza trabalho real: ambiente de produção mantido dura
 
 ---
 
-## Épico 2 — Núcleo
+## Épico 2 — Núcleo ✅ **entregue**
 
 **Entrega:** o razão financeiro funcionando.
 
@@ -306,7 +306,7 @@ fiscal fica fora por decisão dele: P-15.
 
 ---
 
-## Épico 12 — Open Finance
+## Épico 12 — Open Finance — **a máquina pronta, sem agregador ligado**
 
 **Entrega:** adapter de agregador · `Conexao` · `Consentimento` versionado · sincronização periódica · revogação em três fases.
 
