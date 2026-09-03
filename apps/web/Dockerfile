@@ -44,8 +44,11 @@ ENV NODE_ENV=production
 # build — não é lido do ambiente do container. `NODE_ENV=production` já faz o
 # padrão apontar para `http://api:4711`, o nome do serviço na rede interna. O
 # argumento existe para o dia em que a topologia mudar.
+# **Sem `ENV` a partir deste `ARG`.** Um `ARG` não passado vira `ENV` com string
+# vazia, e a leitura no `next.config` interpretava isso como "configurado como
+# nada" — o destino do rewrite saía sem host. O `ARG` sozinho já fica visível
+# como variável para o `next build`, e quando ausente fica de fato ausente.
 ARG MAVIA_API_URL
-ENV MAVIA_API_URL=${MAVIA_API_URL}
 
 RUN pnpm --filter @mavia/web build
 

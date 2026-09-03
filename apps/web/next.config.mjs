@@ -86,7 +86,12 @@ const config = {
   async rewrites() {
     const padrao =
       process.env.NODE_ENV === 'production' ? 'http://api:4711' : 'http://127.0.0.1:4711'
-    const api = process.env.MAVIA_API_URL ?? padrao
+    // **`||` e não `??`, e a diferença custou um deploy.** Um `ARG` do Docker
+    // que não é passado vira `ENV` com string **vazia**, não indefinida — e o
+    // `??` só cai no padrão para `null` e `undefined`. O destino do rewrite
+    // ficou `/:caminho*`, sem host, e `/api/...` respondia 404 em produção
+    // enquanto todas as telas funcionavam.
+    const api = process.env.MAVIA_API_URL || padrao
     return [{ source: '/api/:caminho*', destination: `${api}/:caminho*` }]
   },
 }
