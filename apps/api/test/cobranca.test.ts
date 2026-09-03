@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
+import { comoApp, TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
 import { subirApi, type ApiDeTeste } from './aplicacao-de-teste.js'
 
 /**
@@ -268,5 +268,50 @@ describe('a matriz', () => {
 
     expect(r.statusCode).toBe(200)
     expect(r.json().plano).toBe('pessoal')
+  })
+})
+
+describe('o registro de integração não é legível entre espaços', () => {
+  it('**`mavia_app` não alcança `eventos_de_cobranca`** — migration 0028', async () => {
+    // Encontrado verificando o primeiro deploy: era a única tabela com
+    // `tenant_id` e sem RLS. A 0025 documentou a escolha, e o raciocínio estava
+    // certo até onde ia — o webhook não tem sessão. O que faltou é que a tabela
+    // guarda o **corpo cru** do evento da Stripe (e-mail, id de assinatura,
+    // valores) e ganha `tenant_id` depois.
+    //
+    // A defesa anterior era "nenhuma rota lê essa tabela". É exatamente o que a
+    // regra 16 recusa: filtro na aplicação como **única** camada.
+    const desfecho = await comoApp(
+      api.banco.cliente,
+      { tenantId: TENANT_A, usuarioId: USUARIO_A },
+      () =>
+        api.banco.cliente
+          .query('SELECT count(*) FROM eventos_de_cobranca')
+          .then(() => 'leu')
+          .catch((e: Error) => e.message),
+    )
+
+    expect(desfecho).not.toBe('leu')
+    expect(desfecho).toMatch(/permission denied|permissão negada/i)
+  })
+
+  it('**e o webhook continua escrevendo, pela porta estreita**', async () => {
+    // O outro lado da mesma regra: fechar a tabela não pode fechar o webhook.
+    // Se a policy de `mavia_auth` faltasse, o `ON CONFLICT DO NOTHING` passaria
+    // a não inserir nada e o replay viraria "sempre novo", em silêncio.
+    const evento = `evt_prova_rls_${Date.now()}`
+
+    const primeira = await api.banco.cliente.query<{ registrar_evento_de_cobranca: boolean }>(
+      `SELECT auth.registrar_evento_de_cobranca($1, 'teste', '{}'::jsonb)`,
+      [evento],
+    )
+    const segunda = await api.banco.cliente.query<{ registrar_evento_de_cobranca: boolean }>(
+      `SELECT auth.registrar_evento_de_cobranca($1, 'teste', '{}'::jsonb)`,
+      [evento],
+    )
+
+    expect(primeira.rows[0]!.registrar_evento_de_cobranca).toBe(true)
+    // A detecção de reenvio, que é a defesa 1 do webhook.
+    expect(segunda.rows[0]!.registrar_evento_de_cobranca).toBe(false)
   })
 })

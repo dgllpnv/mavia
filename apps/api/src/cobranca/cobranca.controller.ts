@@ -194,19 +194,21 @@ export class WebhookController {
     return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
       // Defesa 1: o id do evento é a chave primária. Reenvio é conflito, e
       // conflito significa "já tratei".
-      const novo = await c.query(
-        `INSERT INTO eventos_de_cobranca (id, tipo, corpo) VALUES ($1,$2,$3::jsonb)
-         ON CONFLICT (id) DO NOTHING`,
+      //
+      // Pela função, e não pela tabela: `eventos_de_cobranca` ganhou RLS na
+      // migration 0028, e `mavia_app` não tem acesso direto a ela. O corpo cru
+      // do evento carrega e-mail, id de assinatura e valores, e a defesa
+      // anterior era "nenhuma rota lê essa tabela" — filtro na aplicação como
+      // única camada, que é o que a regra 16 recusa.
+      const novo = await c.query<{ registrar_evento_de_cobranca: boolean }>(
+        'SELECT auth.registrar_evento_de_cobranca($1,$2,$3::jsonb)',
         [id, type, JSON.stringify(req.body)],
       )
-      if ((novo.rowCount ?? 0) === 0) return { tratado: false }
+      if (novo.rows[0]?.registrar_evento_de_cobranca !== true) return { tratado: false }
 
       const gatilho = EVENTOS[type]
       if (!gatilho || subscription === '') {
-        await c.query(
-          'UPDATE eventos_de_cobranca SET processado_em = now() WHERE id = $1',
-          [id],
-        )
+        await c.query('SELECT auth.concluir_evento_de_cobranca($1)', [id])
         return { tratado: false }
       }
 
@@ -216,10 +218,7 @@ export class WebhookController {
       )
       const linha = atual.rows[0]
       if (!linha) {
-        await c.query(
-          'UPDATE eventos_de_cobranca SET processado_em = now() WHERE id = $1',
-          [id],
-        )
+        await c.query('SELECT auth.concluir_evento_de_cobranca($1)', [id])
         return { tratado: false }
       }
 
@@ -239,12 +238,11 @@ export class WebhookController {
         ])
       }
 
-      await c.query(
-        `UPDATE eventos_de_cobranca
-            SET processado_em = now(), tenant_id = $2, transicao = $3
-          WHERE id = $1`,
-        [id, linha.id_do_tenant, destino],
-      )
+      await c.query('SELECT auth.concluir_evento_de_cobranca($1,$2,$3)', [
+        id,
+        linha.id_do_tenant,
+        destino,
+      ])
 
       return { tratado: destino !== null }
     })
