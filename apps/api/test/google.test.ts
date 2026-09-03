@@ -50,13 +50,13 @@ describe('sem credencial do Google configurada', () => {
 })
 
 describe('o estado da tentativa', () => {
-  it('guarda os três segredos e devolve todos diferentes', async () => {
+  it('guarda os quatro segredos, cada um na sua forma', async () => {
     const t = await estado.abrir('/lancamentos')
 
     expect(t.state).toMatch(/^[0-9a-f]{64}$/)
     expect(t.nonce).toMatch(/^[0-9a-f]{64}$/)
     expect(t.verifier.length).toBeGreaterThanOrEqual(43)
-    expect(new Set([t.state, t.nonce, t.verifier]).size).toBe(3)
+    expect(t.vinculo).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('**consome uma vez, e a segunda não encontra nada**', async () => {
@@ -64,8 +64,8 @@ describe('o estado da tentativa', () => {
     // retorno de autorização não possa ser reproduzido.
     const t = await estado.abrir('/')
 
-    const primeira = await estado.consumir(t.state)
-    const segunda = await estado.consumir(t.state)
+    const primeira = await estado.consumir(t.state, t.vinculo)
+    const segunda = await estado.consumir(t.state, t.vinculo)
 
     expect(primeira?.nonce).toBe(t.nonce)
     expect(primeira?.verifier).toBe(t.verifier)
@@ -75,17 +75,57 @@ describe('o estado da tentativa', () => {
   it('preserva o destino, que é para onde a pessoa volta', async () => {
     const t = await estado.abrir('/relatorios')
 
-    expect((await estado.consumir(t.state))?.destino).toBe('/relatorios')
+    expect((await estado.consumir(t.state, t.vinculo))?.destino).toBe('/relatorios')
   })
 
   it('estado com forma errada nem vai ao Redis', async () => {
     for (const lixo of ['', 'x', 'F'.repeat(64), 'a'.repeat(63), `${'a'.repeat(64)} `]) {
-      expect(await estado.consumir(lixo)).toBeNull()
+      expect(await estado.consumir(lixo, 'a'.repeat(64))).toBeNull()
     }
   })
 
   it('**um estado que nunca foi aberto não abre nada**', async () => {
-    expect(await estado.consumir('9'.repeat(64))).toBeNull()
+    expect(await estado.consumir('9'.repeat(64), 'a'.repeat(64))).toBeNull()
+  })
+
+  it('**sem o vínculo do navegador, o retorno não vale — é o CSRF de login**', async () => {
+    // O ataque que o `state` sozinho **não** impede, e que a primeira versão
+    // deste código deixava passar:
+    //
+    //  1. o atacante começa uma entrada com a conta Google dele e para no meio;
+    //  2. entrega à vítima um link com aquele `code` e aquele `state`;
+    //  3. a nossa própria tela faz o `POST`, e a vítima entra na conta **dele**;
+    //  4. ela passa a lançar os dados financeiros dela num espaço que ele lê.
+    //
+    // O `state` não protege porque o atacante o conhece — ele o gerou. O que
+    // ele não consegue é escrever um cookie no navegador da vítima.
+    const t = await estado.abrir('/')
+
+    expect(await estado.consumir(t.state, null)).toBeNull()
+  })
+
+  it('**o vínculo de outra tentativa também não vale**', async () => {
+    const daVitima = await estado.abrir('/')
+    const doAtacante = await estado.abrir('/')
+
+    // O navegador da vítima apresenta o `state` do atacante com o cookie dela.
+    expect(await estado.consumir(doAtacante.state, daVitima.vinculo)).toBeNull()
+  })
+
+  it('**um retorno com vínculo errado queima o `state`**', async () => {
+    // Consumir antes de conferir é de propósito: a tentativa do atacante morre
+    // junto com a rejeição, sem deixar um `state` vivo para uma segunda
+    // tentativa com outro navegador.
+    const t = await estado.abrir('/')
+
+    expect(await estado.consumir(t.state, 'b'.repeat(64))).toBeNull()
+    expect(await estado.consumir(t.state, t.vinculo)).toBeNull()
+  })
+
+  it('os quatro segredos são distintos', async () => {
+    const t = await estado.abrir('/')
+
+    expect(new Set([t.state, t.nonce, t.verifier, t.vinculo]).size).toBe(4)
   })
 })
 

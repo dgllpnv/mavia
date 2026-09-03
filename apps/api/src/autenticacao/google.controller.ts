@@ -22,7 +22,12 @@ import { VIDA_DO_ACESSO_EM_SEGUNDOS, type CofreDeAcesso } from '../redis/cofre-d
 import { LimiteExcedido, type LimiteDeTentativas } from '../redis/limite-de-tentativas.js'
 import { ESTADO_OAUTH, type EstadoDoOauth } from '../redis/estado-do-oauth.js'
 import { comUsuario } from '../tenancy/tenancy.js'
-import { cookieDeSessao } from './cookie.js'
+import {
+  cookieDeSessao,
+  cookieDoOauth,
+  cookieDoOauthDeSaida,
+  vinculoDoCookie,
+} from './cookie.js'
 import {
   EntradaFederadaInvalida,
   gerarPkce,
@@ -79,6 +84,12 @@ const zIniciar = z.object({
 const zRetorno = z.object({
   codigo: z.string().min(1).max(2048),
   state: z.string().regex(/^[0-9a-f]{64}$/),
+  /**
+   * `mobile` muda a vida da sessão e faz o refresh sair no corpo. **O app ainda
+   * não usa esta rota** (P-10/P-11), e quando usar precisará carregar o vínculo
+   * do cookie por conta própria — o `__Host-` do navegador não existe lá. Está
+   * declarado para que a diferença seja decidida, e não descoberta.
+   */
   plataforma: z.enum(['web', 'mobile']).default('web'),
 })
 
@@ -114,7 +125,10 @@ export class GoogleController {
    */
   @Post()
   @HttpCode(200)
-  async iniciar(@Body() corpo: unknown): Promise<{ url: string }> {
+  async iniciar(
+    @Res({ passthrough: true }) resposta: FastifyReply,
+    @Body() corpo: unknown,
+  ): Promise<{ url: string }> {
     // A validação vem **antes** da configuração, e a ordem é deliberada: um
     // destino malformado é 400 quer o Google esteja ligado ou não. Com a ordem
     // invertida, a recusa do redirecionador aberto ficaria escondida atrás do
@@ -126,6 +140,13 @@ export class GoogleController {
 
     const pkce = gerarPkce()
     const tentativa = await this.estado.abrir(analise.data.destino ?? '/')
+
+    // **O vínculo com o navegador, e é ele que impede o CSRF de login.** O
+    // `state` sozinho não impede: o atacante que começa uma entrada com a conta
+    // Google dele conhece o `state` — ele o gerou —, e um link entregue à
+    // vítima faria a nossa própria tela concluir a entrada **na conta dele**. O
+    // atacante não tem como escrever um cookie no navegador da vítima.
+    resposta.header('set-cookie', cookieDoOauth(tentativa.vinculo))
 
     return {
       url: urlDeAutorizacao(cfg, {
@@ -155,8 +176,14 @@ export class GoogleController {
 
     await this.contarTentativa(req)
 
-    // Uso único: o segundo retorno com o mesmo `state` não encontra nada.
-    const tentativa = await this.estado.consumir(d.state)
+    // O cookie sai **sempre**, inclusive nas recusas: a tentativa acabou de um
+    // jeito ou de outro, e um vínculo que sobrevive a ela é lixo no navegador.
+    resposta.header('set-cookie', cookieDoOauthDeSaida())
+
+    // Uso único **e** vinculado ao navegador que começou. As duas coisas: a
+    // primeira impede replay, a segunda impede CSRF de login, e confundi-las
+    // foi o defeito da versão anterior deste arquivo.
+    const tentativa = await this.estado.consumir(d.state, vinculoDoCookie(req.headers.cookie))
     if (!tentativa) throw new UnauthorizedException(RECUSA)
 
     let identidade: IdentidadeDoGoogle
