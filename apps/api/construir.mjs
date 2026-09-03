@@ -120,6 +120,24 @@ await build({
 })
 
 /**
+ * A semente, junto do migrador e pelo mesmo motivo.
+ *
+ * Ela é ferramenta de **deploy**, não da aplicação: cria o espaço de
+ * demonstração uma vez, com credencial própria, e nunca é chamada por uma rota.
+ * Sem ela na imagem, semear um ambiente remoto exigiria clonar o repositório e
+ * instalar as dependências na máquina de destino — e aí a semente que roda
+ * deixa de ser a que foi testada.
+ *
+ * A trava dela continua valendo: contra um banco que não é local, sem
+ * `SENHA_DEMO` ela recusa.
+ */
+await build({
+  ...comum,
+  entryPoints: ['src/db/semear.ts'],
+  outfile: 'dist/semear.js',
+})
+
+/**
  * O parser, num arquivo **separado**.
  *
  * Ele não é importado pela API: é **executado** como processo filho, um por
