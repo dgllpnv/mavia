@@ -130,3 +130,22 @@ de destino, em ADR — é regra de negócio, e uma escolha silenciosa aqui vira
 divergência de saldo três meses depois.
 
 ---
+
+## P-7 · `pnpm lint` não existe
+
+**Onde:** raiz do monorepo
+**Citado em:** `CLAUDE.md` §8, entre os comandos
+
+O comando está documentado e não está ligado: `pnpm -w lint` falha com
+`Command "lint" not found`. Não há ESLint configurado em nenhum pacote.
+
+O que segura a qualidade hoje é o `pnpm typecheck`, com `strict` e
+`noUncheckedIndexedAccess`, que pega a maior parte do que o lint pegaria neste
+código. O que se perde é a camada de estilo e as regras que o compilador não
+tem: import ciclíco, `await` esquecido em promessa flutuante, dependência de
+hook incompleta no React — esta última é a que mais dói no `apps/web`.
+
+**Condição de saída:** ESLint com `typescript-eslint` e o plugin de hooks, um
+config na raiz herdado pelos pacotes, ligado no CI junto do typecheck.
+
+---

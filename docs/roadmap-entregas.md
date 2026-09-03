@@ -12,10 +12,10 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 | | |
 |---|---|
-| **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local |
-| **Testes** | 286 passando — 160 de domínio, 12 de contrato, 114 de integração contra Postgres real |
+| **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local · **web utilizável de ponta a ponta** · **Planejamento** |
+| **Testes** | 437 passando — 205 de domínio, 12 de contrato, 20 de `ui`, 200 de integração contra Postgres real — mais 17 cenários Playwright |
 | **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
-| **Em código** | Épicos 1 (menos deploy), 2 e 3. O deploy foi adiado por decisão do dono |
+| **Em código** | Épicos 1 (menos deploy), 2, 3, 4 e a primeira entidade do 8. O deploy foi adiado por decisão do dono |
 
 ---
 
@@ -85,15 +85,23 @@ A decisão é boa e economiza trabalho real: ambiente de produção mantido dura
 
 ---
 
-## Épico 4 — Web
+## Épico 4 — Web ✅ **entregue**
 
-**Entrega:** o produto visível, na direção "papel e trilho".
+**Entrega:** o produto visível. A direção "papel e trilho" foi **substituída** em
+curso pela direção familiar (`docs/design/direcao-visual-2-familiar.md`): o dono
+do produto avaliou a primeira como feia e difícil, e pediu a disposição do
+Organizze, que é a que os clientes já sabem usar. As cores continuam nossas.
 
 Tokens em `packages/ui` · dashboard · extrato denso com o trilho · formulário de lançamento · tela de fatura como objeto de ciclo · filtros nos três eixos.
 
 **O que prova:** Playwright nos fluxos críticos, contraste WCAG AA verificado, e a auditoria de design da seção 5.
 
 **Ao fim você consegue:** usar a Mavia pelo navegador, de verdade. **É a primeira etapa em que dá para demonstrar o produto a alguém.**
+
+**Ressalvas abertas**, em `docs/validacao/auditoria-interface-epico-4.md` §6:
+banner de contas em atraso no topo do extrato, seleção em massa de lançamentos,
+e o seletor de granularidade de período (hoje / semana / mês / intervalo). São
+comodidades do Organizze que ainda não foram copiadas; nenhuma bloqueia o uso.
 
 ---
 
@@ -133,11 +141,27 @@ Sem modelo externo e sem treinar com dado de cliente, conforme suas decisões.
 
 ---
 
-## Épico 8 — Planejamento
+## Épico 8 — Planejamento *(em andamento)*
 
-**Entrega:** `Planejamento` com teto e piso · `Objetivo` de acúmulo com aportes · alertas em basis points · `Recorrencia` com ancoragem de dia do mês.
+**Entrega:** ~~`Planejamento` com teto e piso~~ ✅ · `Objetivo` de acúmulo com aportes · alertas em basis points · `Recorrencia` com ancoragem de dia do mês.
 
 **O que prova:** a precedência global → raiz → subcategoria sem contagem dupla, e o alerta de teto que **não** dispara invertido.
+
+**Antecipado.** Esta etapa veio antes do épico 5 porque o épico 4 mostrou que
+rota testada e nunca exercida por uma tela esconde defeito — e porque
+planejamento é o que o cliente do Organizze usa todo mês.
+
+O que ficou de pé: `Planejamento`, com o total sem contagem dupla e a cópia
+entre meses idempotente. O que falta:
+
+| Falta | Depende de |
+|---|---|
+| `Objetivo` de acúmulo com aportes (ADR 0009) | nada — é o próximo |
+| `Recorrencia` com ancoragem de dia do mês | nada; **destrava o terceiro eixo de filtro** (`fixo`), hoje ausente por não haver o que filtrar |
+| Emissão do alerta em basis points | canal de notificação — e-mail (P-3) ou push (épico 5) |
+
+O cálculo do alerta já existe e é testado (`atingiu`, em `packages/domain`); o
+que não existe é para onde mandá-lo.
 
 ---
 
