@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useState, type FormEvent } from 'react'
 import { api, ErroDaApi } from '../../api/cliente'
+import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 
 /**
  * Escrever a senha nova.
@@ -42,7 +43,7 @@ function Formulario() {
   if (pronto !== null) {
     return (
       <>
-        <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+        <h1 className="portico__titulo">
           Senha trocada
         </h1>
         <p className="mt-24 text-corpo text-ink-1">
@@ -63,7 +64,7 @@ function Formulario() {
   if (!/^[0-9a-f]{64}$/.test(token)) {
     return (
       <>
-        <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+        <h1 className="portico__titulo">
           Este link está incompleto
         </h1>
         <p className="mt-24 text-corpo text-ink-1">Copie o endereço inteiro do e-mail.</p>
@@ -78,7 +79,7 @@ function Formulario() {
 
   return (
     <>
-      <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+      <h1 className="portico__titulo">
         Escolha a senha nova
       </h1>
 
@@ -121,8 +122,11 @@ function Formulario() {
 
 export default function Redefinir() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[420px] flex-col justify-center px-24">
-      <p className="rotulo">Mavia</p>
+    <main className="portico">
+      <div className="portico__topo">
+        <p className="rotulo">Mavia</p>
+        <SeletorDeTema />
+      </div>
       <Suspense fallback={null}>
         <Formulario />
       </Suspense>

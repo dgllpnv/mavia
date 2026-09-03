@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, type FormEvent } from 'react'
 import { api } from '../../api/cliente'
 import { ErroDaApi } from '../../api/cliente'
+import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 
 /**
  * O cadastro.
@@ -42,9 +43,12 @@ export default function Cadastrar() {
 
   if (enviado) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-[420px] flex-col justify-center px-24">
+      <main className="portico">
+        <div className="portico__topo">
         <p className="rotulo">Mavia</p>
-        <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+        <SeletorDeTema />
+      </div>
+        <h1 className="portico__titulo">
           Abra seu e-mail
         </h1>
         <p className="mt-24 text-corpo text-ink-1">
@@ -69,7 +73,7 @@ export default function Cadastrar() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-[420px] flex-col justify-center px-24">
       <p className="rotulo">Mavia</p>
-      <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+      <h1 className="portico__titulo">
         Crie sua conta
       </h1>
 

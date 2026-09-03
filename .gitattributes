@@ -6,6 +6,14 @@
 # SQL que o Postgres executa no `initdb`.
 *               text=auto eol=lf
 *.sh            text eol=lf
+
+# **`.bat` e `.cmd` exigem CRLF.** O `cmd.exe` do Windows engole o primeiro
+# caractere de cada linha quando o arquivo tem LF puro: `REM` vira `EM`, `set`
+# vira `et`, e o script falha com erros que não têm nada a ver com o que ele faz.
+# A regra `* text=auto eol=lf` acima os pegava junto, e foi assim que o
+# `mavia.bat` parou de funcionar.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
 Dockerfile      text eol=lf
 *.sql           text eol=lf
 

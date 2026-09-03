@@ -540,3 +540,143 @@ select {
   background: var(--despesa-fundo);
   color: var(--despesa);
 }
+
+/* --------------------------------------------------------------------------
+ * O seletor de tema
+ *
+ * Três estados num controle só, com borda — o mesmo peso visual de um campo.
+ * Ele fica em toda tela de credencial e no cabeçalho do aplicativo, sempre no
+ * mesmo canto: um controle que muda de lugar é um controle que se procura.
+ * ----------------------------------------------------------------------- */
+.seletor-de-tema {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+
+.seletor-de-tema__opcao {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--fonte-corpo);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  padding: var(--s-4) var(--s-12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* A divisória entre as opções, e não margem: assim o alvo de clique de cada
+   uma encosta na vizinha, sem faixa morta no meio. */
+.seletor-de-tema__opcao + .seletor-de-tema__opcao {
+  border-left: 1px solid var(--line);
+}
+
+.seletor-de-tema__opcao:hover {
+  background: var(--surface-2);
+  color: var(--ink-1);
+}
+
+/* **A seleção não é só cor.** O fundo muda *e* a tinta escurece — quem não
+   distingue as duas superfícies ainda lê a diferença no texto. `docs/design.md`
+   §5: nenhum significado depende só de cor. */
+.seletor-de-tema__opcao[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--ink-0);
+  font-weight: var(--peso-rotulo);
+}
+
+/* --------------------------------------------------------------------------
+ * A moldura das telas de credencial
+ *
+ * Entrar, cadastrar, recuperar, redefinir e o retorno do Google. Uma coluna,
+ * largura de leitura, sem card — `docs/design.md` §2.2: onde a tipografia
+ * conduz, a caixa é ruído.
+ * ----------------------------------------------------------------------- */
+.portico {
+  min-height: 100dvh;
+  max-width: 26rem;
+  margin-inline: auto;
+  padding: var(--s-24);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-4);
+}
+
+/* O título das telas de credencial.
+ *
+ * **Classe própria, e não o utilitário `text-4`.** As regras de elemento deste
+ * arquivo estão fora de `@layer`, e no cascade do CSS o não-camadado vence o
+ * `@layer utilities` do Tailwind — então `h1 { font-size: var(--text-3) }`
+ * ganhava de `class="text-4"` e o título saía com 24px enquanto o mesmo
+ * utilitário num `div` dava 36px.
+ *
+ * A auditoria do `docs/design.md` §5 pede relação de ao menos 3:1 entre o maior
+ * texto e o corpo. Com o corpo em 15px, 24px dava 1.6 — reprovado. O passo
+ * `heroi` dá 3.73, e é o que faz a tipografia conduzir em vez de decorar.
+ *
+ * Corrigir o cascade global seria o conserto de raiz, e mexeria no tamanho de
+ * todo título do produto de uma vez. Fica registrado como dívida, não resolvido
+ * de passagem numa tela de login.
+ */
+.portico__titulo {
+  font-family: var(--fonte-numero);
+  font-size: var(--text-heroi);
+  line-height: var(--lh-heroi);
+  letter-spacing: var(--tracking-heroi, var(--tracking-3));
+  color: var(--ink-0);
+}
+
+/* O topo: a marca de um lado, o tema do outro. */
+.portico__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-16);
+  margin-bottom: var(--s-32);
+}
+
+/* **A régua de 2px com pontas quadradas é a gramática do trilho**, o
+ * elemento-assinatura (`docs/design/direcao-visual.md` §1).
+ *
+ * Aqui ela é **estrutura, não dado**: não há número em curso numa tela de
+ * entrada, e desenhar um trilho de mentira seria ornamento fingindo ser
+ * informação — exatamente o que o §2.6 recusa. O que se toma emprestado é a
+ * forma: 2px, raio zero, cor de linha. É o que faz esta tela parecer da Mavia
+ * sem inventar dado nenhum.
+ */
+.regua {
+  height: 2px;
+  border-radius: 0;
+  background: var(--line);
+  border: 0;
+  margin: 0;
+}
+
+/* A separação entre a entrada pelo Google e o formulário. A palavra fica sobre
+   a régua, e não flutuando entre duas margens. */
+.ou {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--s-12);
+  color: var(--ink-4);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+.ou::before,
+.ou::after {
+  content: '';
+  height: 2px;
+  background: var(--line);
+}
+
+/* A marca do Google, do tamanho da linha do texto ao lado. */
+.marca-google {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+}

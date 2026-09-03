@@ -14,7 +14,23 @@ import { agendarMaterializacao } from './recorrencias/agendador.js'
  * ambiente e nunca do repositório (regra 19).
  */
 async function principal(): Promise<void> {
-  const pool = new Pool({ connectionString: process.env['DATABASE_URL'] })
+  /**
+   * O padrão é o banco local, pela mesma razão que o `REDIS_URL` tem um.
+   *
+   * Sem ele, `pnpm dev` subia a API contra `undefined` e falhava na primeira
+   * consulta — o ambiente local só funcionava para quem soubesse exportar a
+   * variável à mão. A credencial aqui é a mesma que o `bootstrap-papeis.sql` e a
+   * semente gravam, já versionada, e vale só para um Postgres que escuta em
+   * `127.0.0.1` e cujos dados o `mavia reset` apaga.
+   *
+   * Em produção a variável vem do ambiente e este padrão nunca é alcançado —
+   * e se fosse, o banco de produção não teria essa senha.
+   */
+  const pool = new Pool({
+    connectionString:
+      process.env['DATABASE_URL'] ??
+      'postgresql://mavia_app:mavia_local_dev@127.0.0.1:4732/mavia',
+  })
 
   // Bloco 47xx, como o Postgres. `maxRetriesPerRequest: null` é exigência do
   // BullMQ e não muda o comportamento do cofre.

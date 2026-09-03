@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { api, ErroDaApi } from '../../api/cliente'
 import { useSessao } from '../../componentes/provedores'
+import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 
 /**
  * O clique no link de confirmação.
@@ -53,7 +54,7 @@ function Confirmacao() {
   if (erro) {
     return (
       <>
-        <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+        <h1 className="portico__titulo">
           Este link não vale mais
         </h1>
         <p role="alert" className="mt-24 text-corpo text-ink-1">
@@ -73,7 +74,7 @@ function Confirmacao() {
 
   return (
     <>
-      <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+      <h1 className="portico__titulo">
         Confirmando…
       </h1>
       <p className="mt-24 text-corpo text-ink-1">Um instante.</p>
@@ -83,8 +84,11 @@ function Confirmacao() {
 
 export default function Confirmar() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[420px] flex-col justify-center px-24">
-      <p className="rotulo">Mavia</p>
+    <main className="portico">
+      <div className="portico__topo">
+        <p className="rotulo">Mavia</p>
+        <SeletorDeTema />
+      </div>
       {/* `useSearchParams` exige Suspense no App Router; sem ele a página
           inteira vira renderização dinâmica no build. */}
       <Suspense fallback={null}>

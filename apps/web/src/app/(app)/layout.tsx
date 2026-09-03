@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSessao } from '../../componentes/provedores'
 import { Sino } from '../../componentes/sino'
+import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 
 /**
  * O cromo do produto: barra sólida na cor da marca, cinco destinos à esquerda,
@@ -94,6 +95,15 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
               className="absolute top-[44px] right-0 min-w-[220px] rounded-3 border border-[var(--card-borda)] bg-card p-8 text-ink-1 shadow-[var(--elev-2)]"
             >
               <p className="px-12 py-8 text-sm text-ink-3">{eu.usuario.email}</p>
+              <hr className="my-4 border-line" />
+
+              {/* O tema mora aqui, e não na barra: é preferência que se ajusta
+                  uma vez e não se procura todo dia. Na barra ele competiria por
+                  atenção com a navegação, que é o que se usa o tempo todo. */}
+              <div className="flex items-center justify-between gap-12 px-12 py-8">
+                <span className="text-sm text-ink-3">Tema</span>
+                <SeletorDeTema />
+              </div>
               <hr className="my-4 border-line" />
               <Link
                 role="menuitem"

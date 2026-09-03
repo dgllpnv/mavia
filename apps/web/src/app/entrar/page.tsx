@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, ErroDaApi } from '../../api/cliente'
+import { MarcaDoGoogle } from '../../componentes/marca-do-google'
+import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 import { useSessao } from '../../componentes/provedores'
 
 /**
@@ -70,11 +72,28 @@ export default function Entrar() {
   if (carregando) return null
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[420px] flex-col justify-center px-24">
-      <p className="rotulo">Mavia</p>
-      <h1 className="mt-8 font-numero text-4 leading-none tracking-tight text-ink-0">
+    <main className="portico">
+      <div className="portico__topo">
+        <p className="rotulo">Mavia</p>
+        <SeletorDeTema />
+      </div>
+
+      <h1 className="portico__titulo">
         Entre na sua conta
       </h1>
+
+      {/* Uma frase específica, e não um slogan (`docs/design.md` §2.7). Ela diz
+          o que o produto faz com o dinheiro de quem entra — e é a única frase
+          desta tela que não é rótulo de campo. */}
+      <p className="mt-12 text-corpo text-ink-2">
+        Seus lançamentos, faturas e planejamento do mês.
+      </p>
+
+      {/* A régua de 2px com pontas quadradas é a gramática do trilho, o
+          elemento-assinatura. Aqui ela é estrutura, e não dado: numa tela de
+          entrada não há número em curso, e um trilho de mentira seria ornamento
+          fingindo ser informação. Ver o comentário de `.regua` em globais.css. */}
+      <hr className="regua mt-24" />
 
       {/* "Continuar", e não "Entrar com o Google": é a palavra convencional
           para este botão, porque ele serve tanto a quem já tem conta quanto a
@@ -86,12 +105,17 @@ export default function Entrar() {
 
           O Google vem **antes** do formulário: é um clique contra quatro
           campos, e a ordem da tela deve refletir a ordem do esforço. */}
+      {/* `botao--discreto` traz a borda: sem ela o botão sumia contra o fundo e
+          não parecia clicável — foi a queixa do dono do produto. Ele é a ação
+          **secundária**; a primária é "Entrar", a única sólida da tela. Dois
+          botões preenchidos competiriam, e quem chega já sabe qual quer. */}
       <button
         type="button"
-        className="botao mt-44 justify-center"
+        className="botao botao--discreto mt-32 w-full justify-center"
         onClick={() => void comGoogle()}
         disabled={enviando}
       >
+        <MarcaDoGoogle />
         Continuar com o Google
       </button>
 
@@ -101,7 +125,9 @@ export default function Entrar() {
         </p>
       )}
 
-      <p className="mt-24 text-center text-sm text-ink-3">ou</p>
+      {/* A palavra sobre a régua, e não flutuando entre duas margens: é o que
+          faz a separação parecer desenhada em vez de sobrada. */}
+      <p className="ou mt-24">ou</p>
 
       <form onSubmit={(e) => void enviar(e)} className="mt-24 flex flex-col gap-20" noValidate>
         <label className="flex flex-col gap-6">
