@@ -20,6 +20,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
+import { lerRegras, naturezaConfere, propor } from '../classificacao/classificacao.controller.js'
 import { comTenant } from '../tenancy/tenancy.js'
 import { detectar, provider } from './provider.js'
 
@@ -140,6 +141,9 @@ export class ImportacaoController {
         ],
       )
       const importacaoId = criada.rows[0]!.id
+      // Lidas uma vez, e não por lançamento: um extrato de trezentas linhas
+      // faria trezentas consultas idênticas.
+      const regras = await lerRegras(c, ctx.tenantId)
 
       let criados = 0
       let repetidos = 0
@@ -169,18 +173,29 @@ export class ImportacaoController {
           continue
         }
 
+        // Categorização automática, quando ela souber alguma coisa. Sem regra
+        // e sem histórico ela não sabe, e o registro cai em `A classificar` —
+        // que é a resposta honesta, e não uma categoria plausível inventada.
+        const proposta = await propor(c, ctx.tenantId, registro.descricao, regras)
+        const propostaValida =
+          proposta !== null &&
+          (await naturezaConfere(c, ctx.tenantId, proposta.categoriaId, registro.centavos))
+
         await this.criarLancamento(c, ctx, {
           importacaoId,
           contaId: d.contaId,
-          // A categoria é escolhida pelo **sinal do registro**. Um extrato tem
-          // as duas naturezas — salário e mercado chegam no mesmo arquivo — e
-          // mandar tudo para uma categoria de despesa faz o gatilho de
-          // coerência recusar a receita e derrubar a importação inteira.
-          categoriaId: await this.categoriaDeImportacao(
-            c,
-            ctx.tenantId,
-            registro.centavos < 0n ? 'despesa' : 'receita',
-          ),
+          // Sem proposta, a categoria é escolhida pelo **sinal do registro**.
+          // Um extrato tem as duas naturezas — salário e mercado chegam no
+          // mesmo arquivo — e mandar tudo para uma categoria de despesa faz o
+          // gatilho de coerência recusar a receita e derrubar a importação.
+          categoriaId: propostaValida
+            ? proposta.categoriaId
+            : await this.categoriaDeImportacao(
+                c,
+                ctx.tenantId,
+                registro.centavos < 0n ? 'despesa' : 'receita',
+              ),
+          ...(propostaValida ? { classificacao: proposta } : {}),
           brutoId,
           registro,
           moeda: moedaDaConta,
@@ -381,6 +396,8 @@ export class ImportacaoController {
       brutoId: string
       registro: RegistroBruto
       moeda: string
+      /** Preenchida quando a categoria veio de regra ou de histórico. */
+      classificacao?: { origem: string; motivo: string }
     },
   ): Promise<void> {
     const { registro: r } = dados
@@ -391,10 +408,10 @@ export class ImportacaoController {
     const criado = await c.query<{ id: string }>(
       `INSERT INTO lancamentos (tenant_id, conta_id, categoria_id, valor_centavos, moeda,
                                 posted_at, settled_at, descricao, origem, criado_por,
-                                importacao_id)
+                                importacao_id, classificacao_origem, classificacao_motivo)
        VALUES ($1,$2,$3,$4,$5,
                make_date($6,$7,$8)::timestamptz, make_date($6,$7,$8)::timestamptz,
-               $9,'importado',$10,$11)
+               $9,'importado',$10,$11,$12,$13)
        RETURNING id`,
       [
         ctx.tenantId,
@@ -408,6 +425,8 @@ export class ImportacaoController {
         r.descricao,
         ctx.usuarioId,
         dados.importacaoId,
+        dados.classificacao?.origem ?? null,
+        dados.classificacao?.motivo ?? null,
       ],
     )
 

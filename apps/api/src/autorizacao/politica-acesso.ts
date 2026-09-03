@@ -85,6 +85,17 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['POST /v1/conciliacoes/:id/confirmar', { papeis: QUEM_ESCREVE }],
   ['POST /v1/conciliacoes/:id/descartar', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/regras', { papeis: TODOS }],
+  ['POST /v1/regras', { papeis: QUEM_ESCREVE }],
+  ['DELETE /v1/regras/:id', { papeis: QUEM_ESCREVE }],
+  // Aplicar não decide nada de novo: realiza o que as regras já diziam, e só
+  // sobre o que ainda não foi classificado por um humano.
+  ['POST /v1/regras/aplicar', { papeis: QUEM_ESCREVE }],
+
+  // Alterar um lançamento faltava por completo: a importação criava linhas em
+  // `A classificar` e não havia caminho nenhum para movê-las.
+  ['PATCH /v1/lancamentos/:id', { papeis: QUEM_ESCREVE }],
+
   ['GET /v1/alertas', { papeis: TODOS }],
 
   ['GET /v1/categorias', { papeis: TODOS }],

@@ -136,3 +136,14 @@ export {
   type OpcoesDeConciliacao,
   type Sugestao,
 } from './conciliacao.js'
+
+export {
+  assinatura,
+  classificar,
+  PISO_DE_CONFIANCA as PISO_DE_CONFIANCA_DA_CLASSIFICACAO,
+  REPETICOES_MINIMAS,
+  type Classificacao,
+  type Historico,
+  type RegraDoUsuario,
+  type TipoDeRegra,
+} from './classificacao.js'

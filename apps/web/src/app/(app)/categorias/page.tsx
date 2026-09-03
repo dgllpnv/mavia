@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import type { Categoria } from '@mavia/contracts'
 import { corDaCategoria } from '@mavia/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -50,9 +52,16 @@ export default function Categorias() {
     <>
       <div className="flex items-baseline justify-between gap-24">
         <h1>Categorias</h1>
-        <button className="botao botao--primario" onClick={() => setCriando({})}>
-          + categoria
-        </button>
+        <div className="flex items-center gap-8">
+          {/* A regra existe para atribuir categoria; sozinha ela não significa
+              nada, e por isso mora aqui e não na barra. */}
+          <Link href="/categorias/regras" className="botao botao--discreto">
+            regras
+          </Link>
+          <button className="botao botao--primario" onClick={() => setCriando({})}>
+            + categoria
+          </button>
+        </div>
       </div>
 
       {categorias.isPending && <p className="mt-24 text-corpo text-ink-3">Carregando…</p>}

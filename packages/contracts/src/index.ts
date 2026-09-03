@@ -189,6 +189,24 @@ export const zLancamento = z.object({
   installmentNumero: z.number().int().nullable(),
   installmentTotal: z.number().int().nullable(),
 
+  /**
+   * De onde veio a categoria, quando ela não veio de uma pessoa.
+   *
+   * Nulo é **decisão humana** — e é o que torna a reversão observável: trocar a
+   * categoria à mão limpa os dois campos, e o lançamento deixa de constar como
+   * automático porque deixou de ser.
+   */
+  classificacaoOrigem: z.enum(['regra', 'historico']).nullable(),
+  /**
+   * A frase em português que explica a classificação, para a tela.
+   *
+   * A frase, e não o identificador da regra: guardar o identificador faria a
+   * explicação mudar quando a regra mudasse, e o lançamento passaria a dizer
+   * que foi classificado por um motivo que não existia quando ele foi
+   * classificado.
+   */
+  classificacaoMotivo: z.string().nullable(),
+
   /** Terceiro eixo de filtro do extrato: o que o usuário digitou e o que veio. */
   origem: zOrigemDoLancamento,
 })

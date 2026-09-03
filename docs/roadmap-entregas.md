@@ -160,13 +160,34 @@ conciliação é sugestão, desfazer devolve o mês ao que era.
 
 ---
 
-## Épico 7 — Inteligência
+## Épico 7 — Inteligência — **entregue, menos o OCR**
 
 **Entrega:** categorização que aprende, sem terceiro na cadeia.
 
-Regra do usuário · histórico do próprio espaço · OCR de recibo com confirmação · explicabilidade e reversão em um toque.
+Regra do usuário · histórico do próprio espaço · ~~OCR de recibo com confirmação~~ · explicabilidade e reversão em um toque.
 
 Sem modelo externo e sem treinar com dado de cliente, conforme suas decisões.
+
+### O que está de pé
+
+**As duas garantias do glossário**, e as duas com teste: motivo visível — toda
+classificação automática grava a frase em português que a explica — e
+reversibilidade observável: trocar a categoria à mão apaga a marca de
+automático, porque ela deixou de ser verdade.
+
+A ordem é regra do usuário, depois histórico do espaço, depois nada. "Nada" é
+uma resposta: sem palpite, porque um palpite errado num relatório é pior do que
+uma linha esperando. Duas ocorrências mínimas para o histórico valer, e o
+sistema **não aprende com o próprio palpite** — aprender da própria
+classificação é como um erro vira convicção.
+
+Apareceu um buraco de produto no caminho, e foi fechado: **não havia como
+reclassificar um lançamento**. A importação criava linhas em `A classificar` e
+não existia rota nenhuma para movê-las.
+
+**Falta o OCR de recibo** — P-13. Ele depende do processo `parser` isolado
+(P-12), porque decodificar imagem enviada por usuário no processo que tem a
+`DATABASE_URL` é exatamente o que o isolamento existe para impedir.
 
 ---
 

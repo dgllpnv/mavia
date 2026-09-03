@@ -263,3 +263,24 @@ processo da API.
 saída validado por Zod — o pai **não confia** na saída do filho.
 
 ---
+
+## P-13 · OCR de recibo
+
+**Onde:** não existe
+**Spec:** roadmap, épico 7
+**Depende de:** motor de OCR dentro do processo `parser` isolado (P-12)
+
+O épico 7 prevê "OCR de recibo com confirmação". Não foi feito, e a razão é a
+mesma que torna o item caro: um motor de OCR é uma dependência nativa pesada, e
+ela precisa viver **dentro** do processo isolado do P-12 — junto do parsing de
+arquivo hostil, sem rede e sem segredo. Fazer o OCR antes do isolamento
+significaria rodar decodificação de imagem no processo que tem a `DATABASE_URL`.
+
+A parte do épico que **está** de pé é a que decide categoria: regra do usuário,
+histórico do próprio espaço, motivo visível e reversão em um toque. O OCR
+acrescentaria uma **fonte** de lançamento; a inteligência sobre ele já existe.
+
+**Condição de saída:** o processo `parser` isolado (P-12), e então Tesseract
+dentro dele.
+
+---

@@ -2,9 +2,9 @@
 
 import type { Lancamento } from '@mavia/contracts'
 import { dataCivilDe, dinheiro, fimDoDiaCivil, formatarDataCivil, valorEmTexto } from '@mavia/domain'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { chamar, ErroDaApi } from '../api/cliente'
+import { api, chamar, ErroDaApi } from '../api/cliente'
 import { CampoDeValor } from './campo-de-valor'
 import { Modal } from './modal'
 import { Valor } from './valor'
@@ -69,6 +69,12 @@ export function DetalheDoLancamento({
       <dl className="mt-16">
         <Linha rotulo="Estado" valor={lancamento.status} />
         <Linha rotulo="Categoria" valor={ehTransferencia ? 'transferência' : nomeDaCategoria} />
+        {lancamento.classificacaoMotivo && (
+          /* A garantia do glossário: "sempre com o motivo visível". Uma
+             classificação que a pessoa não consegue explicar é uma que ela não
+             consegue contestar. */
+          <Linha rotulo="Por quê" valor={lancamento.classificacaoMotivo} />
+        )}
         {lancamento.installmentTotal !== null && (
           <Linha
             rotulo="Parcela"
@@ -97,6 +103,18 @@ export function DetalheDoLancamento({
         />
       ) : (
         <div className="mt-24 border-t border-line pt-16">
+          {!ehTransferencia && (
+            <TrocarCategoria
+              tenantId={tenantId}
+              lancamento={lancamento}
+              aoTrocar={() => {
+                void fila.invalidateQueries({ queryKey: ['lancamentos'] })
+                void fila.invalidateQueries({ queryKey: ['resumo'] })
+                aoFechar()
+              }}
+            />
+          )}
+
           {podeEstornar({ ehTransferencia, ehEstorno, ehDeCartao }) ? (
             <>
               <button className="botao botao--discreto" onClick={() => setEstornando(true)}>
@@ -285,4 +303,90 @@ const MESES = [
 function diaLongo(iso: string): string {
   const c = dataCivilDe(new Date(iso))
   return `${String(c.dia).padStart(2, '0')} ${MESES[c.mes - 1]} ${c.ano}`
+}
+
+/**
+ * Trocar a categoria — a reversão em um toque que o épico 7 promete.
+ *
+ * Fica **atrás de um toque**, e não como um seletor sempre aberto: o detalhe é
+ * uma tela de leitura, e um seletor aberto convida a mexer sem querer num
+ * registro que já está certo.
+ *
+ * Trocar aqui apaga a marca de classificação automática — quem decidiu foi a
+ * pessoa, e a partir daí o lançamento deixa de constar como decidido pelo
+ * sistema.
+ */
+function TrocarCategoria({
+  tenantId,
+  lancamento,
+  aoTrocar,
+}: {
+  tenantId: string
+  lancamento: Lancamento
+  aoTrocar(): void
+}) {
+  const [aberto, setAberto] = useState(false)
+  const [escolhida, setEscolhida] = useState(lancamento.categoriaId ?? '')
+
+  const categorias = useQuery({
+    queryKey: ['categorias', tenantId],
+    queryFn: () => api.categorias(tenantId),
+    enabled: aberto,
+    staleTime: 5 * 60_000,
+  })
+
+  const trocar = useMutation({
+    mutationFn: () =>
+      chamar(`/lancamentos/${lancamento.id}`, {
+        metodo: 'PATCH',
+        tenantId,
+        corpo: { categoriaId: escolhida },
+      }),
+    onSuccess: aoTrocar,
+  })
+
+  const natureza = BigInt(lancamento.valorCentavos) < 0n ? 'despesa' : 'receita'
+  const disponiveis = (categorias.data?.itens ?? []).filter(
+    (c) => c.natureza === natureza && c.analitica && !c.arquivada,
+  )
+
+  if (!aberto) {
+    return (
+      <button className="botao botao--discreto mb-16" onClick={() => setAberto(true)}>
+        trocar categoria
+      </button>
+    )
+  }
+
+  return (
+    <div className="mb-20 flex flex-col gap-12">
+      <label className="flex flex-col gap-6">
+        <span className="rotulo">Categoria</span>
+        <select
+          className="campo"
+          value={escolhida}
+          onChange={(e) => setEscolhida(e.target.value)}
+        >
+          {disponiveis.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nome}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="flex gap-12">
+        <button
+          className="botao botao--primario"
+          onClick={() => void trocar.mutateAsync()}
+          disabled={trocar.isPending || escolhida === ''}
+        >
+          {trocar.isPending ? 'salvando…' : 'salvar'}
+        </button>
+        <button className="botao" onClick={() => setAberto(false)}>
+          cancelar
+        </button>
+      </div>
+    </div>
+  )
 }

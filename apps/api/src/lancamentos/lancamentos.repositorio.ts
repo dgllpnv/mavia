@@ -26,12 +26,14 @@ interface Linha {
   readonly installment_number: number | null
   readonly installment_total: number | null
   readonly origem: Lancamento['origem']
+  readonly classificacao_origem: 'regra' | 'historico' | null
+  readonly classificacao_motivo: string | null
 }
 
 const COLUNAS = `id, conta_id, cartao_id, categoria_id, valor_centavos, moeda, posted_at,
                  settled_at, descricao, transfer_group_id, estorno_de_lancamento_id,
                  fatura_id, installment_group_id, installment_number, installment_total,
-                 origem`
+                 origem, classificacao_origem, classificacao_motivo`
 
 function paraContrato(l: Linha, agora: Date): Lancamento {
   const status: StatusDeLancamento = statusDeLancamento(
@@ -58,6 +60,8 @@ function paraContrato(l: Linha, agora: Date): Lancamento {
     installmentNumero: l.installment_number,
     installmentTotal: l.installment_total,
     origem: l.origem,
+    classificacaoOrigem: l.classificacao_origem,
+    classificacaoMotivo: l.classificacao_motivo,
   }
 }
 
