@@ -6,6 +6,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import Link from 'next/link'
 import { useState } from 'react'
 import { api, chamar, ErroDaApi } from '../../../api/cliente'
+import { Cartao as CartaoUi, Vazio } from '../../../componentes/cartao'
 import { FormularioDeCartao } from '../../../componentes/formulario-de-cartao'
 import { PagamentoDeFatura } from '../../../componentes/pagamento-de-fatura'
 import { useEspaco } from '../../../componentes/provedores'
@@ -64,23 +65,40 @@ export default function Cartoes() {
       {cartoes.isPending && <p className="mt-24 text-corpo text-ink-3">Carregando…</p>}
 
       {contas.data && semContas && (
-        <p className="mt-24 max-w-[60ch] text-corpo text-ink-3">
-          Antes do cartão, crie a conta que vai pagá-lo — o pagamento da fatura é
-          uma transferência, e ela precisa sair de algum lugar.{' '}
-          <Link href="/contas" className="text-primaria underline">
-            criar conta →
-          </Link>
-        </p>
+        <div className="mt-24 max-w-[700px]">
+          <CartaoUi>
+            <Vazio
+              acao={
+                <Link href="/contas" className="botao botao--primario">
+                  criar conta
+                </Link>
+              }
+            >
+              Antes do cartão, crie a conta que vai pagá-lo — o pagamento da
+              fatura é uma transferência, e ela precisa sair de algum lugar.
+            </Vazio>
+          </CartaoUi>
+        </div>
       )}
 
       {cartoes.data?.itens.length === 0 && !semContas && (
-        <p className="mt-24 max-w-[60ch] text-corpo text-ink-3">
-          Nenhum cartão ainda. Um cartão precisa do dia de fechamento e do dia de
-          vencimento — é o ciclo que decide em qual fatura cada compra entra.
-        </p>
+        <div className="mt-24 max-w-[700px]">
+          <CartaoUi>
+            <Vazio
+              acao={
+                <button className="botao botao--primario" onClick={() => setCriando(true)}>
+                  adicionar cartão
+                </button>
+              }
+            >
+              Nenhum cartão ainda. Um cartão precisa do dia de fechamento e do dia
+              de vencimento — é o ciclo que decide em qual fatura cada compra entra.
+            </Vazio>
+          </CartaoUi>
+        </div>
       )}
 
-      <div className="mt-32 flex flex-col gap-64">
+      <div className="mt-24 grid max-w-[820px] gap-24">
         {(cartoes.data?.itens ?? []).map((cartao, i) => {
           const lista = [...(faturas[i]?.data?.itens ?? [])].sort((a, b) =>
             a.competencia < b.competencia ? -1 : 1,
@@ -91,33 +109,36 @@ export default function Cartoes() {
           const outras = lista.filter((f) => f.id !== corrente?.id)
 
           return (
-            <section key={cartao.id}>
-              <div className="flex items-baseline justify-between gap-24">
-                <h2 className="font-numero text-2 font-semibold">
-                  <Link href={`/cartoes/${cartao.id}`} className="hover:text-primaria">
-                    {cartao.nome}
-                  </Link>
-                </h2>
-                <p className="text-sm text-ink-3">
+            <CartaoUi
+              key={cartao.id}
+              titulo={cartao.nome}
+              acoes={
+                <span className="text-sm text-ink-3">
                   fecha dia {cartao.closingDay} · vence dia {cartao.dueDay}
-                </p>
-              </div>
-
+                </span>
+              }
+              semPadding
+              rodape={
+                <Link href={`/cartoes/${cartao.id}`} className="hover:underline">
+                  ver todas as faturas
+                </Link>
+              }
+            >
               {corrente ? (
                 <FaturaCorrente tenantId={espaco.id} fatura={corrente} />
               ) : (
-                <p className="mt-16 text-corpo text-ink-3">
+                <p className="px-20 py-16 text-corpo text-ink-3">
                   Nenhuma fatura aberta. Ela nasce na primeira compra do ciclo —
                   ninguém abre fatura à mão.
                 </p>
               )}
 
               {outras.length > 0 && (
-                <div className="mt-32 max-w-[700px]">
-                  <p className="rotulo">Demais faturas</p>
+                <div className="border-t border-line">
+                  <p className="rotulo px-20 pt-16">Demais faturas</p>
                   <ul className="mt-8">
                     {outras.map((f) => (
-                      <li key={f.id} className="linha grid-cols-[92px_1fr_150px_88px] gap-16">
+                      <li key={f.id} className="linha grid-cols-[92px_1fr_150px_88px]">
                         <span className="valor text-1">{f.competencia.slice(0, 7)}</span>
                         <span className="truncate text-sm text-ink-3">
                           {f.estado.replace('_', ' ')} · vence {f.dataVencimento}
@@ -135,13 +156,13 @@ export default function Cartoes() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-12 max-w-[60ch] text-sm text-ink-3">
+                  <p className="max-w-[60ch] px-20 pb-16 text-sm text-ink-3">
                     Parcela lançada em fatura futura já é compromisso: ela aparece
                     aqui desde o dia da compra, e não no mês em que chega.
                   </p>
                 </div>
               )}
-            </section>
+            </CartaoUi>
           )
         })}
       </div>
@@ -213,7 +234,7 @@ function FaturaCorrente({ tenantId, fatura }: { tenantId: string; fatura: Fatura
   const aindaNaoFechou = hoje < fatura.dataFechamento
 
   return (
-    <div className="mt-16 max-w-[640px]">
+    <div className="px-20 py-16">
       <p className="rotulo">Fatura de {fatura.competencia.slice(0, 7)} · aberta</p>
       <p className="mt-8 font-numero text-4 font-semibold tracking-tight text-ink-0">
         <Valor centavos={fatura.totalCentavos} isolado />

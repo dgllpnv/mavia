@@ -5,6 +5,8 @@ import { corDaCategoria } from '@mavia/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent } from 'react'
 import { api, chamar, ErroDaApi } from '../../../api/cliente'
+import { Cartao } from '../../../componentes/cartao'
+import { IconeDeCategoria } from '../../../componentes/icone-de-categoria'
 import { Modal } from '../../../componentes/modal'
 import { useEspaco } from '../../../componentes/provedores'
 
@@ -61,49 +63,44 @@ export default function Categorias() {
         </p>
       )}
 
-      <div className="mt-32 grid gap-44 lg:grid-cols-2">
+      <div className="mt-24 grid gap-24 lg:grid-cols-2">
         {(['despesa', 'receita'] as const).map((natureza) => (
-          <section key={natureza}>
-            <p className="rotulo">{natureza === 'despesa' ? 'Despesas' : 'Receitas'}</p>
-
-            <div className="mt-12">
-              <div className="linha h-[var(--altura-colunas)] grid-cols-[1fr_auto] border-b border-line-forte bg-surface-2">
-                <span className="rotulo">Categoria</span>
-                <span className="rotulo">Ações</span>
-              </div>
-
-              {arvore
-                .filter((r) => r.raiz.natureza === natureza)
-                .map(({ raiz, filhas }) => (
-                  <div key={raiz.id}>
+          <Cartao
+            key={natureza}
+            titulo={natureza === 'despesa' ? 'Despesas' : 'Receitas'}
+            semPadding
+          >
+            {arvore
+              .filter((r) => r.raiz.natureza === natureza)
+              .map(({ raiz, filhas }) => (
+                <div key={raiz.id}>
+                  <LinhaDeCategoria
+                    categoria={raiz}
+                    cor={corDaCategoria(raiz.id)}
+                    aoCriarFilha={() => {
+                      setErro(null)
+                      setCriando({ parentId: raiz.id })
+                    }}
+                    aoArquivar={() => {
+                      setErro(null)
+                      arquivar.mutate(raiz.id)
+                    }}
+                  />
+                  {filhas.map((f) => (
                     <LinhaDeCategoria
-                      categoria={raiz}
+                      key={f.id}
+                      categoria={f}
                       cor={corDaCategoria(raiz.id)}
-                      aoCriarFilha={() => {
-                        setErro(null)
-                        setCriando({ parentId: raiz.id })
-                      }}
+                      filha
                       aoArquivar={() => {
                         setErro(null)
-                        arquivar.mutate(raiz.id)
+                        arquivar.mutate(f.id)
                       }}
                     />
-                    {filhas.map((f) => (
-                      <LinhaDeCategoria
-                        key={f.id}
-                        categoria={f}
-                        cor={corDaCategoria(raiz.id)}
-                        filha
-                        aoArquivar={() => {
-                          setErro(null)
-                          arquivar.mutate(f.id)
-                        }}
-                      />
-                    ))}
-                  </div>
-                ))}
-            </div>
-          </section>
+                  ))}
+                </div>
+              ))}
+          </Cartao>
         ))}
       </div>
 
@@ -174,25 +171,35 @@ function LinhaDeCategoria({
   aoArquivar(): void
 }) {
   return (
-    <div className="linha grid-cols-[1fr_auto] gap-16">
-      <span className={`flex items-center gap-8 truncate ${filha ? 'pl-20' : ''}`}>
-        <span
-          className="marca-categoria"
-          style={{ background: cor, opacity: categoria.arquivada ? 0.35 : 1 }}
-          aria-hidden="true"
-        />
+    <div className="linha group grid-cols-[auto_1fr_auto]">
+      {filha ? (
+        // A filha não repete o círculo da mãe: ela recebe um recuo e um traço,
+        // que é o que diz "pertence à de cima" sem duplicar a cor.
+        <span className="flex w-[var(--icone-categoria)] justify-center text-ink-4" aria-hidden="true">
+          └
+        </span>
+      ) : (
+        <IconeDeCategoria nome={categoria.nome} cor={cor} />
+      )}
+
+      <span className="flex min-w-0 items-center gap-8">
         <span className={`truncate text-1 ${categoria.arquivada ? 'text-ink-4 line-through' : ''}`}>
           {categoria.nome}
         </span>
-        {categoria.sistema && <span className="rotulo">do sistema</span>}
+        {categoria.sistema && <span className="rotulo shrink-0">do sistema</span>}
         {!categoria.analitica && (
-          <span className="rotulo" title="Fica fora do relatório de categoria e do planejamento">
+          <span
+            className="rotulo shrink-0"
+            title="Fica fora do relatório de categoria e do planejamento"
+          >
             não analítica
           </span>
         )}
       </span>
 
-      <span className="flex items-center gap-8">
+      {/* As ações aparecem no hover, como no Organizze: a lista fica limpa
+          para quem só veio conferir, e completa para quem veio mexer. */}
+      <span className="flex items-center gap-4 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {aoCriarFilha && !categoria.arquivada && (
           <button className="botao text-sm" onClick={aoCriarFilha}>
             + subcategoria
@@ -200,7 +207,7 @@ function LinhaDeCategoria({
         )}
         {!categoria.sistema && !categoria.arquivada && (
           <button
-            className="botao text-sm"
+            className="botao text-sm text-ink-3"
             aria-label={`Arquivar ${categoria.nome}`}
             onClick={aoArquivar}
           >

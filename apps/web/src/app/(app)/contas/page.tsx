@@ -1,12 +1,15 @@
 'use client'
 
 import type { TipoDeConta } from '@mavia/contracts'
+import { corDaCategoria } from '@mavia/ui'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { competenciaDe } from '@mavia/domain'
 import { useState, type FormEvent } from 'react'
 import { api, chamar, ErroDaApi } from '../../../api/cliente'
 import { periodoDe } from '../../../api/periodo'
 import { CampoDeValor } from '../../../componentes/campo-de-valor'
+import { Cartao, Vazio } from '../../../componentes/cartao'
+import { IconeDeCategoria } from '../../../componentes/icone-de-categoria'
 import { Modal } from '../../../componentes/modal'
 import { useEspaco } from '../../../componentes/provedores'
 import { Valor } from '../../../componentes/valor'
@@ -70,53 +73,55 @@ export default function Contas() {
         </button>
       </div>
 
-      {contas.isPending && <p className="mt-24 text-corpo text-ink-3">Carregando…</p>}
+      <div className="mt-24 max-w-[760px]">
+        <Cartao titulo="Minhas contas" semPadding>
+          {contas.isPending && <p className="px-20 py-16 text-corpo text-ink-3">Carregando…</p>}
 
-      {contas.data?.itens.length === 0 && (
-        <p className="mt-24 max-w-[60ch] text-corpo text-ink-3">
-          Nenhuma conta ainda. Toda movimentação sai de uma conta ou de um cartão
-          — comece pela conta em que o seu salário cai.
-        </p>
-      )}
+          {contas.data?.itens.length === 0 && (
+            <div className="px-20 py-8">
+              <Vazio
+                acao={
+                  <button className="botao botao--primario" onClick={() => setCriando(true)}>
+                    criar conta
+                  </button>
+                }
+              >
+                Toda movimentação sai de uma conta ou de um cartão. Comece pela
+                conta em que o seu salário cai.
+              </Vazio>
+            </div>
+          )}
 
-      <div className="mt-32 max-w-[760px]">
-        <div className="linha h-[var(--altura-colunas)] grid-cols-[1fr_140px_160px_100px] border-b border-line-forte bg-surface-2">
-          <span className="rotulo">Conta</span>
-          <span className="rotulo">Tipo</span>
-          <span className="rotulo text-right">Saldo</span>
-          <span className="rotulo text-right">No total</span>
-        </div>
-
-        {(contas.data?.itens ?? []).map((c, i) => (
-          <div key={c.id} className="linha grid-cols-[1fr_140px_160px_100px]">
-            <span className="truncate text-1">{c.nome}</span>
-            <span className="text-sm text-ink-3">
-              {TIPOS.find(([t]) => t === c.tipo)?.[1] ?? c.tipo}
-            </span>
-            <span className="text-right text-1">
-              <Valor centavos={saldos[i]?.data?.saldo ?? c.saldoInicialCentavos} saldo />
-            </span>
-            <span className="flex items-center justify-end gap-8 text-sm text-ink-3">
-              {/* Conta de investimento nasce fora do saldo geral: o dinheiro é
-                  do usuário, mas não é o que ele tem para gastar este mês. */}
-              {c.incluirNoSaldoGeral ? 'entra' : 'fora'}
+          {(contas.data?.itens ?? []).map((c, i) => (
+            <div key={c.id} className="linha grid-cols-[auto_1fr_auto_auto]">
+              <IconeDeCategoria nome={c.nome} cor={corDaCategoria(c.id)} />
+              <span className="min-w-0">
+                <span className="block truncate text-1">{c.nome}</span>
+                <span className="block truncate text-sm text-ink-3">
+                  {TIPOS.find(([t]) => t === c.tipo)?.[1] ?? c.tipo}
+                  {c.incluirNoSaldoGeral ? '' : ' · fora do saldo geral'}
+                </span>
+              </span>
+              <span className="text-1">
+                <Valor centavos={saldos[i]?.data?.saldo ?? c.saldoInicialCentavos} saldo />
+              </span>
               <button
-                className="botao text-sm"
+                className="botao text-sm text-ink-3"
                 aria-label={`Arquivar ${c.nome}`}
                 onClick={() => arquivar.mutate(c.id)}
               >
                 ✕
               </button>
-            </span>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </Cartao>
 
-      <p className="mt-16 max-w-[60ch] text-sm text-ink-3">
-        Arquivar uma conta não apaga o histórico dela. Os lançamentos continuam
-        no extrato e nos totais dos meses em que aconteceram — o que muda é que
-        ela deixa de aparecer para receber lançamento novo.
-      </p>
+        <p className="mt-16 max-w-[60ch] text-sm text-ink-3">
+          Arquivar uma conta não apaga o histórico dela. Os lançamentos continuam
+          no extrato e nos totais dos meses em que aconteceram — o que muda é que
+          ela deixa de aparecer para receber lançamento novo.
+        </p>
+      </div>
 
       {criando && <FormularioDeConta tenantId={espaco.id} aoFechar={() => setCriando(false)} />}
     </>
