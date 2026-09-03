@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import type { Pool } from 'pg'
 import { AppModule } from './app.module.js'
+import { ErroInesperadoFilter } from './observabilidade/erro-inesperado.filter.js'
 import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
 import {
@@ -32,6 +33,10 @@ export async function criarAplicacao(
     new FastifyAdapter(),
     { logger: false },
   )
+
+  // Sem isto, um erro não previsto vira `{"statusCode":500}` sem deixar rastro
+  // nenhum — e a investigação começa e termina no relato do cliente.
+  app.useGlobalFilters(new ErroInesperadoFilter())
 
   const instancia = app.getHttpAdapter().getInstance()
 

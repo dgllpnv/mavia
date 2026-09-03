@@ -31,6 +31,7 @@
     "@testcontainers/redis": "^12.1.0",
     "@types/node": "^22",
     "@types/pg": "^8",
-    "vitest": "^2"
+    "vitest": "^2",
+    "@mavia/parser": "workspace:*"
   }
 }

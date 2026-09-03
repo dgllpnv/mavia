@@ -13,9 +13,9 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 | | |
 |---|---|
 | **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local · **web utilizável de ponta a ponta** · **Planejamento** |
-| **Testes** | 524 passando — 245 de domínio, 12 de contrato, 20 de `ui`, 247 de integração contra Postgres real — mais 18 cenários Playwright |
+| **Testes** | 615 passando — 263 de domínio, 32 de parser, 17 do núcleo do app, 12 de contrato, 20 de `ui`, 271 de integração contra Postgres real — mais 18 cenários Playwright |
 | **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
-| **Em código** | Épicos 1 (menos deploy), 2, 3, 4 e 8. O deploy foi movido para **depois de todos os épicos**, por decisão do dono |
+| **Em código** | Épicos 1 (menos deploy), 2, 3, 4, 6 e 8; o 5 escrito e não executado. O deploy foi movido para **depois de todos os épicos**, por decisão do dono |
 
 ---
 
@@ -137,15 +137,24 @@ dizer "entregue" aqui seria afirmar o que o `CLAUDE.md` proíbe. Ver P-10.
 
 ---
 
-## Épico 6 — Importação
+## Épico 6 — Importação ✅ **entregue**
 
 **Entrega:** trazer extrato de verdade para dentro.
 
 `BankSyncProvider` com os adapters OFX e CSV · `LancamentoBruto` com idempotência · deduplicação · conciliação como sugestão · desfazer importação.
 
-> **Antes desta etapa, o processo `parser` isolado precisa existir** — sem rede, sem segredo, sem banco. É aqui que o **seu** extrato entra no sistema, e o parser é a superfície mais hostil do produto.
+> **Antes desta etapa, o processo `parser` isolado precisa existir** — sem rede, sem segredo, sem banco.
 
-**Correção do que eu disse antes:** afirmei que o guardião de chaves precisava existir já no épico 1. É impreciso. O **parser isolado** é pré-requisito desta etapa; o **guardião de chaves** é do épico 12, quando credencial bancária passa a existir.
+**Sobre o pré-requisito:** o `packages/parser` foi escrito para caber nesse
+processo — **sem nenhuma dependência**, sem I/O, sem ambiente — e uma
+propriedade cobre o que mais importa ali: nenhuma entrada o faz lançar. O
+container em si ainda não existe, e isso está declarado em P-12. Foi uma
+escolha: o isolamento é propriedade do container, e prendê-lo antes teria
+adiado a única parte que o cliente vê.
+
+**O que prova:** 32 testes do parser, com propriedades sobre a conversão de
+dinheiro; 15 de integração cobrindo as três promessas — reimportar não duplica,
+conciliação é sugestão, desfazer devolve o mês ao que era.
 
 **Ao fim você consegue:** baixar o OFX do seu banco, importar, e ver os lançamentos conciliados sem duplicar.
 

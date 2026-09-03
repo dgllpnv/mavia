@@ -72,6 +72,19 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // idempotente pela identidade da ocorrência.
   ['POST /v1/recorrencias/materializar', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/importacoes', { papeis: TODOS }],
+  // Importar cria lançamento; desfazer apaga o que ela criou. As duas são de
+  // quem escreve, e nenhuma é só do dono: importar extrato é rotina de membro.
+  ['POST /v1/importacoes', { papeis: QUEM_ESCREVE }],
+  ['POST /v1/importacoes/:id/desfazer', { papeis: QUEM_ESCREVE }],
+
+  ['GET /v1/conciliacoes', { papeis: TODOS }],
+  // Decidir uma conciliação é decidir sobre o registro de outra pessoa do
+  // espaço. Continua sendo escrita, e não exclusividade do dono: o veto de
+  // "jamais apagar o registro do usuário sozinho" já é do sistema, não do papel.
+  ['POST /v1/conciliacoes/:id/confirmar', { papeis: QUEM_ESCREVE }],
+  ['POST /v1/conciliacoes/:id/descartar', { papeis: QUEM_ESCREVE }],
+
   ['GET /v1/alertas', { papeis: TODOS }],
 
   ['GET /v1/categorias', { papeis: TODOS }],

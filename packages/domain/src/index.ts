@@ -126,3 +126,13 @@ export {
   type Ocorrencia,
   type RegraDeRecorrencia,
 } from './recorrencia.js'
+
+export {
+  conciliar,
+  semelhanca,
+  PISO_DE_CONFIANCA,
+  type Candidato,
+  type Importado,
+  type OpcoesDeConciliacao,
+  type Sugestao,
+} from './conciliacao.js'

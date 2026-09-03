@@ -236,3 +236,30 @@ pessoa negar todos os seguintes.
 **Condição de saída:** conta de desenvolvedor nas duas lojas, com as chaves.
 
 ---
+
+## P-12 · O parser ainda não roda isolado
+
+**Onde:** `packages/parser/`
+**Spec:** `docs/arquitetura/sistema.md` §2.6
+
+O `sistema.md` exige que o parsing de arquivo enviado por usuário execute num
+**processo filho descartável** por arquivo: usuário sem privilégio, sem
+variáveis de ambiente de segredo, sem rede, filesystem somente-leitura exceto um
+`tmpfs`, cgroup de memória e CPU, `seccomp` restritivo e timeout duro.
+
+O que **já está pronto**: o pacote foi escrito para caber nesse processo. Ele
+não tem `dependencies` nenhuma, não faz I/O, não lê ambiente e não conhece o
+domínio — a ausência de dependências no `package.json` é o que força qualquer
+`import` novo a ser defendido. Uma propriedade cobre a parte que mais importa
+para um processo isolado: **nenhuma entrada faz o parser lançar**, porque uma
+exceção derrubaria o processo que o hospeda.
+
+O que falta é o container. O próprio `sistema.md` já diz que o isolamento é
+"propriedade do container, não do código", e hoje o parsing roda dentro do
+processo da API.
+
+**Condição de saída:** o serviço `parser` no `docker-compose`, com
+`--network none`, e a API passando a chamá-lo por arquivo de entrada e JSON de
+saída validado por Zod — o pai **não confia** na saída do filho.
+
+---

@@ -63,6 +63,9 @@ importers:
       '@mavia/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@mavia/parser':
+        specifier: workspace:*
+        version: link:../../packages/parser
       '@testcontainers/postgresql':
         specifier: ^10
         version: 10.28.0(supports-color@8.1.1)
@@ -203,6 +206,15 @@ importers:
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.51.2)
 
   packages/domain:
+    devDependencies:
+      fast-check:
+        specifier: ^3
+        version: 3.23.2
+      vitest:
+        specifier: ^2
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.51.2)
+
+  packages/parser:
     devDependencies:
       fast-check:
         specifier: ^3

@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import type { TipoDeConta } from '@mavia/contracts'
 import { corDaCategoria } from '@mavia/ui'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -68,9 +70,16 @@ export default function Contas() {
     <>
       <div className="flex items-baseline justify-between gap-24">
         <h1>Contas</h1>
-        <button className="botao botao--primario" onClick={() => setCriando(true)}>
-          + conta
-        </button>
+        <div className="flex items-center gap-8">
+          {/* O extrato pertence à conta, e por isso a importação mora aqui — e
+              não num sétimo item de navegação. */}
+          <Link href="/importar" className="botao botao--discreto">
+            importar extrato
+          </Link>
+          <button className="botao botao--primario" onClick={() => setCriando(true)}>
+            + conta
+          </button>
+        </div>
       </div>
 
       <div className="mt-24 max-w-[760px]">
