@@ -104,6 +104,20 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // Um visualizador convidado não leva o espaço inteiro embora num arquivo.
   ['GET /v1/exportacao', { papeis: SO_DONO }],
 
+  // Matriz §2.3: nome e papel são de todos; o e-mail dos outros, só do dono —
+  // e essa parte é projeção, não rota.
+  ['GET /v1/membros', { papeis: TODOS }],
+  ['POST /v1/membros/convites', { papeis: SO_DONO }],
+  ['GET /v1/membros/convites', { papeis: SO_DONO }],
+  ['DELETE /v1/membros/convites/:id', { papeis: SO_DONO }],
+  // Escalada de privilégio (R-4). A matriz é a trava 1; as outras três estão
+  // no controlador e no banco.
+  ['PATCH /v1/membros/:usuarioId', { papeis: SO_DONO, exigeReautenticacao: true }],
+  // **`TODOS`, e não `SO_DONO`**: a matriz dá a membro e visualizador o direito
+  // de saírem do espaço. Quem sai é só a si mesmo, e essa distinção é do
+  // controlador — a matriz não tem como expressar "só sobre o próprio id".
+  ['DELETE /v1/membros/:usuarioId', { papeis: TODOS }],
+
   ['GET /v1/alertas', { papeis: TODOS }],
 
   ['GET /v1/categorias', { papeis: TODOS }],
@@ -145,6 +159,9 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
  */
 export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
   'POST /v1/sessoes',
+  // Quem aceita o convite ainda não pertence ao espaço: exigir o cabeçalho
+  // seria pedir a resposta como pergunta. Quem escolhe o espaço é o token.
+  'POST /v1/convites/aceitar',
   // Renovar é pública **pela sessão**: quem chega aqui é justamente quem já não
   // tem access token válido. A credencial que ela exige é o refresh, e a
   // própria rota o valida.

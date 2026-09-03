@@ -10,6 +10,7 @@ import { CartoesController } from './cartoes/cartoes.controller.js'
 import { SessoesController } from './autenticacao/sessoes.controller.js'
 import { CategoriasController } from './categorias/categorias.controller.js'
 import { AlertasController } from './alertas/alertas.controller.js'
+import { AceitarConviteController, MembrosController } from './membros/membros.controller.js'
 import { ExportacaoController } from './exportacao/exportacao.controller.js'
 import { RelatoriosController } from './relatorios/relatorios.controller.js'
 import { AlterarLancamentoController, RegrasController } from './classificacao/classificacao.controller.js'
@@ -33,6 +34,8 @@ export class AppModule {
         ContasController,
         CategoriasController,
         AlertasController,
+        MembrosController,
+        AceitarConviteController,
         RelatoriosController,
         ExportacaoController,
         RegrasController,

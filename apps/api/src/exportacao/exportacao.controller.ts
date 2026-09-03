@@ -135,6 +135,14 @@ const CONJUNTOS = [
     colunas: 'id, bruto_id, lancamento_id, confianca, motivo, estado, decidido_em, criado_em',
   },
   {
+    nome: 'convites',
+    tabela: 'convites',
+    // **Sem `token_hash`.** A quem você convidou e quando é dado do titular; o
+    // material que abre a porta não é. Um convite pendente exportado com o hash
+    // seria uma credencial dentro do arquivo de portabilidade.
+    colunas: `id, email, papel, criado_em, expira_em, aceito_em, revogado_em`,
+  },
+  {
     nome: 'saldo_snapshots',
     tabela: 'saldo_snapshots',
     colunas: null,

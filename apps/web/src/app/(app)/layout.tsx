@@ -95,6 +95,15 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
             >
               <p className="px-12 py-8 text-sm text-ink-3">{eu.usuario.email}</p>
               <hr className="my-4 border-line" />
+              <Link
+                role="menuitem"
+                href="/membros"
+                className="botao w-full justify-start"
+                onClick={() => setMenuAberto(false)}
+              >
+                pessoas do espaço
+              </Link>
+              <hr className="my-4 border-line" />
               <button
                 role="menuitem"
                 className="botao w-full justify-start"

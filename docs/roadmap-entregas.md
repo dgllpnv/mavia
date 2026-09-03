@@ -242,11 +242,31 @@ comprimindo o eixo do tempo.
 
 ---
 
-## Épico 10 — Compartilhamento
+## Épico 10 — Compartilhamento ✅ **entregue**
 
 **Entrega:** múltiplos usuários por espaço, com os papéis e a matriz de acesso aplicada.
 
 **Pré-requisito duro do épico 11:** sem isto, `Família` e `Negócio` são o mesmo plano com três preços.
+
+### O que prova
+
+A regra **R-4** da matriz — "a rota de escalada de privilégio do produto" — tem
+quatro travas, e cada uma tem teste. A terceira tem o teste que mais importa:
+ela é provada **passando por cima da aplicação**, com `UPDATE` direto no SQL,
+porque é lá que ela mora. Um `if` no controlador não seguraria o `UPDATE` às
+três da manhã durante um incidente.
+
+O gatilho é `FOR EACH STATEMENT` e há teste para o porquê: linha a linha, um
+`UPDATE` que rebaixa dois proprietários de uma vez passaria — o primeiro porque
+o segundo ainda era dono, o segundo porque o primeiro já não era.
+
+Remover alguém **revoga as sessões no ato**, como o spec de autenticação §4.3
+manda. Sem isso, "removi o acesso" seria promessa que o servidor não cumpre por
+quinze minutos de access e semanas de refresh.
+
+O convite é um link com token hasheado, e não um e-mail: o mailer é a pendência
+P-3, e prender o compartilhamento a ele adiaria o épico 11 inteiro. O convite é
+**para um endereço**, não para quem tiver o link.
 
 ---
 
