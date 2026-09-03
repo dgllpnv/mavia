@@ -1,4 +1,5 @@
-import { lerCsv, lerOfx, type MapaDeColunas, type Resultado } from '@mavia/parser'
+import type { MapaDeColunas, Resultado } from '@mavia/parser'
+import { parsearIsolado } from '../importacao/parser-isolado.js'
 
 /**
  * `BankSyncProvider` — a interface única por onde **todo** dado bancário entra,
@@ -130,9 +131,11 @@ export interface BankSyncProvider {
 /**
  * Os adapters de arquivo.
  *
- * Ambos delegam a `@mavia/parser`, que **não tem dependências**: é o pacote
- * escrito para caber no processo filho descartável que o `sistema.md` §2.6
- * exige. Aqui só se dá nome ao que ele faz.
+ * Nenhum dos dois interpreta o arquivo **neste processo**: os dois mandam o
+ * conteúdo para o processo filho descartável (`parser-isolado`), que morre com
+ * o arquivo. O processo da API tem a `DATABASE_URL` e o caminho do socket do
+ * guardião; OFX e CSV são as entradas mais hostis do produto. Manter os dois
+ * juntos era o vetor A-32/33/34 — o que compromete todos os tenants de uma vez.
  *
  * Os dois revogam **sem tocar em rede**. O acesso foi o titular entregar um
  * arquivo, uma vez; não há sessão para encerrar. O que precisa sumir é o
@@ -142,7 +145,7 @@ const OFX: BankSyncProvider = {
   nome: 'ofx-import',
   modeloDeCredencial: 'sem-credencial',
   revogacaoRemota: 'nao-aplicavel',
-  buscar: (origem) => lerOfx(origem.conteudo),
+  buscar: (origem) => parsearIsolado({ formato: 'ofx', conteudo: origem.conteudo }),
   revogar: async () => semAcessoContinuado('importação de arquivo OFX'),
 }
 
@@ -150,7 +153,7 @@ const CSV: BankSyncProvider = {
   nome: 'csv-import',
   modeloDeCredencial: 'sem-credencial',
   revogacaoRemota: 'nao-aplicavel',
-  buscar: (origem) => lerCsv(origem.conteudo, origem.mapa),
+  buscar: (origem) => parsearIsolado({ formato: 'csv', conteudo: origem.conteudo, mapa: origem.mapa }),
   revogar: async () => semAcessoContinuado('importação de arquivo CSV'),
 }
 

@@ -237,10 +237,43 @@ pessoa negar todos os seguintes.
 
 ---
 
-## P-12 · O parser ainda não roda isolado
+## P-12 · O parser roda isolado — falta a metade do container
 
-**Onde:** `packages/parser/`
+**Onde:** `apps/api/src/importacao/parser-isolado.ts`, `packages/parser/src/cli.ts`
 **Spec:** `docs/arquitetura/sistema.md` §2.6
+**Atualizado em:** 2026-09-03
+
+**A metade que é código está feita.** O parsing acontece num processo filho
+descartável, um por arquivo:
+
+| Controle | Onde |
+|---|---|
+| sem segredo no ambiente do parsing | código — `env: {}`, com teste de comportamento |
+| contenção de queda | código — o filho morre, o pai responde |
+| prazo duro (`SIGKILL` aos 10 s) | código |
+| teto de saída | código |
+| saída não confiável, validada por Zod | código |
+| sem rede, fs somente-leitura, cgroup, `seccomp` | **container** |
+
+O `centavos` atravessa o fio como **string decimal**, e não como `number`: JSON
+não tem inteiro de precisão arbitrária, e um `number` faria o valor passar por
+ponto flutuante na fronteira mais hostil do sistema. Há um teste com R$
+92.233.720.368.547,75 — acima de `Number.MAX_SAFE_INTEGER` em centavos — que
+falharia com qualquer outra escolha.
+
+`DataCivil` atravessa como `{ano, mes, dia}` pela mesma razão de forma
+diferente: uma string de data acabaria em `new Date()` do outro lado, que a lê
+em UTC e desloca o dia para quem está em São Paulo.
+
+**O que falta é o container**, e o `sistema.md` §2.6 já dizia que seria assim:
+"é propriedade do container, não do código; testar isso em Vitest testaria o
+mock". O serviço e as quatro verificações de deploy — que precisam **falhar** ao
+rodar — estão escritos em `infra/README.md`.
+
+**Condição de saída:** o serviço `parser` no compose de produção, com as quatro
+verificações no pipeline de deploy. Item do 1D.
+
+### O texto original
 
 O `sistema.md` exige que o parsing de arquivo enviado por usuário execute num
 **processo filho descartável** por arquivo: usuário sem privilégio, sem

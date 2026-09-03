@@ -68,3 +68,84 @@ UTC
 Os testes contra banco usam **Testcontainers**, que sobe um Postgres próprio e efêmero por execução. Eles **não** dependem deste ambiente e não sujam o banco local.
 
 Este ambiente é para desenvolvimento e para teste manual. O `mavia reset` existe justamente para você conseguir repetir um roteiro de teste do zero.
+
+---
+
+## O `parser` no deploy — a metade que é container
+
+O parsing de arquivo de usuário roda **fora do processo da API** desde o
+`apps/api/src/importacao/parser-isolado.ts`: um processo filho por arquivo, com
+`env: {}`, prazo duro de 10 s, teto de saída e a resposta validada por Zod — o
+pai não confia no filho.
+
+O que aquele arquivo **não** entrega, e o `sistema.md` §2.6 já dizia que ele não
+entregaria, é o que só o container dá:
+
+```yaml
+  parser:
+    image: mavia/parser
+    # Sem rede. Não é endurecimento: é a diferença entre um RCE de biblioteca
+    # nativa que lê um extrato e um que exfiltra o banco inteiro.
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    user: '10001:10001'
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 64
+    # **Nenhuma variável de ambiente.** Nem uma. Se um dia esta lista deixar de
+    # estar vazia, a verificação abaixo falha — e é para falhar.
+    environment: {}
+```
+
+**Verificações do deploy** (§2.6 — não são teste de código, e testá-las em
+Vitest testaria o mock):
+
+```bash
+# 1. Nenhum segredo no ambiente do parser.
+docker compose exec parser env | grep -Ei 'DATABASE|SECRET|KEK|TOKEN|STRIPE|GUARDIAO' && exit 1
+
+# 2. O parser não resolve DNS nem alcança a rede.
+docker compose exec parser getent hosts postgres && exit 1
+
+# 3. O parser não alcança o banco.
+docker compose exec parser sh -c 'timeout 2 </dev/tcp/postgres/5432' && exit 1
+
+# 4. O filesystem é somente-leitura fora do tmpfs.
+docker compose exec parser sh -c 'touch /nao-deve-escrever' && exit 1
+```
+
+As quatro precisam **falhar** ao rodar. Um `exit 1` numa delas é o deploy
+recusado, e não um aviso.
+
+## O `guardiao` no deploy
+
+Processo separado, socket em volume compartilhado, **sem porta TCP**. Desselado à
+mão a cada reboot — é a opção B do ADR 0018 §D3.3, e a consequência é assumida:
+enquanto ele estiver selado, a sincronização bancária não funciona e o resto do
+produto funciona normalmente. O runbook está em `apps/guardiao/README.md`.
+
+```yaml
+  guardiao:
+    image: mavia/guardiao
+    network_mode: none
+    read_only: true
+    user: '10002:10002'
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # `stdin_open` porque a KEK entra pela entrada padrão, uma vez, e não toca
+    # o disco.
+    stdin_open: true
+    tty: false
+    volumes:
+      - guardiao-socket:/run/mavia
+      - guardiao-diario:/var/log/mavia
+```
+
+**Verificação:** `docker compose exec guardiao env` não contém a KEK — ela nunca
+foi variável de ambiente —, e `ss -ltn` dentro do container não lista porta
+nenhuma.
