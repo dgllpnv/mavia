@@ -101,6 +101,46 @@ Enquanto isso, o ambiente local nasce semeado (`pnpm db:seed`).
 
 ---
 
+## ~~P-4 · Login pelo Google~~ ✅ **fechada em código**
+
+**Fechada em:** 2026-09-03. `apps/api/src/autenticacao/oidc.ts`,
+`google.controller.ts`, `apps/api/src/redis/estado-do-oauth.ts`, e as telas
+`/entrar` (botão) e `/entrar/google` (retorno).
+
+**A decisão de o que fazer com uma identidade que chega não está na rota.** Ela
+é pura, mora em `packages/domain/identidade` e já estava testada. O controlador
+faz o protocolo, busca os cinco fatos no banco e **obedece** — não há `if` sobre
+identidade nele, há um `switch` sobre o que a função pura devolveu, e o
+compilador cobra a exaustividade. É essa separação que impede o erro clássico
+desta superfície: um `if` a mais escrito às pressas num caso de suporte,
+abrindo a porta que a matriz fechou.
+
+A verificação do `id_token` é feita à mão com `node:crypto`, pela mesma razão do
+mensageiro: o que ela precisa fazer é pequeno e exato, e a superfície de um
+verificador que aceita **um** algoritmo é menor que a de um que aceita quinze.
+Ela é testada com tokens **forjados** contra um par de chaves RSA de verdade —
+a única forma honesta de testar um verificador.
+
+Os dois ataques clássicos têm teste próprio, porque cada um é um login válido
+para quem não deveria entrar:
+
+- **`alg: none`** — o token que pede para não ser verificado. Recusado pelo
+  cabeçalho, antes de qualquer criptografia.
+- **`HS256` assinado com a chave pública** — confusão de algoritmo: o atacante
+  usa a chave *pública* do Google como segredo de HMAC, e ela é pública.
+
+E mais: `iss` conferido exatamente (`accounts.google.com.atacante.net` é um
+domínio registrável), token emitido para outro cliente, `nonce` de outra sessão,
+`state` de uso único com `GETDEL` atômico, PKCE **S256**, e destino de retorno
+obrigatoriamente relativo — um destino absoluto transformaria o login num
+redirecionador aberto.
+
+**O que ainda depende do dono:** criar o cliente OAuth no console do Google e
+configurar `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e a URI de retorno. Sem
+eles a rota responde **503** e a tela de entrada diz para usar e-mail e senha.
+
+### O texto original
+
 ## P-4 · Login pelo Google
 
 **Onde:** não existe rota
