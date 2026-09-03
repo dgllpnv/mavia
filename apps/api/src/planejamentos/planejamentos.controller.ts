@@ -223,81 +223,15 @@ export class PlanejamentosController {
    *
    * Transferência e categoria não analítica ficam de fora por construção.
    */
-  private async carregarComRealizado(
+  private carregarComRealizado(
     c: PoolClient,
     tenantId: string,
     competencia: string,
     apenasId?: string,
   ): Promise<Planejamento[]> {
-    const r = await c.query<{
-      id: string
-      competencia: Date
-      categoria_id: string | null
-      valor_centavos: string
-      alertas_percentuais: number[]
-      realizado: string
-    }>(
-      `WITH p AS (
-         SELECT id, competencia, categoria_id, valor_centavos, alertas_percentuais,
-                (valor_centavos < 0) AS eh_teto
-           FROM planejamentos
-          WHERE tenant_id = $1 AND competencia = $2::date AND deleted_at IS NULL
-            AND ($3::uuid IS NULL OR id = $3)
-       )
-       SELECT p.id, p.competencia, p.categoria_id, p.valor_centavos, p.alertas_percentuais,
-              coalesce((
-                SELECT sum(l.valor_centavos)
-                  FROM lancamentos l
-                  JOIN categorias cat
-                    ON cat.id = l.categoria_id AND cat.tenant_id = l.tenant_id
-                 WHERE l.tenant_id = $1
-                   AND l.deleted_at IS NULL
-                   -- Transferência nunca entra: ela não é receita nem despesa.
-                   AND l.transfer_group_id IS NULL
-                   -- Categoria não analítica fica fora de todo planejamento.
-                   AND cat.analitica
-                   -- A partição é por **natureza da categoria**, e não pelo
-                   -- sinal do lançamento.
-                   AND cat.natureza = CASE WHEN p.eh_teto THEN 'despesa'::natureza_de_categoria
-                                           ELSE 'receita'::natureza_de_categoria END
-                   -- Base temporal "data da parcela": o realizado de um
-                   -- planejamento usa sempre posted_at, independentemente da
-                   -- preferência de relatório do usuário.
-                   AND l.posted_at >= p.competencia::timestamptz
-                   AND l.posted_at < (p.competencia + interval '1 month')::timestamptz
-                   -- O escopo agrega para baixo: a raiz soma as filhas, e o
-                   -- global soma tudo.
-                   AND (p.categoria_id IS NULL
-                        OR cat.id = p.categoria_id
-                        OR cat.parent_id = p.categoria_id)
-              ), 0)::text AS realizado
-         FROM p
-        ORDER BY p.categoria_id NULLS FIRST, p.valor_centavos`,
-      [tenantId, competencia, apenasId ?? null],
-    )
-
-    return r.rows.map((l): Planejamento => {
-      const valor = dinheiro(BigInt(l.valor_centavos), 'BRL')
-      const realizado = dinheiro(BigInt(l.realizado), 'BRL')
-
-      return {
-        id: l.id,
-        competencia: diaCivil(l.competencia).slice(0, 7),
-        categoriaId: l.categoria_id,
-        valorCentavos: l.valor_centavos,
-        realizadoCentavos: l.realizado,
-        natureza: naturezaDoValor(valor),
-        // Derivados no domínio, nunca em SQL: a razão truncada e o terceiro
-        // estado são exatamente onde a versão anterior errou, e a regra existe
-        // testada num lugar só.
-        consumoBp: consumoEmBp(realizado, valor),
-        estado: estadoDoPlanejamento(realizado, valor),
-        alertasPercentuais: l.alertas_percentuais,
-      }
-    })
+    return planejamentosComRealizado(c, tenantId, competencia, apenasId)
   }
 
-  /** categoria → mãe. Só o que a precedência precisa. */
   private async arvoreDeCategorias(
     c: PoolClient,
     tenantId: string,
@@ -348,3 +282,89 @@ function diaCivil(d: Date): string {
   const doisDigitos = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}-${doisDigitos(d.getUTCMonth() + 1)}-${doisDigitos(d.getUTCDate())}`
 }
+
+
+/**
+ * Os planejamentos de um mês, com o realizado apurado.
+ *
+ * Função de módulo, e não método privado, porque a **central de alertas** lê
+ * exatamente este número. Um segundo SQL com a mesma intenção divergiria na
+ * primeira borda, e a divergência apareceria como um alerta que dispara sem que
+ * a tela concorde — o pior tipo de defeito de confiança.
+ */
+
+export async function planejamentosComRealizado(
+  c: PoolClient,
+  tenantId: string,
+  competencia: string,
+  apenasId?: string,
+): Promise<Planejamento[]> {
+  const r = await c.query<{
+    id: string
+    competencia: Date
+    categoria_id: string | null
+    valor_centavos: string
+    alertas_percentuais: number[]
+    realizado: string
+  }>(
+    `WITH p AS (
+       SELECT id, competencia, categoria_id, valor_centavos, alertas_percentuais,
+              (valor_centavos < 0) AS eh_teto
+         FROM planejamentos
+        WHERE tenant_id = $1 AND competencia = $2::date AND deleted_at IS NULL
+          AND ($3::uuid IS NULL OR id = $3)
+     )
+     SELECT p.id, p.competencia, p.categoria_id, p.valor_centavos, p.alertas_percentuais,
+            coalesce((
+              SELECT sum(l.valor_centavos)
+                FROM lancamentos l
+                JOIN categorias cat
+                  ON cat.id = l.categoria_id AND cat.tenant_id = l.tenant_id
+               WHERE l.tenant_id = $1
+                 AND l.deleted_at IS NULL
+                 -- Transferência nunca entra: ela não é receita nem despesa.
+                 AND l.transfer_group_id IS NULL
+                 -- Categoria não analítica fica fora de todo planejamento.
+                 AND cat.analitica
+                 -- A partição é por **natureza da categoria**, e não pelo
+                 -- sinal do lançamento.
+                 AND cat.natureza = CASE WHEN p.eh_teto THEN 'despesa'::natureza_de_categoria
+                                         ELSE 'receita'::natureza_de_categoria END
+                 -- Base temporal "data da parcela": o realizado de um
+                 -- planejamento usa sempre posted_at, independentemente da
+                 -- preferência de relatório do usuário.
+                 AND l.posted_at >= p.competencia::timestamptz
+                 AND l.posted_at < (p.competencia + interval '1 month')::timestamptz
+                 -- O escopo agrega para baixo: a raiz soma as filhas, e o
+                 -- global soma tudo.
+                 AND (p.categoria_id IS NULL
+                      OR cat.id = p.categoria_id
+                      OR cat.parent_id = p.categoria_id)
+            ), 0)::text AS realizado
+       FROM p
+      ORDER BY p.categoria_id NULLS FIRST, p.valor_centavos`,
+    [tenantId, competencia, apenasId ?? null],
+  )
+
+  return r.rows.map((l): Planejamento => {
+    const valor = dinheiro(BigInt(l.valor_centavos), 'BRL')
+    const realizado = dinheiro(BigInt(l.realizado), 'BRL')
+
+    return {
+      id: l.id,
+      competencia: diaCivil(l.competencia).slice(0, 7),
+      categoriaId: l.categoria_id,
+      valorCentavos: l.valor_centavos,
+      realizadoCentavos: l.realizado,
+      natureza: naturezaDoValor(valor),
+      // Derivados no domínio, nunca em SQL: a razão truncada e o terceiro
+      // estado são exatamente onde a versão anterior errou, e a regra existe
+      // testada num lugar só.
+      consumoBp: consumoEmBp(realizado, valor),
+      estado: estadoDoPlanejamento(realizado, valor),
+      alertasPercentuais: l.alertas_percentuais,
+    }
+  })
+}
+
+/** categoria → mãe. Só o que a precedência precisa. */

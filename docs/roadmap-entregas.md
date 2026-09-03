@@ -13,9 +13,9 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 | | |
 |---|---|
 | **Pronto** | Monorepo · domínio com `Money`, `ratear`, base temporal e matriz de vinculação · tenancy com RLS provada · cadastro e login · API HTTP com matriz de acesso · CI · ambiente Docker local · **web utilizável de ponta a ponta** · **Planejamento** |
-| **Testes** | 437 passando — 205 de domínio, 12 de contrato, 20 de `ui`, 200 de integração contra Postgres real — mais 17 cenários Playwright |
+| **Testes** | 524 passando — 245 de domínio, 12 de contrato, 20 de `ui`, 247 de integração contra Postgres real — mais 18 cenários Playwright |
 | **Especificado e revisado por gate** | Domínio, arquitetura, produto, design, segurança, LGPD, autenticação, cobrança |
-| **Em código** | Épicos 1 (menos deploy), 2, 3, 4 e a primeira entidade do 8. O deploy foi adiado por decisão do dono |
+| **Em código** | Épicos 1 (menos deploy), 2, 3, 4 e 8. O deploy foi movido para **depois de todos os épicos**, por decisão do dono |
 
 ---
 
@@ -45,7 +45,11 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 **O que prova:** o seam S2 como o arquiteto exigiu — **dois tenants em toda rota**, e uma transação sem contexto lança erro em vez de retornar linha.
 
-### 1D · Deploy na VPS — **adiado por decisão do dono do produto**
+### 1D · Deploy na VPS — **movido para o fim de tudo, por decisão do dono do produto**
+
+> **Atualização.** A decisão original adiava o deploy para dentro do épico 5.
+> O dono do produto o moveu para **depois de todos os épicos**: a aplicação sobe
+> para a VPS quando estiver completa, e não antes.
 
 **Movido para depois do épico 5**, quando a aplicação estiver completa e testada localmente.
 
@@ -107,7 +111,8 @@ comodidades do Organizze que ainda não foram copiadas; nenhuma bloqueia o uso.
 
 ## Épico 5 — Mobile *(fim do MVP)*
 
-**Entrega:** os apps Android e iOS. **É aqui que a etapa 1D, o deploy na VPS, entra** — com a aplicação completa e testada localmente, conforme decidido.
+**Entrega:** os apps Android e iOS. ~~É aqui que a etapa 1D entra~~ — **o deploy
+saiu daqui** e foi para depois de todos os épicos, por decisão do dono.
 
 Expo · offline-first com fila durável e idempotência · lançamento em três toques · biometria · push · build e envio às lojas.
 
@@ -141,27 +146,26 @@ Sem modelo externo e sem treinar com dado de cliente, conforme suas decisões.
 
 ---
 
-## Épico 8 — Planejamento *(em andamento)*
+## Épico 8 — Planejamento ✅ **entregue**
 
-**Entrega:** ~~`Planejamento` com teto e piso~~ ✅ · `Objetivo` de acúmulo com aportes · alertas em basis points · `Recorrencia` com ancoragem de dia do mês.
+**Entrega:** `Planejamento` com teto e piso · `Objetivo` de acúmulo com aportes · alertas em basis points · `Recorrencia` com ancoragem de dia do mês.
 
 **O que prova:** a precedência global → raiz → subcategoria sem contagem dupla, e o alerta de teto que **não** dispara invertido.
 
-**Antecipado.** Esta etapa veio antes do épico 5 porque o épico 4 mostrou que
-rota testada e nunca exercida por uma tela esconde defeito — e porque
-planejamento é o que o cliente do Organizze usa todo mês.
+**Antecipado.** Veio antes do épico 5 porque o épico 4 mostrou que rota testada e
+nunca exercida por uma tela esconde defeito — e porque planejamento é o que o
+cliente do Organizze usa todo mês.
 
-O que ficou de pé: `Planejamento`, com o total sem contagem dupla e a cópia
-entre meses idempotente. O que falta:
+As três entidades e o alerta estão de pé. Duas ressalvas declaradas:
 
-| Falta | Depende de |
+| Ressalva | Pendência |
 |---|---|
-| `Objetivo` de acúmulo com aportes (ADR 0009) | nada — é o próximo |
-| `Recorrencia` com ancoragem de dia do mês | nada; **destrava o terceiro eixo de filtro** (`fixo`), hoje ausente por não haver o que filtrar |
-| Emissão do alerta em basis points | canal de notificação — e-mail (P-3) ou push (épico 5) |
+| O horizonte da recorrência não anda sozinho: materializa doze meses na escrita, e o job periódico precisa de agendador | P-8 |
+| O alerta é **derivado e visível na sessão**; nada avisa quem não abriu o app | P-9 |
 
-O cálculo do alerta já existe e é testado (`atingiu`, em `packages/domain`); o
-que não existe é para onde mandá-lo.
+**Ao fim você consegue:** planejar o mês, acompanhar um acúmulo de meses, deixar
+o aluguel e a assinatura se lançarem sozinhos, e ver num lugar só o que pede
+atenção.
 
 ---
 

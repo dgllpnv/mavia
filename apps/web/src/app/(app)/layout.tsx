@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSessao } from '../../componentes/provedores'
+import { Sino } from '../../componentes/sino'
 
 /**
  * O cromo do produto: barra sólida na cor da marca, cinco destinos à esquerda,
@@ -70,6 +71,8 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
 
         <div className="relative ml-auto flex items-center gap-16">
           <span className="hidden text-sm opacity-80 sm:inline">{espaco.nome}</span>
+
+          <Sino tenantId={espaco.id} />
 
           {/* Avatar de iniciais, e não foto. O teardown registra que o Organizze
               busca `picture` do provedor, o que cria uma requisição de saída da

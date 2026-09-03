@@ -297,70 +297,8 @@ export class ObjetivosController {
    * conclusão discordarem por um centavo em algum caso de borda — e a
    * discordância apareceria como um objetivo em 100% que nunca conclui.
    */
-  private async carregar(
-    c: PoolClient,
-    tenantId: string,
-    apenasId?: string,
-  ): Promise<Objetivo[]> {
-    const r = await c.query<{
-      id: string
-      nome: string
-      valor_alvo_centavos: string
-      prazo: Date | null
-      conta_id: string | null
-      saldo_base_centavos: string | null
-      concluido_em: Date | null
-      progresso: string
-      aportes: string
-    }>(
-      `SELECT o.id, o.nome, o.valor_alvo_centavos::text, o.prazo, o.conta_id,
-              o.saldo_base_centavos::text, o.concluido_em,
-              progresso_do_objetivo(o.*)::text AS progresso,
-              (SELECT count(*) FROM aportes a
-                WHERE a.tenant_id = o.tenant_id AND a.objetivo_id = o.id
-                  AND a.deleted_at IS NULL)::text AS aportes
-         FROM objetivos o
-        WHERE o.tenant_id = $1 AND o.deleted_at IS NULL
-          AND ($2::uuid IS NULL OR o.id = $2)
-        ORDER BY o.concluido_em NULLS FIRST, o.prazo NULLS LAST, o.criado_em`,
-      [tenantId, apenasId ?? null],
-    )
-
-    const hoje = dataCivilDe(new Date())
-
-    return r.rows.map((l): Objetivo => {
-      const alvo = dinheiro(BigInt(l.valor_alvo_centavos), 'BRL')
-      const progresso = dinheiro(BigInt(l.progresso), 'BRL')
-      const prazo = l.prazo === null ? null : diaCivil(l.prazo)
-
-      return {
-        id: l.id,
-        nome: l.nome,
-        valorAlvoCentavos: l.valor_alvo_centavos,
-        prazo,
-        contaId: l.conta_id,
-        saldoBaseCentavos: l.saldo_base_centavos,
-        progressoCentavos: l.progresso,
-        // Derivados no domínio, um lugar só. O estado tem precedência
-        // (concluído > vencido > ativo) e o consumo não é limitado a 100%.
-        consumoBp: consumoDoObjetivoEmBp(progresso, alvo),
-        estado: estadoDoObjetivo(
-          {
-            concluidoEm: l.concluido_em,
-            prazo:
-              prazo === null
-                ? null
-                : (() => {
-                    const [ano, mes, dia] = prazo.split('-').map(Number)
-                    return { ano: ano ?? 0, mes: mes ?? 0, dia: dia ?? 0 }
-                  })(),
-          },
-          hoje,
-        ),
-        concluidoEm: l.concluido_em?.toISOString() ?? null,
-        aportes: Number(l.aportes),
-      }
-    })
+  private carregar(c: PoolClient, tenantId: string, apenasId?: string): Promise<Objetivo[]> {
+    return objetivosDoEspaco(c, tenantId, apenasId)
   }
 
   private traduzir(erro: unknown): Error {
@@ -409,4 +347,78 @@ export class ObjetivosController {
 function diaCivil(d: Date): string {
   const doisDigitos = (n: number) => String(n).padStart(2, '0')
   return `${d.getUTCFullYear()}-${doisDigitos(d.getUTCMonth() + 1)}-${doisDigitos(d.getUTCDate())}`
+}
+
+
+/**
+ * Os objetivos do espaço, com progresso, consumo e estado apurados.
+ *
+ * Função de módulo pelo mesmo motivo dos planejamentos: a central de alertas
+ * precisa **deste** estado, e não de um recalculado ao lado.
+ */
+
+export async function objetivosDoEspaco(
+  c: PoolClient,
+  tenantId: string,
+  apenasId?: string,
+): Promise<Objetivo[]> {
+  const r = await c.query<{
+    id: string
+    nome: string
+    valor_alvo_centavos: string
+    prazo: Date | null
+    conta_id: string | null
+    saldo_base_centavos: string | null
+    concluido_em: Date | null
+    progresso: string
+    aportes: string
+  }>(
+    `SELECT o.id, o.nome, o.valor_alvo_centavos::text, o.prazo, o.conta_id,
+            o.saldo_base_centavos::text, o.concluido_em,
+            progresso_do_objetivo(o.*)::text AS progresso,
+            (SELECT count(*) FROM aportes a
+              WHERE a.tenant_id = o.tenant_id AND a.objetivo_id = o.id
+                AND a.deleted_at IS NULL)::text AS aportes
+       FROM objetivos o
+      WHERE o.tenant_id = $1 AND o.deleted_at IS NULL
+        AND ($2::uuid IS NULL OR o.id = $2)
+      ORDER BY o.concluido_em NULLS FIRST, o.prazo NULLS LAST, o.criado_em`,
+    [tenantId, apenasId ?? null],
+  )
+
+  const hoje = dataCivilDe(new Date())
+
+  return r.rows.map((l): Objetivo => {
+    const alvo = dinheiro(BigInt(l.valor_alvo_centavos), 'BRL')
+    const progresso = dinheiro(BigInt(l.progresso), 'BRL')
+    const prazo = l.prazo === null ? null : diaCivil(l.prazo)
+
+    return {
+      id: l.id,
+      nome: l.nome,
+      valorAlvoCentavos: l.valor_alvo_centavos,
+      prazo,
+      contaId: l.conta_id,
+      saldoBaseCentavos: l.saldo_base_centavos,
+      progressoCentavos: l.progresso,
+      // Derivados no domínio, um lugar só. O estado tem precedência
+      // (concluído > vencido > ativo) e o consumo não é limitado a 100%.
+      consumoBp: consumoDoObjetivoEmBp(progresso, alvo),
+      estado: estadoDoObjetivo(
+        {
+          concluidoEm: l.concluido_em,
+          prazo:
+            prazo === null
+              ? null
+              : (() => {
+                  const [ano, mes, dia] = prazo.split('-').map(Number)
+                  return { ano: ano ?? 0, mes: mes ?? 0, dia: dia ?? 0 }
+                })(),
+        },
+        hoje,
+      ),
+      concluidoEm: l.concluido_em?.toISOString() ?? null,
+      aportes: Number(l.aportes),
+    }
+  })
 }

@@ -69,6 +69,8 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // idempotente pela identidade da ocorrência.
   ['POST /v1/recorrencias/materializar', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/alertas', { papeis: TODOS }],
+
   ['GET /v1/categorias', { papeis: TODOS }],
   ['POST /v1/categorias', { papeis: QUEM_ESCREVE }],
   ['PATCH /v1/categorias/:id', { papeis: QUEM_ESCREVE }],

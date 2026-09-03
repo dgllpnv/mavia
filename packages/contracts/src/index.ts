@@ -580,3 +580,33 @@ export const zRecorrencia = z.object({
 export type CriarRecorrencia = z.infer<typeof zCriarRecorrencia>
 export type AlterarRecorrencia = z.infer<typeof zAlterarRecorrencia>
 export type Recorrencia = z.infer<typeof zRecorrencia>
+
+// ---------------------------------------------------------------------------
+// Alertas — derivados do estado, nunca armazenados
+// ---------------------------------------------------------------------------
+/**
+ * Não há tabela de notificações, e a ausência é escolha: uma tabela precisaria
+ * ser mantida em sincronia com o estado que descreve, e um alerta de "teto
+ * estourado" que sobrevive ao estorno que desestourou o teto é pior do que
+ * alerta nenhum.
+ */
+export const zAlerta = z.object({
+  tipo: z.enum([
+    'teto',
+    'piso',
+    'objetivo_vencido',
+    'objetivo_concluido',
+    'lancamento_em_atraso',
+    'fatura_vencida',
+  ]),
+  /** Ordena a lista. Urgente é o que custa dinheiro se ficar mais um dia. */
+  severidade: z.enum(['urgente', 'atencao', 'informacao']),
+  titulo: z.string(),
+  detalhe: z.string(),
+  /** Rota da web para onde o alerta leva. Aviso sem destino é aviso inútil. */
+  destino: z.string(),
+  /** Identidade estável do alerta, para o dia em que houver "marcar como visto". */
+  chave: z.string(),
+})
+
+export type Alerta = z.infer<typeof zAlerta>
