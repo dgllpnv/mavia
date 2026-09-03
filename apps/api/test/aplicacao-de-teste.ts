@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { Pool } from 'pg'
 import Redis from 'ioredis'
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis'
+import { RedisContainer } from '@testcontainers/redis'
 import type { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { criarAplicacao } from '../src/aplicacao.js'
 import { autenticadorDeSessao } from '../src/autenticacao/autenticador.js'

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { chamar, ErroDaApi } from '../../../api/cliente'
-import { Cartao, Vazio } from '../../../componentes/cartao'
+import { Cartao } from '../../../componentes/cartao'
 import { Modal } from '../../../componentes/modal'
 import { useSessao } from '../../../componentes/provedores'
 

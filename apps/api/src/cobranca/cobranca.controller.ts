@@ -175,11 +175,21 @@ export class WebhookController {
     if (!evento.success) throw new BadRequestException('Evento em formato desconhecido.')
 
     const { id, type, data } = evento.data
-    const subscription = String(
-      (data.object as { subscription?: unknown; id?: unknown }).subscription ??
-        (data.object as { id?: unknown }).id ??
-        '',
-    )
+
+    /**
+     * O id da assinatura, e **só quando ele é uma string**.
+     *
+     * A Stripe devolve `subscription` como id ou como **objeto expandido**,
+     * conforme o que foi pedido na criação do evento. Um `String(objeto)` daria
+     * `[object Object]` — e todas as assinaturas do mundo passariam a colidir
+     * na mesma chave, num caminho que decide o estado de cobrança de clientes.
+     * O lint encontrou; o defeito só apareceria com um evento expandido.
+     */
+    const texto = (valor: unknown): string | null =>
+      typeof valor === 'string' && valor.length > 0 ? valor : null
+
+    const alvo = data.object as { subscription?: unknown; id?: unknown }
+    const subscription = texto(alvo.subscription) ?? texto(alvo.id) ?? ''
 
     return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
       // Defesa 1: o id do evento é a chave primária. Reenvio é conflito, e
@@ -314,7 +324,7 @@ export async function lerAssinatura(c: PoolClient, tenantId: string): Promise<As
   const linha = r.rows[0]
   if (!linha) throw new BadRequestException('Este espaço não tem assinatura.')
 
-  const codigo = (planoDoCatalogo(linha.plano)?.codigo ?? 'pessoal') as CodigoDoPlano
+  const codigo = (planoDoCatalogo(linha.plano)?.codigo ?? 'pessoal')
   const cotas = cotasVigentes(linha.estado, codigo)
 
   const uso = await c.query<{ pessoas: string; espacos: string }>(

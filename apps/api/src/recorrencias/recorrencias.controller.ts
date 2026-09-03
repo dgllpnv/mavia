@@ -22,8 +22,6 @@ import {
 import {
   competenciaDe,
   formatarDataCivil,
-  inicioDoDiaCivil,
-  ocorrencias,
   proximaOcorrencia,
   type Competencia,
   type RegraDeRecorrencia,
@@ -318,11 +316,6 @@ export class RecorrenciasController {
 
 function doisDigitos(n: number): string {
   return String(n).padStart(2, '0')
-}
-
-function avancar(c: Competencia, meses: number): Competencia {
-  const total = c.ano * 12 + (c.mes - 1) + meses
-  return { ano: Math.floor(total / 12), mes: (total % 12) + 1 }
 }
 
 /**

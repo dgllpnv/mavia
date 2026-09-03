@@ -3,7 +3,7 @@
 import type { Categoria, Conta } from '@mavia/contracts'
 import { dataCivilDe, fimDoDiaCivil, formatarDataCivil } from '@mavia/domain'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { chamar, ErroDaApi } from '../api/cliente'
 import { CampoDeValor } from './campo-de-valor'
 import { Interruptor } from './interruptor'
@@ -90,19 +90,38 @@ export function FormularioDeLancamento({
    * saldo` é **não-analítica**: como padrão, faria quem lança às pressas
    * registrar gastos que nunca apareceriam em relatório nenhum.
    */
-  const disponiveis = [...categorias]
-    .filter((c) => c.natureza === (ehTransferencia ? 'despesa' : natureza) && !c.arquivada)
-    .sort((a, b) => {
-      if (a.analitica !== b.analitica) return a.analitica ? -1 : 1
-      if (a.sistema !== b.sistema) return a.sistema ? 1 : -1
-      return a.nome.localeCompare(b.nome, 'pt-BR')
-    })
+  const disponiveis = useMemo(
+    () =>
+      [...categorias]
+        .filter((c) => c.natureza === (ehTransferencia ? 'despesa' : natureza) && !c.arquivada)
+        .sort((a, b) => {
+          if (a.analitica !== b.analitica) return a.analitica ? -1 : 1
+          if (a.sistema !== b.sistema) return a.sistema ? 1 : -1
+          return a.nome.localeCompare(b.nome, 'pt-BR')
+        }),
+    [categorias, natureza, ehTransferencia],
+  )
 
+  /**
+   * A categoria escolhida acompanha a lista quando ela muda.
+   *
+   * As dependências eram `[natureza, categorias]`, e **faltava
+   * `ehTransferencia`** — que também decide a lista. Trocar para transferência
+   * filtrava as categorias para `despesa` e deixava a escolhida intacta: o
+   * seletor passava a apontar para uma categoria que não estava mais na lista,
+   * e o lançamento saía com a natureza errada. Foi o `exhaustive-deps` que
+   * encontrou, e é o defeito de React mais caro que existe — ele não quebra,
+   * mostra o número de ontem.
+   *
+   * O `useMemo` acima é o que permite depender da lista em vez de tentar
+   * enumerar de novo o que a produz: um array novo a cada render faria o efeito
+   * rodar sempre.
+   */
   useEffect(() => {
     if (!disponiveis.some((c) => c.id === categoriaId)) {
       setCategoriaId(disponiveis[0]?.id ?? '')
     }
-  }, [natureza, categorias])
+  }, [disponiveis, categoriaId])
 
   /**
    * A conta escolhida acompanha a lista quando ela chega.

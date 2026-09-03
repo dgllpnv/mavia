@@ -90,7 +90,7 @@ export default function Plano() {
       )}
 
       <div className="mt-16 grid gap-16 lg:grid-cols-3">
-        {(Object.values(PLANOS) as (typeof PLANOS)[CodigoDoPlano][]).map((p) => {
+        {(Object.values(PLANOS)).map((p) => {
           const atual = a?.plano === p.codigo
           const valor = intervalo === 'anual' ? p.anual : p.mensal
 

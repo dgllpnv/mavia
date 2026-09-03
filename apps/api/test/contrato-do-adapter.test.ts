@@ -75,7 +75,7 @@ describe('C2 · adapter `nao-aplicavel` não toca em rede', () => {
     const original = globalThis.fetch
     globalThis.fetch = (() => {
       throw new Error('o adapter abriu rede numa revogação que não tem lado de lá')
-    }) as typeof fetch
+    })
 
     try {
       const r = await adapter.revogar(alvo({ provider: adapter.nome }), opcoes())

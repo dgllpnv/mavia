@@ -23,8 +23,6 @@ let cartaoId = ''
 let categoriaId = ''
 let contaId = ''
 
-/** Um ciclo inteiramente no passado, para poder fechar e pagar de verdade. */
-const CICLO_PASSADO = { ano: 2026, mes: 6 }
 const COMPRA_PASSADA = '2026-06-10T15:00:00.000Z'
 
 /** Um ciclo que ainda não fechou na data de hoje (2026-09-02). */

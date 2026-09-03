@@ -154,7 +154,7 @@ test.describe('o extrato do mês', () => {
       textos.length - 1,
     )
 
-    const saldoDoDia = (i: number) => centavosDe(cabecalhos[i]!.split('saldo no dia')[1] ?? '')
+    const saldoDoDia = (i: number) => centavosDe(cabecalhos[i].split('saldo no dia')[1] ?? '')
 
     expect(saldoDoDia(indice)).toBe(saldoDoDia(indice + 1))
   })

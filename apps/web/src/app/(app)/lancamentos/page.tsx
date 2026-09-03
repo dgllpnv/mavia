@@ -541,6 +541,6 @@ function rotuloDoDia(chave: string): string {
   const [ano, mes, dia] = chave.split('-').map(Number)
   // `Date.UTC` e leitura em UTC: a data já é civil, e reinterpretá-la no fuso do
   // navegador a moveria de volta um dia.
-  const d = new Date(Date.UTC(ano!, mes! - 1, dia!))
+  const d = new Date(Date.UTC(ano!, mes! - 1, dia))
   return `${DIAS_DA_SEMANA[d.getUTCDay()]}, ${dia} de ${MESES_CURTOS[mes! - 1]}`
 }

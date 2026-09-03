@@ -13,12 +13,17 @@
     "dev": "turbo run dev",
     "db:migrate": "pnpm --filter @mavia/api db:migrate",
     "db:seed": "pnpm --filter @mavia/api db:seed",
-    "e2e": "pnpm --filter @mavia/web e2e"
+    "e2e": "pnpm --filter @mavia/web e2e",
+    "lint": "turbo run lint",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "tsx": "^4.23.13",
     "turbo": "^2",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "typescript-eslint": "^8.69.0"
   }
 }

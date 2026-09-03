@@ -14,7 +14,6 @@ let api: ApiDeTeste
 let conta = ''
 let alimentacao = ''
 let transporte = ''
-let receita = ''
 
 const DE = { usuario: USUARIO_A, tenant: TENANT_A }
 const pedir = (metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, corpo?: unknown) =>
@@ -54,7 +53,10 @@ beforeAll(async () => {
 
   alimentacao = await criarCategoria('Alimentação', 'despesa')
   transporte = await criarCategoria('Transporte', 'despesa')
-  receita = await criarCategoria('Salário', 'receita')
+  // A categoria de receita precisa existir no espaço — a classificação escolhe
+  // entre as da natureza certa —, mas nenhum caso deste arquivo referencia o id
+  // dela. Guardá-lo numa variável que ninguém lê foi o que o lint encontrou.
+  await criarCategoria('Salário', 'receita')
 }, 180_000)
 
 afterAll(async () => {

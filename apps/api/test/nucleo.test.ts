@@ -21,10 +21,6 @@ const AGORA = new Date('2026-09-15T12:00:00Z')
 const DE = new Date('2026-09-01T03:00:00Z') // 00h de 1º/set em São Paulo
 const ATE = new Date('2026-10-01T03:00:00Z')
 
-/** Executa como superusuário: os testes precisam montar cenários. */
-async function comoDono<T>(trabalho: (c: PoolClient) => Promise<T>): Promise<T> {
-  return trabalho(banco.cliente as unknown as PoolClient)
-}
 
 async function lancar(dados: {
   conta: string

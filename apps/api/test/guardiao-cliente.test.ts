@@ -53,7 +53,7 @@ function subir(socket: string, diario: string): Promise<ChildProcessWithoutNullS
   const filho = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
     cwd: RAIZ,
     env: { ...process.env, MAVIA_GUARDIAO_SOCKET: socket, MAVIA_GUARDIAO_DIARIO: diario },
-  }) as ChildProcessWithoutNullStreams
+  })
 
   return esperar(filho, /escutando/).then(() => filho)
 }

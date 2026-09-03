@@ -59,7 +59,7 @@ export default function Recuperar() {
         </>
       ) : (
         <>
-          <form onSubmit={enviar} className="mt-44 flex flex-col gap-20" noValidate>
+          <form onSubmit={(e) => void enviar(e)} className="mt-44 flex flex-col gap-20" noValidate>
             <label className="flex flex-col gap-6">
               <span className="rotulo">E-mail</span>
               <input

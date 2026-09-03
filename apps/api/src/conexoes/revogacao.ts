@@ -99,7 +99,7 @@ export async function revogarConexao(
     const segredo = await decifrarSeHouver(deps, ctx, conexaoId, adapter, atual)
 
     const destruicao = await destruir(c, conexaoId, ctx, motivo, remotaInicial)
-    return { ...destruicao, adapter: adapter as BankSyncProvider | null, atual, segredo }
+    return { ...destruicao, adapter: adapter, atual, segredo }
   })
 
   if (fase1.jaEstavaRevogada) {

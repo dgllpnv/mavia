@@ -1,6 +1,6 @@
 import { hash } from '@node-rs/argon2'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
+import { TENANT_A, USUARIO_A, USUARIO_B } from './postgres.js'
 import { subirApi, type ApiDeTeste } from './aplicacao-de-teste.js'
 
 /**

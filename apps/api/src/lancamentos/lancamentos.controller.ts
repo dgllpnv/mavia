@@ -42,8 +42,13 @@ export class LancamentosController {
 
   /** Janela semiaberta `[de, ate)`, como toda janela do domínio. */
   private janela(query: Record<string, unknown>): { de: Date; ate: Date } {
-    const de = new Date(String(query['de'] ?? ''))
-    const ate = new Date(String(query['ate'] ?? ''))
+    // `?de[x]=1` chega como **objeto**, e `String(objeto)` daria
+    // `[object Object]`. O resultado seria o mesmo 400, por acaso; exigir a
+    // string torna a recusa uma decisão em vez de um efeito colateral de
+    // `new Date` não entender o que recebeu.
+    const texto = (valor: unknown): string => (typeof valor === 'string' ? valor : '')
+    const de = new Date(texto(query['de']))
+    const ate = new Date(texto(query['ate']))
     if (Number.isNaN(de.getTime()) || Number.isNaN(ate.getTime())) {
       throw new BadRequestException('Informe o período em `de` e `ate`, em ISO 8601.')
     }

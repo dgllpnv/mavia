@@ -88,7 +88,7 @@ export function TrilhoDeCiclo({ fechamento, vencimento, hoje = new Date() }: Tri
  */
 function diaEmUtc(civil: string): Date {
   const [ano, mes, dia] = civil.split('-').map(Number)
-  return new Date(Date.UTC(ano!, mes! - 1, dia!))
+  return new Date(Date.UTC(ano!, mes! - 1, dia))
 }
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
