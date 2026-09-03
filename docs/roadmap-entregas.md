@@ -19,7 +19,7 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 ---
 
-## Épico 1 — Fundação — **entregue, menos o deploy (1D)**
+## Épico 1 — Fundação ✅ **entregue**
 
 ### 1B · Autenticação — ✅ **entregue**
 
@@ -45,7 +45,29 @@ Não há estimativa de prazo. O que existe é ordem e dependência: cada etapa s
 
 **O que prova:** o seam S2 como o arquiteto exigiu — **dois tenants em toda rota**, e uma transação sem contexto lança erro em vez de retornar linha.
 
-### 1D · Deploy na VPS — **o único passo que falta em todo o roadmap**
+### 1D · Deploy na VPS — ✅ **entregue em 2026-09-03**
+
+**No ar em `https://mavia.o9cmue.easypanel.host`**, com TLS válido e HTTP
+redirecionando. Runbook completo em `infra/producao/README.md`.
+
+A VPS não estava vazia: 24 containers de produção de outros negócios, em Swarm
+sob o EasyPanel. A Mavia entra **ao lado** — containers comuns, descobertos pelo
+Traefik por label, sem escrever no arquivo que o painel gera. Nenhum vizinho
+ficou doente, e a carga não passou de 1.6 de 4 CPUs durante os builds.
+
+Só o `web` encara a internet. Postgres e Redis vivem numa rede sem rota de
+saída; só a API tem saída, porque precisa do SMTP e do Google.
+
+**O que o deploy encontrou, e que nenhum teste pegaria:** o build local
+contaminado por uma extensão de editor, o `??` que não cai no padrão para string
+vazia (o `rewrite` de `/api` saiu sem host), o `psql -c` que não interpola
+variável, e — a mais séria — `eventos_de_cobranca` como a única tabela com
+`tenant_id` e sem RLS, achada consultando o banco de produção.
+
+**O que falta para ser usável:** o SMTP. Sem ele não existe caminho para criar a
+primeira conta.
+
+### O texto original
 
 > **Atualização.** A decisão original adiava o deploy para dentro do épico 5.
 > O dono do produto o moveu para **depois de todos os épicos**: a aplicação sobe
