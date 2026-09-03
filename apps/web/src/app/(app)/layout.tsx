@@ -25,6 +25,7 @@ const DESTINOS = [
   { href: '/cartoes', rotulo: 'cartões' },
   { href: '/planejamento', rotulo: 'planejamento' },
   { href: '/objetivos', rotulo: 'objetivos' },
+  { href: '/relatorios', rotulo: 'relatórios' },
   { href: '/contas', rotulo: 'contas' },
   { href: '/categorias', rotulo: 'categorias' },
 ] as const

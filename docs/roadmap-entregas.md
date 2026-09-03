@@ -214,11 +214,31 @@ atenção.
 
 ---
 
-## Épico 9 — Relatórios
+## Épico 9 — Relatórios ✅ **entregue**
 
 **Entrega:** gráficos na direção visual · comparação de períodos · o seletor de base temporal no cabeçalho · exportação enumerando as 26 entidades.
 
 A exportação aqui é também o cumprimento do direito de portabilidade.
+
+### O que prova
+
+**O seletor de base fica no cabeçalho, e a base viaja na resposta.** "Quanto
+gastei em março" tem três respostas certas, e elas diferem em centenas de reais
+para quem parcela. Há teste para as três: por data da compra a parcelada aparece
+inteira no mês da compra; por data da parcela, só a parcela.
+
+**A comparação é calculada pelo servidor, nos dois lados.** É a invariante do
+glossário — bases ou fronteiras distintas produzem variação inventada —, e
+deixar o cliente montar duas chamadas convidaria exatamente esse erro.
+
+**A exportação tem um teste que falha no futuro:** ele compara a lista escrita
+de tabelas com as tabelas que têm `tenant_id`, e falha quando alguém cria uma
+tabela nova sem decidir se ela é dado do titular. Ele já pegou uma.
+
+Dois defeitos de tela apareceram na verificação e foram corrigidos: o delta da
+comparação saía verde com "+" ao lado de "gastou mais" — a tela se contradizendo
+na mesma linha —, e o gráfico de doze meses pulava os meses sem movimento,
+comprimindo o eixo do tempo.
 
 ---
 

@@ -10,6 +10,8 @@ import { CartoesController } from './cartoes/cartoes.controller.js'
 import { SessoesController } from './autenticacao/sessoes.controller.js'
 import { CategoriasController } from './categorias/categorias.controller.js'
 import { AlertasController } from './alertas/alertas.controller.js'
+import { ExportacaoController } from './exportacao/exportacao.controller.js'
+import { RelatoriosController } from './relatorios/relatorios.controller.js'
 import { AlterarLancamentoController, RegrasController } from './classificacao/classificacao.controller.js'
 import { ConciliacoesController, ImportacaoController } from './importacao/importacao.controller.js'
 import { IdempotenciaInterceptor } from './idempotencia/idempotencia.interceptor.js'
@@ -31,6 +33,8 @@ export class AppModule {
         ContasController,
         CategoriasController,
         AlertasController,
+        RelatoriosController,
+        ExportacaoController,
         RegrasController,
         AlterarLancamentoController,
         ImportacaoController,

@@ -96,6 +96,14 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // `A classificar` e não havia caminho nenhum para movê-las.
   ['PATCH /v1/lancamentos/:id', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/relatorios/por-categoria', { papeis: TODOS }],
+  ['GET /v1/relatorios/evolucao', { papeis: TODOS }],
+  ['GET /v1/relatorios/comparacao', { papeis: TODOS }],
+
+  // Exportar é o direito de portabilidade da LGPD, e ele é **do titular**.
+  // Um visualizador convidado não leva o espaço inteiro embora num arquivo.
+  ['GET /v1/exportacao', { papeis: SO_DONO }],
+
   ['GET /v1/alertas', { papeis: TODOS }],
 
   ['GET /v1/categorias', { papeis: TODOS }],
