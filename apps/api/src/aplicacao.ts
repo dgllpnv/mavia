@@ -8,6 +8,7 @@ import { ErroInesperadoFilter } from './observabilidade/erro-inesperado.filter.j
 import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
 import type { Mensageiro } from './mensageiro/mensageiro.js'
+import type { EstadoDoOauth } from './redis/estado-do-oauth.js'
 import {
   chaveDaRota,
   ROTAS_SEM_TENANT,
@@ -30,9 +31,10 @@ export async function criarAplicacao(
   cofre: CofreDeAcesso,
   limite: LimiteDeTentativas,
   mensageiro?: Mensageiro,
+  estadoDoOauth?: EstadoDoOauth,
 ): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.comPool(pool, cofre, limite, mensageiro),
+    AppModule.comPool(pool, cofre, limite, mensageiro, estadoDoOauth),
     new FastifyAdapter(),
     { logger: false },
   )

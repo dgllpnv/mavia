@@ -234,6 +234,28 @@ export const api = {
     return r
   },
 
+  /**
+   * Começa a entrada pelo Google.
+   *
+   * A rota **devolve a URL** em vez de responder 302: um redirecionamento numa
+   * resposta de `fetch` seria seguido pelo navegador sem que a aplicação visse
+   * o que aconteceu. Quem navega é esta camada, e de propósito.
+   */
+  entrarComGoogle: (destino?: string) =>
+    chamar<{ url: string }>('/auth/google', {
+      metodo: 'POST',
+      corpo: destino ? { destino } : {},
+    }),
+
+  async retornoDoGoogle(codigo: string, state: string): Promise<Eu & { destino: string }> {
+    const r = await chamar<Eu & { acesso: string; destino: string }>('/auth/google/retorno', {
+      metodo: 'POST',
+      corpo: { codigo, state, plataforma: 'web' },
+    })
+    guardarAcesso(r.acesso)
+    return r
+  },
+
   recuperarSenha: (email: string) =>
     chamar<{ mensagem: string }>('/senha/recuperar', { metodo: 'POST', corpo: { email } }),
 

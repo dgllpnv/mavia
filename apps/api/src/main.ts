@@ -4,6 +4,7 @@ import { criarAplicacao } from './aplicacao.js'
 import { autenticadorDeSessao } from './autenticacao/autenticador.js'
 import { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
+import { EstadoDoOauth } from './redis/estado-do-oauth.js'
 import { agendarMaterializacao } from './recorrencias/agendador.js'
 
 /**
@@ -30,7 +31,14 @@ async function principal(): Promise<void> {
     process.env['MAVIA_PEPPER_TENTATIVAS'] ?? 'pepper-local-de-desenvolvimento',
   )
 
-  const app = await criarAplicacao(pool, autenticadorDeSessao(pool, cofre), cofre, limite)
+  const app = await criarAplicacao(
+    pool,
+    autenticadorDeSessao(pool, cofre),
+    cofre,
+    limite,
+    undefined,
+    new EstadoDoOauth(redis),
+  )
 
   // O horizonte da recorrência passa a andar sozinho — pendência P-8.
   const agendador = await agendarMaterializacao(pool, redis)

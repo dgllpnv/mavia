@@ -7,6 +7,7 @@ import { criarAplicacao } from '../src/aplicacao.js'
 import { autenticadorDeSessao } from '../src/autenticacao/autenticador.js'
 import { CofreDeAcesso } from '../src/redis/cofre-de-acesso.js'
 import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
+import { EstadoDoOauth } from '../src/redis/estado-do-oauth.js'
 import type { Mensageiro, Mensagem } from '../src/mensageiro/mensageiro.js'
 import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTeste } from './postgres.js'
 
@@ -89,6 +90,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
     cofre,
     limite,
     mensageiro,
+    new EstadoDoOauth(redis),
   )
   await app.init()
 

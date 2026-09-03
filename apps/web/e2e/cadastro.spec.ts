@@ -120,7 +120,7 @@ test.describe('recuperação de senha', () => {
     await page.goto('/entrar')
     await page.getByLabel('E-mail').fill(EMAIL)
     await page.getByLabel('Senha').fill('a segunda senha bem comprida')
-    await page.getByRole('button', { name: 'Entrar' }).click()
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 
     await expect(page.getByRole('link', { name: 'lançamentos' })).toBeVisible({
       timeout: 15_000,

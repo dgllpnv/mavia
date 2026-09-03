@@ -23,6 +23,8 @@ import { RecorrenciasController } from './recorrencias/recorrencias.controller.j
 import { ConexoesController } from './conexoes/conexoes.controller.js'
 import { ClienteDoGuardiao, GUARDIAO } from './guardiao/cliente.js'
 import { CadastroController } from './autenticacao/cadastro.controller.js'
+import { GoogleController } from './autenticacao/google.controller.js'
+import { ESTADO_OAUTH, EstadoDoOauth } from './redis/estado-do-oauth.js'
 import { MENSAGEIRO, mensageiroDoAmbiente, type Mensageiro } from './mensageiro/mensageiro.js'
 
 @Module({})
@@ -33,12 +35,19 @@ export class AppModule {
     limite: LimiteDeTentativas,
     /** O arreio de teste injeta um mensageiro que guarda em vez de enviar. */
     mensageiro?: Mensageiro,
+    /**
+     * O estado das tentativas de entrada pelo Google. Precisa do Redis, que
+     * quem monta o processo já tem — construí-lo aqui obrigaria este módulo a
+     * conhecer a conexão.
+     */
+    estadoDoOauth?: EstadoDoOauth,
   ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
         SessoesController,
         CadastroController,
+        GoogleController,
         ContasController,
         CategoriasController,
         AlertasController,
@@ -67,6 +76,7 @@ export class AppModule {
         // que importa vive no processo do guardião, do outro lado do socket.
         { provide: GUARDIAO, useValue: new ClienteDoGuardiao() },
         { provide: MENSAGEIRO, useValue: mensageiro ?? mensageiroDoAmbiente() },
+        { provide: ESTADO_OAUTH, useValue: estadoDoOauth },
         // Global de propósito: idempotência escrita rota a rota é idempotência
         // que falta na rota nova. Aqui é propriedade do transporte, e vale para
         // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda

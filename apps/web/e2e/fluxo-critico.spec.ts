@@ -37,7 +37,7 @@ async function entrar(page: Page) {
   await page.goto('/entrar')
   await page.getByLabel('E-mail').fill(EMAIL)
   await page.getByLabel('Senha').fill(SENHA)
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible()
 }
 
@@ -78,7 +78,7 @@ test.describe('entrada na plataforma', () => {
     await page.goto('/entrar')
     await page.getByLabel('E-mail').fill(EMAIL)
     await page.getByLabel('Senha').fill('não é essa')
-    await page.getByRole('button', { name: 'Entrar' }).click()
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 
     // Dentro do formulário: o Next mantém um `role="alert"` próprio para
     // anunciar mudança de rota, e `getByRole('alert')` solto pega os dois.

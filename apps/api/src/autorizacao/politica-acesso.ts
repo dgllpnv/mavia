@@ -193,6 +193,10 @@ export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
   'POST /v1/cadastro/confirmar',
   'POST /v1/senha/recuperar',
   'POST /v1/senha/redefinir',
+  // A entrada pelo Google. Quem começa não tem sessão, e quem volta ainda
+  // não tem: o espaço só é escolhido depois de a identidade existir.
+  'POST /v1/auth/google',
+  'POST /v1/auth/google/retorno',
 ])
 
 /** Dispensa até a sessão. Uma entrada a mais aqui é uma porta a mais. */
@@ -214,6 +218,11 @@ export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   'POST /v1/cadastro/confirmar',
   'POST /v1/senha/recuperar',
   'POST /v1/senha/redefinir',
+  // A credencial destas duas é o `state` de uso único e o `id_token`
+  // assinado pelo Google, verificados na própria rota. Sessão aqui seria
+  // exigir o que elas existem para produzir.
+  'POST /v1/auth/google',
+  'POST /v1/auth/google/retorno',
 ])
 
 export function chaveDaRota(rota: Rota): string {
