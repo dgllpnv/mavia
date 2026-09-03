@@ -73,6 +73,19 @@ beforeAll(async () => {
 
   await api.pedir({
     metodo: 'POST',
+    url: `/v1/cartoes/${cartaoId}/compras`,
+    usuario: USUARIO_A,
+    tenant: TENANT_A,
+    corpo: {
+      categoriaId,
+      valorCentavos: '-4500',
+      postedAt: COMPRA,
+      descricao: 'Café à vista',
+    },
+  })
+
+  await api.pedir({
+    metodo: 'POST',
     url: '/v1/lancamentos',
     usuario: USUARIO_A,
     tenant: TENANT_A,
@@ -133,10 +146,38 @@ describe('os campos que faltavam na listagem', () => {
     expect(livro.faturaId).toBeNull()
   })
 
-  it('a origem vem junto — é o terceiro eixo de filtro do extrato', async () => {
+  it('a origem distingue o que foi digitado do que veio de outro lugar', async () => {
+    // O terceiro eixo de filtro do extrato. `lancamento_origem` tem cinco
+    // valores no banco — e **não** são os mesmos de `origem_do_dado`, que é o
+    // enum de `contas`. Reusar um tipo para os dois é como o contrato passou a
+    // prometer `conectado` num campo onde ele não existe.
     const itens = (await listar(JANELA)).json().itens
 
-    for (const l of itens) expect(['manual', 'conectado']).toContain(l.origem)
+    for (const l of itens) {
+      expect(['manual', 'importado', 'recorrencia', 'parcelamento', 'ajuste']).toContain(l.origem)
+    }
+  })
+
+  it('a parcela nasce com origem `parcelamento`, e não `manual`', async () => {
+    // Sem isto a coluna existe e não significa nada: o filtro por origem não
+    // teria como separar o que foi parcelado, e o usuário veria "parcelado" numa
+    // lista que devolve tudo.
+    const itens = (await listar(JANELA)).json().itens
+    const parcela = itens.find((l: { descricao: string }) => l.descricao.startsWith('Bicicleta'))
+    const livro = itens.find((l: { descricao: string }) => l.descricao === 'Livro')
+
+    expect(parcela.origem).toBe('parcelamento')
+    expect(livro.origem).toBe('manual')
+  })
+
+  it('compra à vista no cartão não é parcelamento', async () => {
+    // "1/1" não é parcelamento, e marcar como tal poria compras à vista no
+    // filtro de parceladas — onde a pessoa procura compromisso futuro.
+    const itens = (await listar(JANELA)).json().itens
+    const avista = itens.find((l: { descricao: string }) => l.descricao === 'Café à vista')
+
+    expect(avista.origem).toBe('manual')
+    expect(avista.installmentGroupId).toBeNull()
   })
 })
 
@@ -161,13 +202,20 @@ describe('listar os lançamentos de uma fatura', () => {
     const r = await listar(`faturaId=${primeira.id}`)
 
     expect(r.statusCode).toBe(200)
-    expect(r.json().itens).toHaveLength(1)
-    expect(r.json().itens[0]).toMatchObject({
-      descricao: 'Bicicleta 1/6',
-      installmentNumero: 1,
-      installmentTotal: 6,
-      faturaId: primeira.id,
-    })
+    // A primeira fatura recebe a parcela 1 **e** a compra à vista do mesmo
+    // ciclo — que é a composição real de uma fatura, e não uma coisa só.
+    expect(r.json().itens).toHaveLength(2)
+    expect(r.json().itens).toContainEqual(
+      expect.objectContaining({
+        descricao: 'Bicicleta 1/6',
+        installmentNumero: 1,
+        installmentTotal: 6,
+        faturaId: primeira.id,
+      }),
+    )
+    expect(r.json().itens).toContainEqual(
+      expect.objectContaining({ descricao: 'Café à vista', installmentNumero: null }),
+    )
   })
 
   it('a soma dos lançamentos da fatura é o total dela', async () => {

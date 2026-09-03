@@ -11,6 +11,7 @@ import { useEspaco } from '../../../componentes/provedores'
 import { Trilho } from '../../../componentes/trilho'
 import { Valor } from '../../../componentes/valor'
 import { FormularioDeLancamento } from '../../../componentes/formulario-de-lancamento'
+import { DetalheDoLancamento } from '../../../componentes/detalhe-do-lancamento'
 
 /**
  * Extrato.
@@ -32,6 +33,19 @@ export default function Lancamentos() {
   )
   const [estado, setEstado] = useState<'todos' | 'previsto' | 'pendente' | 'efetivado'>('todos')
   const [lancando, setLancando] = useState(false)
+  const [aberto, setAberto] = useState<Lancamento | null>(null)
+
+  /**
+   * O terceiro eixo: **origem**.
+   *
+   * O `Tipo` do Organizze colapsa natureza, estado e origem em treze opções
+   * lineares; aqui são três seletores independentes de três a quatro valores.
+   *
+   * `fixo` não está aqui porque recorrência ainda não existe (épico 8). Ele
+   * entra junto com ela — oferecer um filtro que devolve sempre vazio é pior do
+   * que não oferecer.
+   */
+  const [origem, setOrigem] = useState<'todas' | 'parcelado' | 'importado' | 'digitado'>('todas')
 
   const periodo = periodoDe(mes.ano, mes.mes)
 
@@ -71,13 +85,23 @@ export default function Lancamentos() {
     [categorias.data, contas.data],
   )
 
+  /**
+   * Há filtro ativo?
+   *
+   * Importa porque o **saldo no dia** e o rodapé só significam alguma coisa
+   * sobre o mês inteiro. Acumular sobre um subconjunto dá um número que parece
+   * saldo e não é — e um número que parece certo e está errado é pior do que
+   * nenhum número.
+   */
+  const filtrado = natureza !== 'todas' || estado !== 'todos' || origem !== 'todas'
+
   const dias = useMemo(
     () =>
       comSaldoAcumulado(
-        agruparPorDia(filtrar(lista.data?.itens ?? [], natureza, estado)),
+        agruparPorDia(filtrar(lista.data?.itens ?? [], natureza, estado, origem)),
         resumo.data?.saldoAnterior ?? '0',
       ),
-    [lista.data, natureza, estado, resumo.data],
+    [lista.data, natureza, estado, origem, resumo.data],
   )
 
   return (
@@ -122,8 +146,21 @@ export default function Lancamentos() {
           ]}
           aoMudar={setEstado}
         />
+        <Seletor<typeof origem>
+          rotulo="Origem"
+          valor={origem}
+          opcoes={[
+            ['todas', 'origem: todas'],
+            ['digitado', 'digitados'],
+            ['parcelado', 'parcelados'],
+            ['importado', 'importados'],
+          ]}
+          aoMudar={setOrigem}
+        />
         <span className="ml-auto text-sm text-ink-3">
-          {dias.reduce((n, d) => n + d.itens.length, 0)} lançamentos
+          {filtrado
+            ? `${dias.reduce((n, d) => n + d.itens.length, 0)} de ${lista.data?.itens.length ?? 0} lançamentos`
+            : `${dias.reduce((n, d) => n + d.itens.length, 0)} lançamentos`}
         </span>
       </div>
 
@@ -150,24 +187,43 @@ export default function Lancamentos() {
         <section key={dia.chave}>
           <h2 className="cabecalho-dia rotulo">{dia.rotulo}</h2>
           {dia.itens.map((l) => (
-            <LinhaDoExtrato key={l.id} lancamento={l} dicionarios={dicionarios} />
+            <LinhaDoExtrato
+              key={l.id}
+              lancamento={l}
+              dicionarios={dicionarios}
+              aoAbrir={() => setAberto(l)}
+            />
           ))}
           {/* O saldo ao fim do dia: o usuário rola o extrato e lê, dia a dia,
-              quanto o dia já se cumpriu. É o trilho na sua versão curta. */}
-          <div className="flex h-[var(--altura-cabecalho-dia)] items-center justify-end gap-12 border-b border-line pr-8">
-            <span className="rotulo">saldo no dia</span>
-            <span className="text-sm">
-              <Valor centavos={dia.saldoAoFim} saldo />
-            </span>
-          </div>
+              quanto o dia já se cumpriu.
+
+              Com filtro ativo ele **some**, e some de propósito: acumular sobre
+              um subconjunto produz um número que parece saldo e não é. */}
+          {!filtrado && (
+            <div className="flex h-[var(--altura-cabecalho-dia)] items-center justify-end gap-12 border-b border-line pr-8">
+              <span className="rotulo">saldo no dia</span>
+              <span className="text-sm">
+                <Valor centavos={dia.saldoAoFim} saldo />
+              </span>
+            </div>
+          )}
         </section>
       ))}
 
       {/* Rodapé fixo, 56px, com o trilho do mês — o mesmo do painel. A
           continuidade entre as telas é o ponto do elemento-assinatura. */}
+      {/* Região nomeada: quem usa leitor de tela navega até "Resumo do mês" em
+          vez de tabular por trinta linhas de extrato para chegar ao total. */}
       {resumo.data && (
-        <div className="sticky bottom-0 mt-32 border-t border-line-forte bg-paper py-12">
+        <section
+          role="region"
+          aria-label="Resumo do mês"
+          className="sticky bottom-0 mt-32 border-t border-line-forte bg-paper py-12"
+        >
           <div className="flex flex-wrap items-baseline gap-x-24 gap-y-4 text-sm text-ink-3">
+            {filtrado && (
+              <span className="text-atencao">totais do mês inteiro, não do filtro</span>
+            )}
             <span>
               saldo anterior <Valor centavos={resumo.data.saldoAnterior} saldo />
             </span>
@@ -193,7 +249,17 @@ export default function Lancamentos() {
               />
             </span>
           </div>
-        </div>
+        </section>
+      )}
+
+      {aberto && (
+        <DetalheDoLancamento
+          tenantId={espaco.id}
+          lancamento={aberto}
+          nomeDaCategoria={dicionarios.nomeDaCategoria(aberto.categoriaId)}
+          nomeDaConta={dicionarios.nomeDaConta(aberto.contaId)}
+          aoFechar={() => setAberto(null)}
+        />
       )}
 
       {lancando && (
@@ -219,16 +285,24 @@ export default function Lancamentos() {
 function LinhaDoExtrato({
   lancamento,
   dicionarios,
+  aoAbrir,
 }: {
   lancamento: Lancamento
   dicionarios: Dicionarios
+  aoAbrir(): void
 }) {
   const transferencia = lancamento.transferGroupId !== null
   const glifo = transferencia ? '⇄' : lancamento.status === 'efetivado' ? '✓' : '○'
   const cor = dicionarios.corDaCategoriaPorId(lancamento.categoriaId)
 
   return (
-    <div className="linha grid-cols-[24px_72px_1fr_160px_120px_160px]">
+    // `button` e não `div` com `onClick`: a linha inteira é o alvo, e quem
+    // navega por teclado precisa chegar nela com Tab e abrir com Enter.
+    <button
+      type="button"
+      onClick={aoAbrir}
+      className="linha w-full grid-cols-[24px_72px_1fr_160px_120px_160px] text-left"
+    >
       <span
         className="text-sm text-ink-3"
         title={transferencia ? 'transferência' : lancamento.status}
@@ -265,7 +339,7 @@ function LinhaDoExtrato({
           status={lancamento.status}
         />
       </span>
-    </div>
+    </button>
   )
 }
 
@@ -308,6 +382,7 @@ function filtrar(
   itens: readonly Lancamento[],
   natureza: 'todas' | 'receita' | 'despesa' | 'transferencia',
   estado: 'todos' | 'previsto' | 'pendente' | 'efetivado',
+  origem: 'todas' | 'parcelado' | 'importado' | 'digitado',
 ): Lancamento[] {
   return itens.filter((l) => {
     const ehTransferencia = l.transferGroupId !== null
@@ -317,6 +392,14 @@ function filtrar(
     if (natureza === 'despesa' && (ehTransferencia || BigInt(l.valorCentavos) >= 0n)) return false
 
     if (estado !== 'todos' && l.status !== estado) return false
+
+    // Parcelado pelo **grupo**, e não pela origem: a origem diz de onde o
+    // lançamento veio, e o grupo diz se ele tem irmãos em faturas futuras — que
+    // é o que a pessoa procura quando filtra por "parcelados".
+    if (origem === 'parcelado' && l.installmentGroupId === null) return false
+    if (origem === 'importado' && l.origem !== 'importado') return false
+    if (origem === 'digitado' && l.origem !== 'manual') return false
+
     return true
   })
 }

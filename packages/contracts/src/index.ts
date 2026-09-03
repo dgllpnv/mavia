@@ -32,7 +32,28 @@ export const zTipoDeConta = z.enum([
   'outra',
 ])
 
-export const zOrigem = z.enum(['manual', 'conectado'])
+/**
+ * De onde veio uma **conta** (`origem_do_dado`): digitada, ou trazida por uma
+ * conexão bancária.
+ */
+export const zOrigemDaConta = z.enum(['manual', 'conectado'])
+
+/**
+ * De onde veio um **lançamento** (`lancamento_origem`). São cinco valores, e
+ * eles **não** são os mesmos da conta.
+ *
+ * Os dois campos se chamam `origem` e respondem a perguntas diferentes; reusar
+ * um tipo para ambos fez o contrato prometer `conectado` num campo onde esse
+ * valor não existe, e esconder `parcelamento`, que é o que o filtro do extrato
+ * precisa para separar compromisso futuro de gasto do mês.
+ */
+export const zOrigemDoLancamento = z.enum([
+  'manual',
+  'importado',
+  'recorrencia',
+  'parcelamento',
+  'ajuste',
+])
 
 export const zCriarConta = z.object({
   nome: z.string().trim().min(1, 'informe um nome').max(80),
@@ -48,7 +69,7 @@ export const zConta = z.object({
   id: zUuid,
   nome: z.string(),
   tipo: zTipoDeConta,
-  origem: zOrigem,
+  origem: zOrigemDaConta,
   saldoInicialCentavos: zCentavos,
   moeda: zMoeda,
   incluirNoSaldoGeral: z.boolean(),
@@ -152,7 +173,7 @@ export const zLancamento = z.object({
   installmentTotal: z.number().int().nullable(),
 
   /** Terceiro eixo de filtro do extrato: o que o usuário digitou e o que veio. */
-  origem: zOrigem,
+  origem: zOrigemDoLancamento,
 })
 
 // ---------------------------------------------------------------------------

@@ -78,8 +78,8 @@ export async function registrarCompra(
       `INSERT INTO lancamentos (tenant_id, cartao_id, categoria_id, valor_centavos, moeda,
                                 posted_at, descricao, observacao, fatura_id,
                                 installment_group_id, installment_number, installment_total,
-                                criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                                origem, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING id`,
       [
         ctx.tenantId,
@@ -96,6 +96,10 @@ export async function registrarCompra(
         // juntos. À vista não há grupo, e portanto não há numeração.
         parcelamentoId ? p.numero : null,
         parcelamentoId ? p.total : null,
+        // A origem é o terceiro eixo de filtro do extrato. Compra à vista é
+        // `manual`: "1/1" não é parcelamento, e marcá-la como tal a poria no
+        // filtro de parceladas, onde a pessoa procura compromisso futuro.
+        parcelamentoId ? 'parcelamento' : 'manual',
         ctx.usuarioId,
       ],
     )

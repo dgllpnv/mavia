@@ -240,3 +240,93 @@ test.describe('sair', () => {
     await expect(page).toHaveURL(/\/entrar/)
   })
 })
+
+test.describe('os três eixos de filtro', () => {
+  test('origem separa o parcelado, e o saldo do dia some junto', async ({ page }) => {
+    // O `Tipo` do Organizze colapsa natureza, estado e origem em treze opções
+    // lineares. Aqui são três seletores independentes.
+    //
+    // E o saldo do dia **desaparece** com filtro ativo, de propósito: acumular
+    // sobre um subconjunto produz um número que parece saldo e não é — e um
+    // número que parece certo e está errado é pior do que nenhum número.
+    await entrar(page)
+    await page.goto('/lancamentos')
+    await expect(page.getByText('saldo no dia').first()).toBeVisible()
+
+    const antes = await page.locator('.linha').count()
+    await page.getByLabel('Origem').selectOption('parcelado')
+
+    await expect(page.getByText(/^Pneus \d\/6$/)).toBeVisible()
+    expect(await page.locator('.linha').count()).toBeLessThan(antes)
+    await expect(page.getByText('saldo no dia')).toHaveCount(0)
+    // E o rodapé avisa que os totais continuam sendo do mês inteiro.
+    await expect(page.getByText('totais do mês inteiro, não do filtro')).toBeVisible()
+  })
+
+  test('estado e natureza continuam independentes da origem', async ({ page }) => {
+    await entrar(page)
+    await page.goto('/lancamentos')
+
+    await page.getByLabel('Natureza').selectOption('transferencia')
+    await expect(page.getByText('Para a reserva')).toBeVisible()
+    await expect(page.getByText('Aluguel')).toHaveCount(0)
+
+    // Transferência é `manual` de origem: os dois eixos não se colapsam.
+    await page.getByLabel('Origem').selectOption('digitado')
+    await expect(page.getByText('Para a reserva')).toBeVisible()
+  })
+})
+
+test.describe('estornar', () => {
+  test('não apaga o original, e devolve o valor ao mês', async ({ page }) => {
+    // Decisão DP-4: o dado é do espaço, e a correção precisa ser rastreável.
+    // Quem olha o mês seguinte tem de ver que houve devolução, e não um mês que
+    // mudou sozinho.
+    await entrar(page)
+    await page.goto('/lancamentos')
+
+    // A região nomeada, e não `getByText('despesas')` solto: "despesas" também
+    // é uma opção do filtro de natureza, e o seletor pegaria as duas.
+    const rodape = page.getByRole('region', { name: 'Resumo do mês' })
+    const despesaAntes = centavosDe(
+      (await rodape.getByText(/^despesas/).innerText()).replace('despesas', ''),
+    )
+
+    await page.getByText('Aluguel', { exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: 'estornar', exact: true }).click()
+
+    // R$ 250,00 de um aluguel de R$ 1.800,00: estorno parcial é permitido.
+    const valor = page.getByLabel('Valor')
+    await valor.press('Backspace', { timeout: 5000 })
+    for (let i = 0; i < 8; i++) await valor.press('Backspace')
+    for (const tecla of ['2', '5', '0', '0', '0']) await valor.press(tecla)
+    await expect(valor).toHaveValue('R$ 250,00')
+
+    await page.getByRole('button', { name: 'estornar', exact: true }).last().click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // O original continua lá, com o valor de sempre.
+    await expect(page.getByText('Aluguel', { exact: true })).toBeVisible()
+
+    await expect(async () => {
+      const despesaDepois = centavosDe(
+        (await rodape.getByText(/^despesas/).innerText()).replace('despesas', ''),
+      )
+      expect(despesaDepois).toBe(despesaAntes + 25000n)
+    }).toPass({ timeout: 10_000 })
+  })
+
+  test('transferência não oferece estorno, e diz por quê', async ({ page }) => {
+    // Desfazer uma perna criaria dinheiro: a transferência tem duas, e elas
+    // somam zero por construção.
+    await entrar(page)
+    await page.goto('/lancamentos')
+
+    await page.getByText('Para a reserva').click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await expect(page.getByRole('button', { name: 'estornar' })).toHaveCount(0)
+    await expect(page.getByText(/duas pernas/)).toBeVisible()
+  })
+})

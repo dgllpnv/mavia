@@ -103,3 +103,30 @@ estrutural — e não envelhece na próxima versão da fonte.
 Fica registrado como desvio consciente do texto do documento, não como
 esquecimento. Se algum dia uma tela passar a depender de métrica intrínseca, o
 `size-adjust` volta a ser necessário e este item vira ticket.
+
+---
+
+## P-6 · Estorno de compra no cartão
+
+**Onde:** `apps/api/src/lancamentos/lancamentos.repositorio.ts`, `estornar`
+**Bloqueia:** o botão de estorno na tela de detalhe, para lançamento de cartão
+
+`estornar` junta com `contas` para descobrir a moeda, então só funciona para
+lançamento que tem `conta_id`. Compra de cartão tem `cartao_id`, e a função
+devolve zero linhas.
+
+O que falta **não é código**: é a decisão de **em qual fatura o crédito entra**.
+O reembolso de uma compra de março chega em maio; ele pertence à fatura de
+março, que já foi paga, ou à fatura aberta, que é onde o dinheiro de fato volta?
+As duas respostas são defensáveis e produzem números diferentes no mês.
+
+A restrição `cartao_tem_fatura` obriga a escolher: lançamento de cartão fora de
+transferência **precisa** de `fatura_id`.
+
+A interface hoje não oferece o botão e diz o porquê, em vez de oferecer um erro.
+
+**Condição de saída:** decisão do `arquiteto-dominio-financeiro` sobre a fatura
+de destino, em ADR — é regra de negócio, e uma escolha silenciosa aqui vira
+divergência de saldo três meses depois.
+
+---
