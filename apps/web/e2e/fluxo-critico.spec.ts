@@ -412,10 +412,35 @@ test.describe('estornar', () => {
  * O mês é sorteado à frente, e a asserção do estado vazio vem primeiro: se duas
  * execuções sortearem o mesmo mês, o teste falha alto em vez de passar por
  * acidente.
+ *
+ * **A limpeza vive num `finally`, e a razão é a que se descobre da pior forma.**
+ * Enquanto ela era o último passo do caminho feliz, toda execução que falhasse
+ * no meio deixava o mês sorteado ocupado para sempre — e o próximo sorteio que
+ * caísse ali falhava também. O conjunto de meses envenenados só crescia, e a
+ * taxa de falso vermelho subia sozinha a cada semana. Seis meses já estavam
+ * assim quando isto foi escrito.
  */
 const MESES_A_FRENTE = 24 + Math.floor(Math.random() * 100)
 
 test.describe('planejamento', () => {
+  /**
+   * Devolve os meses ao estado vazio, **aconteça o que acontecer**.
+   *
+   * O `afterEach` compartilha a mesma `page` do teste, e por isso alcança o mês
+   * em que ele parou. Três meses para trás cobrem qualquer ponto de parada
+   * depois da criação — e limpar um mês que já está vazio é um `return`.
+   */
+  test.afterEach(async ({ page }) => {
+    if (!page.url().includes('/planejamento')) return
+
+    for (let i = 0; i < 3; i++) {
+      await limparMesSeHouver(page)
+      const anterior = page.getByRole('button', { name: 'Mês anterior', exact: true })
+      if ((await anterior.count()) === 0) return
+      await anterior.click()
+    }
+  })
+
   test('mês vazio → teto global → consumo, e a cópia não duplica', async ({ page }) => {
     await entrar(page)
     await page.goto('/planejamento')
@@ -475,23 +500,31 @@ test.describe('planejamento', () => {
     await expect(page.getByText(/Nada a copiar/)).toBeVisible()
     await expect(page.getByText('Todas as categorias')).toHaveCount(1)
 
-    // --- devolve os dois meses -------------------------------------------
-    // Sem isto cada execução consome dois meses do espaço sorteado, e a colisão
-    // deixa de ser improvável para virar rotina. Limpar é o que torna o teste
-    // repetível de verdade — a mesma lição do estorno, que comia a semente.
-    await removerPlanejamento(page)
-    await page.getByRole('button', { name: 'Mês anterior', exact: true }).click()
-    await removerPlanejamento(page)
   })
 })
 
 /** Abre o planejamento da tela e o exclui. */
-async function removerPlanejamento(page: Page): Promise<void> {
-  await page.getByText('Todas as categorias').click()
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await page.getByRole('button', { name: 'excluir', exact: true }).click()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByText(/Nenhum planejamento em/)).toBeVisible()
+/**
+ * Remove o teto global do mês visível, se houver um.
+ *
+ * Tolerante de propósito: é chamado na limpeza, sobre meses que podem estar
+ * vazios, depois de um teste que pode ter falhado em qualquer ponto. Uma
+ * limpeza que exige o estado que ela existe para consertar não conserta nada.
+ */
+async function limparMesSeHouver(page: Page): Promise<void> {
+  const alvo = page.getByText('Todas as categorias')
+  if ((await alvo.count()) === 0) return
+
+  try {
+    await alvo.first().click()
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 3_000 })
+    await page.getByRole('button', { name: 'excluir', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  } catch {
+    // A limpeza não é o teste. Se ela falhar, o mês fica ocupado — o que já era
+    // o comportamento antigo — e o relatório continua sendo o do teste, e não o
+    // de um `afterEach` barulhento.
+  }
 }
 
 /**

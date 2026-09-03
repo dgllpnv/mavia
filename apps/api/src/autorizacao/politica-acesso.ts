@@ -72,6 +72,14 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // idempotente pela identidade da ocorrência.
   ['POST /v1/recorrencias/materializar', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/conexoes', { papeis: TODOS }],
+  ['POST /v1/conexoes', { papeis: QUEM_ESCREVE }],
+  // Revogar é encerrar o acesso de um terceiro aos dados de **todo** o espaço,
+  // e destruir a credencial de forma irreversível. É do dono, e exige
+  // reautenticação pelo mesmo motivo que trocar o papel de um membro exige:
+  // uma sessão roubada não decide isso sozinha.
+  ['DELETE /v1/conexoes/:id', { papeis: SO_DONO, exigeReautenticacao: true }],
+
   ['GET /v1/importacoes', { papeis: TODOS }],
   // Importar cria lançamento; desfazer apaga o que ela criou. As duas são de
   // quem escreve, e nenhuma é só do dono: importar extrato é rotina de membro.

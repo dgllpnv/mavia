@@ -22,7 +22,7 @@ import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { lerRegras, naturezaConfere, propor } from '../classificacao/classificacao.controller.js'
 import { comTenant } from '../tenancy/tenancy.js'
-import { detectar, provider } from './provider.js'
+import { detectar, provider } from '../conexoes/provider.js'
 
 /**
  * Importação de extrato.

@@ -27,11 +27,12 @@
   "devDependencies": {
     "@mavia/contracts": "workspace:*",
     "@mavia/domain": "workspace:*",
+    "@mavia/guardiao": "workspace:*",
+    "@mavia/parser": "workspace:*",
     "@testcontainers/postgresql": "^10",
     "@testcontainers/redis": "^12.1.0",
     "@types/node": "^22",
     "@types/pg": "^8",
-    "vitest": "^2",
-    "@mavia/parser": "workspace:*"
+    "vitest": "^2"
   }
 }

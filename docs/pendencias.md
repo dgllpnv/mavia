@@ -322,3 +322,42 @@ Se um dia a obrigação mudar, o que falta é o campo de documento no cadastro e
 integração com o emissor — nada no modelo atual impede.
 
 ---
+
+## P-16 · O que falta antes do primeiro adapter de agregador
+
+**Onde:** `apps/api/src/conexoes/revogacao.ts`, `test/contrato-do-adapter.test.ts`
+**Condição de saída:** o gatilho de receita do ADR 0003 ser atingido
+
+A revogação em três fases existe e é exercitada de ponta a ponta — mas contra
+adapters que declaram `revogacaoRemota: 'nao-aplicavel'`. Os três de hoje
+(`ofx-import`, `csv-import`, `manual`) nunca ficam `pendente`, porque não há
+acesso continuado a encerrar: o titular entregou um arquivo, uma vez.
+
+Um adapter cuja revogação **pode** ficar pendente exige três peças que ainda não
+existem, e as três pela mesma razão — o estado `pendente` só é honesto se
+alguém, mais tarde, o resolver:
+
+1. **O `outbox`.** Hoje a intenção de revogar lá fora vive no request. Se o
+   processo cair entre o commit da Fase 1 e a chamada da Fase 2, a intenção se
+   perde: a credencial foi destruída aqui, e ninguém nunca pedirá ao agregador
+   que encerre a sessão dele. O ADR 0019 §D2 é explícito — o job é enfileirado
+   **pelo outbox, antes de qualquer tentativa**.
+
+2. **O job `conexao.revogar-no-provedor`.** Sem ele, `pendente` é para sempre. E
+   `pendente` para sempre é pior do que um erro: o titular lê a palavra na tela e
+   conclui, corretamente, que o banco ainda pode ter acesso — e nada nunca muda
+   isso.
+
+3. **A Fase 3 assíncrona.** Ela roda hoje dentro da transação da Fase 1, e é
+   correto que rode: são **zero linhas**, porque nenhum adapter registrado
+   escreve `lancamentos_brutos.payload`. No dia em que um escrever, a limpeza
+   passa a ser dezenas de milhares de linhas dentro de uma transação — e o ADR
+   manda ela para fora justamente por isso.
+
+**Isto não depende de ninguém lembrar.** A suíte de contrato tem um teste que
+afirma que nenhum adapter registrado tem revogação remota. Ele falha no primeiro
+`registrarAdapter` de um agregador, com o motivo escrito ao lado — e falhar ali
+custa uma tarde, contra descobrir a ausência com credencial bancária de gente de
+verdade no banco.
+
+---

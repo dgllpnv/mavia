@@ -20,6 +20,8 @@ import { IdempotenciaInterceptor } from './idempotencia/idempotencia.interceptor
 import { ObjetivosController } from './objetivos/objetivos.controller.js'
 import { PlanejamentosController } from './planejamentos/planejamentos.controller.js'
 import { RecorrenciasController } from './recorrencias/recorrencias.controller.js'
+import { ConexoesController } from './conexoes/conexoes.controller.js'
+import { ClienteDoGuardiao, GUARDIAO } from './guardiao/cliente.js'
 
 @Module({})
 export class AppModule {
@@ -48,6 +50,7 @@ export class AppModule {
         ObjetivosController,
         PlanejamentosController,
         RecorrenciasController,
+        ConexoesController,
         LancamentosController,
         CartoesController,
       ],
@@ -55,6 +58,9 @@ export class AppModule {
         { provide: POOL, useValue: pool },
         { provide: COFRE, useValue: cofre },
         { provide: LIMITE, useValue: limite },
+        // Uma instância por processo. Ela não guarda chave nenhuma: o estado
+        // que importa vive no processo do guardião, do outro lado do socket.
+        { provide: GUARDIAO, useValue: new ClienteDoGuardiao() },
         // Global de propósito: idempotência escrita rota a rota é idempotência
         // que falta na rota nova. Aqui é propriedade do transporte, e vale para
         // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda

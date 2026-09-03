@@ -314,6 +314,55 @@ fiscal fica fora por decisão dele: P-15.
 >
 > **Pré-requisito:** o guardião de chaves selado precisa existir **antes** de qualquer credencial bancária entrar — inclusive a sua, no teste manual.
 
+### O que existe
+
+**Nenhum agregador está ligado, e isso é a decisão, não um atraso.** O gatilho do
+ADR 0003 é receita, e ela ainda não existe. O que foi construído é tudo que
+precisa estar pronto **antes** da primeira credencial bancária — porque
+construir depois é construir com pressa, no dia em que já há segredo de gente de
+verdade no banco.
+
+O **guardião de chaves** (ADR 0018), como processo separado: `packages/guardiao`
+com o envelope AES-256-GCM e o AAD que impede transplante de blob entre tenants,
+e `apps/guardiao` com o cofre da KEK. As cinco propriedades do §D3.2 estão
+verificadas, e a primeira delas — *nenhuma operação devolve a KEK* — é uma
+**ausência**: não existe método que a devolva, e um teste de superfície reprova
+se um aparecer. Os internos usam `#` e não `private`, porque `private` some na
+compilação e deixaria `kekPara()` alcançável em runtime. Foi um teste que
+encontrou isso.
+
+O **cliente da API**, que fala com o guardião por socket local e nunca guarda
+DEK. Testado contra o processo de verdade, desselado pela entrada padrão como o
+runbook manda — que é, de quebra, o único lugar que exercita o desselamento
+manual exigido a cada reboot.
+
+A **rotação de KEK sem tocar no ciphertext das credenciais**. Um teste de rotação
+encontrou aqui o defeito mais caro deste épico: a primeira versão carimbava a
+versão de KEK no envelope do segredo, e toda rotação invalidaria todo ciphertext
+do sistema — com o erro aparecendo só na primeira leitura seguinte.
+
+A **migration 0026**: `conexoes` com o envelope completo, `consentimentos` como
+prova que **nunca é apagada pela revogação**, `sincronizacoes`, RLS nas três, e
+três constraints que recusam o que a aplicação poderia esquecer — meia
+credencial, revogada sem data, e revogada com segredo vivo.
+
+A **revogação em três fases** (ADR 0019), com a ordem que importa: a destruição
+da credencial acontece **dentro** da transação e não pergunta ao provider se
+pode; a chamada ao terceiro acontece **depois do commit**, porque um timeout
+dentro da transação faria `ROLLBACK` e deixaria a credencial viva depois de o
+titular pedir para destruí-la. A resposta traz **dois fatos separados**: o que a
+Mavia fez, e o que sabemos do outro lado.
+
+A **suíte de contrato do `BankSyncProvider`**, que roda sobre todo adapter
+registrado. Ela não protege o produto de hoje: protege o adapter que ainda não
+foi escrito, e o reprova antes de ele tocar em credencial de alguém.
+
+### O que falta, e a ordem
+
+O adapter do agregador em si — e, **antes dele**, as três peças da P-16: o
+`outbox`, o job de retentativa e a Fase 3 assíncrona. Há um teste que falha no
+dia em que o primeiro adapter com revogação remota for registrado sem elas.
+
 ---
 
 ## Trilhas que não são etapas

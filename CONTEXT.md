@@ -472,6 +472,14 @@ O nome foi escolhido para não ser `Limite`, e **confirmo a escolha**. Ela deixa
 
 **Sincronizacao** — Execução de um adapter contra uma Conexao. Registra início, fim, resultado e quantos Lancamentos foram criados, atualizados ou ignorados por duplicidade.
 
+**Ficha do adapter** — O par `modeloDeCredencial` × `revogacaoRemota` que todo adapter declara ao se registrar. É o que decide se a Conexao guarda envelope e o que a revogação faz lá fora — nenhum código ramifica sobre o **nome** do provider. Adapter sem ficha não entra no registro. Ver `docs/adr/0018` §D0 e `0019` §D1.
+
+**Guardião** — Processo separado que guarda a KEK em memória e nunca a devolve. A API pede DEK e recebe DEK; desembrulhar em massa **sela** o cofre e alarma. Desselado à mão a cada reboot: enquanto estiver selado, a sincronização bancária não funciona e o resto do produto sim. Ver `docs/adr/0018`.
+
+**Crypto-shred** — Destruir o dado destruindo a chave dele. Na revogação, `credenciais_cifradas` e `dek_cifrada` são anuladas na mesma transação: é a morte da DEK que torna o ciphertext irrecuperável, e não a do ciphertext.
+
+**Revogação em três fases** — Fase 1 destrói a credencial, dentro da transação e sem perguntar ao provider. Fase 2 pede ao provider que encerre o acesso, **depois do commit** e com prazo duro. Fase 3 limpa o volume, assíncrona. A resposta traz dois fatos separados: o que a Mavia fez, e o que se sabe do outro lado. Ver `docs/adr/0019`.
+
 **LancamentoBruto** — Registro cru como veio da fonte, antes de virar Lancamento. Preservado para auditoria e reprocessamento. Chave de idempotência: `(tenant_id, provider, external_id)` + hash de conteúdo.
 
 **Deduplicacao** — Regra que impede o mesmo LancamentoBruto de virar dois Lancamentos. Nunca depende só da descrição.

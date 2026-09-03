@@ -156,6 +156,31 @@ const CONJUNTOS = [
     tabela: 'saldo_snapshots',
     colunas: null,
   },
+  {
+    nome: 'conexoes',
+    tabela: 'conexoes',
+    // **Sem as colunas do envelope.** `credenciais_cifradas` e `dek_cifrada`
+    // são material criptográfico; exportá-las entregaria o ciphertext num
+    // arquivo que o titular guarda no Drive, e a segurança dele passaria a
+    // depender de a KEK nunca vazar em lugar nenhum, nunca.
+    colunas: `provider, apelido, instituicao, status, criado_em, sincronizada_em,
+              revogada_em, motivo_revogacao, revogacao_remota, escopo`,
+  },
+  {
+    nome: 'consentimentos',
+    tabela: 'consentimentos',
+    // O `ip_hash` fica de fora: é pseudônimo, não informação. Para o titular um
+    // hash não diz nada, e num arquivo exportado ele vira só mais um dado a
+    // vazar.
+    colunas: `termos_versao, escopo, finalidade, concedido_em, expira_em,
+              revogado_em, motivo_revogacao`,
+  },
+  {
+    nome: 'sincronizacoes',
+    tabela: 'sincronizacoes',
+    // É como o titular vê o que aconteceu e **quando parou**.
+    colunas: 'comecou_em, terminou_em, registros, novos, falha',
+  },
 ] as const
 
 /**

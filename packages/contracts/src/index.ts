@@ -628,3 +628,61 @@ export const zAlerta = z.object({
 })
 
 export type Alerta = z.infer<typeof zAlerta>
+
+// ---------------------------------------------------------------------------
+// Conexao — a origem do dado bancário, e o fim dela
+// ---------------------------------------------------------------------------
+/**
+ * Épico 12. **Nenhum agregador está ligado** — a porta de receita do ADR 0003
+ * não foi atingida —, e por isso as conexões que existem hoje são as de
+ * arquivo e a manual. O contrato vale para as três e para as que vierem: quem
+ * decide o comportamento é a ficha do adapter, nunca o nome do provider.
+ */
+export const zConexao = z.object({
+  id: z.string().uuid(),
+  provider: z.string(),
+  apelido: z.string(),
+  instituicao: z.string().nullable(),
+  status: z.enum(['ativa', 'requer_atencao', 'revogada']),
+  criadaEm: z.string(),
+  sincronizadaEm: z.string().nullable(),
+  revogadaEm: z.string().nullable(),
+  /**
+   * O segundo fato. "Revogada" descreve o que a Mavia fez com a credencial —
+   * sempre verdade e imediata. Isto descreve o que sabemos do outro lado, e o
+   * produto não tem o direito de fundir os dois numa palavra só.
+   */
+  revogacaoNoProvedor: z
+    .enum(['pendente', 'confirmada', 'falhou', 'nao_aplicavel'])
+    .nullable(),
+  /** Quantos lançamentos vieram desta conexão e **permanecem**. */
+  lancamentos: z.number().int().nonnegative(),
+})
+
+export const zCriarConexao = z.object({
+  provider: z.string().min(1),
+  apelido: z.string().trim().min(1, 'a conexão precisa de um apelido').max(80),
+  instituicao: z.string().trim().max(120).nullish(),
+  /** A versão do texto de consentimento que o titular viu. Vira prova. */
+  termosVersao: z.string().min(1),
+  finalidade: z.string().min(1),
+  escopo: z.array(z.string()).default([]),
+})
+
+/**
+ * A resposta da revogação — os dois fatos, separados.
+ *
+ * `credencialDestruida` é sempre `true` quando a rota devolve 200: a Fase 1 é
+ * incondicional e transacional. `revogacaoNoProvedor` pode ser `pendente`, e
+ * dizer isso é a diferença entre informar e mentir.
+ */
+export const zRevogacao = z.object({
+  status: z.literal('revogada'),
+  credencialDestruida: z.literal(true),
+  revogacaoNoProvedor: z.enum(['pendente', 'confirmada', 'falhou', 'nao_aplicavel']),
+  lancamentosMantidos: z.number().int().nonnegative(),
+})
+
+export type Conexao = z.infer<typeof zConexao>
+export type CriarConexao = z.infer<typeof zCriarConexao>
+export type Revogacao = z.infer<typeof zRevogacao>
