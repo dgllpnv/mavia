@@ -1,10 +1,24 @@
-import { BadRequestException, Controller, Get, Inject, Req, UseGuards } from '@nestjs/common'
-import type { Categoria } from '@mavia/contracts'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common'
+import { zAlterarCategoria, zCriarCategoria, type Categoria } from '@mavia/contracts'
 import type { FastifyRequest } from 'fastify'
 import type { Pool } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { comTenant } from '../tenancy/tenancy.js'
+import * as escrita from './categorias.escrita.js'
 
 /**
  * A árvore de categorias do espaço, inteira, numa chamada.
@@ -20,11 +34,15 @@ import { comTenant } from '../tenancy/tenancy.js'
 export class CategoriasController {
   constructor(@Inject(POOL) private readonly pool: Pool) {}
 
-  @Get()
-  async listar(@Req() req: FastifyRequest): Promise<{ itens: Categoria[] }> {
+  private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    const ctx = { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+  }
+
+  @Get()
+  async listar(@Req() req: FastifyRequest): Promise<{ itens: Categoria[] }> {
+    const ctx = this.contexto(req)
 
     const itens = await comTenant(this.pool, ctx, async (c) => {
       const r = await c.query<{
@@ -67,5 +85,50 @@ export class CategoriasController {
     })
 
     return { itens }
+  }
+
+  @Post()
+  @HttpCode(201)
+  async criar(@Req() req: FastifyRequest, @Body() corpo: unknown): Promise<Categoria> {
+    const ctx = this.contexto(req)
+    const analise = zCriarCategoria.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return comTenant(this.pool, ctx, (c) =>
+      escrita.criar(c, ctx.tenantId, {
+        nome: analise.data.nome,
+        natureza: analise.data.natureza,
+        ...(analise.data.parentId ? { parentId: analise.data.parentId } : {}),
+      }),
+    )
+  }
+
+  @Patch(':id')
+  async alterar(
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @Body() corpo: unknown,
+  ): Promise<Categoria> {
+    const ctx = this.contexto(req)
+    const analise = zAlterarCategoria.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return comTenant(this.pool, ctx, (c) =>
+      escrita.alterar(c, ctx.tenantId, id, {
+        ...(analise.data.nome !== undefined ? { nome: analise.data.nome } : {}),
+        ...(analise.data.natureza !== undefined ? { natureza: analise.data.natureza } : {}),
+      }),
+    )
+  }
+
+  /**
+   * Arquiva. Não existe rota que apague categoria — lançamento antigo aponta
+   * para ela, e apagá-la deixaria a linha do extrato sem nome.
+   */
+  @Delete(':id')
+  @HttpCode(204)
+  async arquivar(@Req() req: FastifyRequest, @Param('id') id: string): Promise<void> {
+    const ctx = this.contexto(req)
+    await comTenant(this.pool, ctx, (c) => escrita.arquivar(c, ctx.tenantId, id))
   }
 }

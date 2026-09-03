@@ -1,7 +1,9 @@
 # Auditoria de interface — épico 4
 
 - **Data:** 2026-09-02
-- **Escopo:** `apps/web` — entrada, visão geral, lançamentos, cartões, formulário
+- **Escopo:** `apps/web` — entrada, visão geral, lançamentos, cartões, contas,
+  categorias, e os formulários de lançamento, conta, cartão, pagamento e estorno
+- **Revisão:** 2026-09-02, após fechar o grupo A das pendências
 - **Norma:** `docs/design.md` §5 (lista obrigatória) e `docs/design/direcao-visual.md`
 - **Método:** telas abertas no navegador contra o banco local semeado, e não
   capturas de mock. Nenhum item abaixo foi marcado por leitura de código.
@@ -134,7 +136,24 @@ a faixa de alerta permanente.
 
 ---
 
-## 6. O que **não** foi auditado, e por quê
+## 6. Defeitos da segunda passagem
+
+Achados ao exercer pela primeira vez fluxos que existiam só como rota testada.
+
+| # | O que aconteceu | O que estava errado |
+|---|---|---|
+| **I-4** | "Fechar a fatura" no dia 2, numa fatura que fecha dia 25 e já continha compras dos dias 12 e 14. O pagamento seguinte devolveu **500** | Faltava a regra de que **quem fecha uma fatura é o calendário**. Fechar cedo cria uma fatura com compras posteriores ao próprio fechamento e empurra as seguintes do ciclo para o mês que vem, em silêncio. Migration 0015 |
+| **I-5** | O pagamento datado ia como **meia-noite** do dia | Meia-noite de 05/07 antecede uma compra das 15h de 05/07, e o banco recusa compensar antes de acontecer. Hoje vira o agora; dia passado vira o fim do dia |
+| **I-6** | O contrato prometia `origem: manual \| conectado` no lançamento | O banco tem **dois** enums de mesmo nome de coluna. O tipo da conta foi reusado no lançamento, prometendo um valor inexistente e escondendo `parcelamento` — que é o que o terceiro eixo de filtro precisa |
+| **I-7** | Com filtro ativo, o "saldo no dia" continuava somando o subconjunto visível | Um número que parece saldo e não é. Agora ele some com filtro, e o rodapé avisa que os totais são do mês inteiro |
+
+I-4 e I-6 têm a mesma forma: **a rota existia, era testada, e ninguém a tinha
+exercido de ponta a ponta.** É o argumento para o épico 4 existir antes do
+épico 5, e não depois.
+
+---
+
+## 7. O que **não** foi auditado, e por quê
 
 - **Contraste medido com colorímetro.** Os valores da §2 da direção visual foram
   computados quando a paleta foi fixada; esta auditoria os assume e verifica o
@@ -146,3 +165,8 @@ a faixa de alerta permanente.
   fechada.
 - **Telas ainda inexistentes:** relatório, planejamento, importação. Cada uma
   precisa da própria passagem por esta lista.
+- **Estorno de compra no cartão** não existe, e a tela diz o porquê em vez de
+  oferecer um botão que falha. Ver P-6 em `docs/pendencias.md`: falta decidir em
+  qual fatura o crédito entra, e isso é regra de negócio.
+- **O eixo `fixo` do filtro de origem** entra com a recorrência, no épico 8. Um
+  filtro que devolve sempre vazio é pior do que um filtro a menos.

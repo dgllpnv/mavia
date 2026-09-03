@@ -45,6 +45,11 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['DELETE /v1/contas/:id', { papeis: SO_DONO }],
 
   ['GET /v1/categorias', { papeis: TODOS }],
+  ['POST /v1/categorias', { papeis: QUEM_ESCREVE }],
+  ['PATCH /v1/categorias/:id', { papeis: QUEM_ESCREVE }],
+  // Arquivar é de quem escreve, e não só do dono: não apaga nada, e a categoria
+  // continua dando nome ao histórico. Reverter é reabrir.
+  ['DELETE /v1/categorias/:id', { papeis: QUEM_ESCREVE }],
 
   ['GET /v1/lancamentos', { papeis: TODOS }],
   ['GET /v1/lancamentos/resumo', { papeis: TODOS }],

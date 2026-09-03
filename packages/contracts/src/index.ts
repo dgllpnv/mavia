@@ -99,10 +99,27 @@ export const zNatureza = z.enum(['receita', 'despesa'])
 
 export const zCriarCategoria = z.object({
   nome: z.string().trim().min(1).max(60),
+  /**
+   * Ignorada quando há `parentId`: a filha **herda** a natureza da mãe.
+   *
+   * Uma filha de despesa que fosse receita faria a soma da árvore misturar os
+   * dois sinais no mesmo galho, e o relatório de categoria deixaria de fechar
+   * com o rodapé do extrato.
+   */
   natureza: zNatureza,
+  /** Ausente cria uma raiz. Presente cria a filha dela — e só isso: a árvore
+   *  tem dois níveis, e uma neta não existe. */
   parentId: zUuid.optional(),
-  cor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 })
+
+export const zAlterarCategoria = z
+  .object({
+    nome: z.string().trim().min(1).max(60).optional(),
+    natureza: zNatureza.optional(),
+  })
+  .refine((c) => c.nome !== undefined || c.natureza !== undefined, {
+    message: 'informe o que mudar',
+  })
 
 export const zCategoria = z.object({
   id: zUuid,
@@ -224,6 +241,7 @@ export const zResumo = z.object({
 
 export type Natureza = z.infer<typeof zNatureza>
 export type CriarCategoria = z.infer<typeof zCriarCategoria>
+export type AlterarCategoria = z.infer<typeof zAlterarCategoria>
 export type Categoria = z.infer<typeof zCategoria>
 export type StatusDoLancamento = z.infer<typeof zStatus>
 export type CriarLancamento = z.infer<typeof zCriarLancamento>
