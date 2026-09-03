@@ -1,0 +1,17 @@
+# Fim de linha, decidido aqui e não pela configuração de cada máquina.
+#
+# O motivo é concreto: um `.sh` com CRLF falha no Linux com
+# `bad interpreter: /usr/bin/env bash^M` — um erro que não menciona fim de linha
+# e leva meia hora para ser entendido. O mesmo vale para o `Dockerfile` e para o
+# SQL que o Postgres executa no `initdb`.
+*               text=auto eol=lf
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.sql           text eol=lf
+
+# Binários, para o git não tentar normalizar nada.
+*.png           binary
+*.jpg           binary
+*.ico           binary
+*.ttf           binary
+*.woff2         binary
