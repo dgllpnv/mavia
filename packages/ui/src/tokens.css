@@ -11,6 +11,13 @@
  * porque saturam demais sobre fundo escuro.
  *
  * Componente novo compõe token. Não inventa valor.
+ *
+ * **Revisão de 2026-09-02 (DP-31).** A direção "Papel e trilho" — sem card,
+ * linha de 36px, densidade máxima — foi substituída pelo dono do produto por
+ * uma disposição próxima à do Organizze, que é o que os clientes dele já sabem
+ * usar. O que muda é a pele: card branco sobre fundo cinza, linha de 56px,
+ * ícone de categoria em círculo. O que **não** muda é o resto deste arquivo —
+ * a paleta, a escala tipográfica e as regras de sinal continuam nossas.
  */
 
 :root {
@@ -86,6 +93,24 @@
   --elev-1: 0 1px 2px rgb(28 26 22 / 6%), 0 4px 12px rgb(28 26 22 / 10%);
   --elev-2: 0 2px 4px rgb(28 26 22 / 8%), 0 16px 40px rgb(28 26 22 / 18%);
   --elev-borda: transparent;
+
+  /* ---------------------------------------------------------------------
+   * O card volta a existir.
+   *
+   * A direção anterior o proibia, e o argumento era bom: ele custa 32px de
+   * altura por tela e não informa nada. O contra-argumento é do dono do
+   * produto e vence — o card é o que separa "estado", "urgência" e "análise"
+   * num painel, e é o que os clientes reconhecem à primeira vista.
+   * ------------------------------------------------------------------- */
+  --card-fundo: var(--paper-0);
+  --card-raio: 8px;
+  --card-padding: var(--s-20);
+  --card-sombra: 0 1px 2px rgb(28 26 22 / 5%), 0 1px 3px rgb(28 26 22 / 6%);
+  --card-borda: var(--line);
+  /* O fundo da página, um degrau **abaixo** de --surface-2.
+     É o contraste com o card branco que faz o card existir; com os dois
+     próximos demais, o card vira uma borda decorativa em volta de nada. */
+  --fundo-da-pagina: #eae6da;
 }
 
 /**
@@ -157,6 +182,12 @@
   --escuro-elev-1: 0 8px 20px rgb(0 0 0 / 55%);
   --escuro-elev-2: 0 16px 40px rgb(0 0 0 / 70%);
   --escuro-elev-borda: var(--line-forte);
+  /* No escuro o card não é branco: é a superfície um degrau acima do fundo,
+     com borda. Sombra praticamente não comunica elevação sobre fundo escuro. */
+  --escuro-card-fundo: #1e1c18;
+  --escuro-card-sombra: none;
+  --escuro-card-borda: #2e2a24;
+  --escuro-fundo-da-pagina: #131210;
 }
 
 /**
@@ -206,6 +237,10 @@
     --elev-1: var(--escuro-elev-1);
     --elev-2: var(--escuro-elev-2);
     --elev-borda: var(--escuro-elev-borda);
+    --card-fundo: var(--escuro-card-fundo);
+    --card-sombra: var(--escuro-card-sombra);
+    --card-borda: var(--escuro-card-borda);
+    --fundo-da-pagina: var(--escuro-fundo-da-pagina);
   }
 }
 
@@ -243,6 +278,10 @@
   --elev-1: var(--escuro-elev-1);
   --elev-2: var(--escuro-elev-2);
   --elev-borda: var(--escuro-elev-borda);
+  --card-fundo: var(--escuro-card-fundo);
+  --card-sombra: var(--escuro-card-sombra);
+  --card-borda: var(--escuro-card-borda);
+  --fundo-da-pagina: var(--escuro-fundo-da-pagina);
 }
 
 /**
@@ -324,8 +363,9 @@
   --s-64: 64px;
   --s-96: 96px;
 
-  --gutter: var(--s-44);
+  --gutter: var(--s-24);
   --largura-maxima: 1240px;
+
 
   /* ---------------------------------------------------------------------
    * Raios — deliberadamente NÃO uniformes. O raio classifica.
@@ -341,12 +381,19 @@
    * contra 6 do Organizze. Densidade aqui não é estética — é a diferença
    * entre comparar e lembrar.
    * ------------------------------------------------------------------- */
-  --altura-linha: 36px;
-  --altura-linha-confortavel: 44px;
-  --altura-cabecalho-dia: 24px;
-  --altura-nav: 48px;
-  --altura-colunas: 28px;
-  --altura-rodape: 56px;
+  /* 56px como no Organizze: é a altura que o ícone em círculo de 32px impõe,
+     e é a que os clientes já leem sem esforço. A densidade de 36px que a
+     direção anterior perseguia custava a familiaridade, e a familiaridade era
+     o que eles elogiavam no concorrente. */
+  --altura-linha: 56px;
+  --altura-linha-compacta: 44px;
+  --altura-cabecalho-dia: 32px;
+  --altura-nav: 56px;
+  --altura-colunas: 32px;
+  --altura-rodape: 64px;
+
+  /* O ícone de categoria: círculo cheio na cor da raiz, com a inicial. */
+  --icone-categoria: 32px;
 
   /* O trilho: 2px na linha, 3px no herói, 4px no ciclo da fatura. */
   --trilho-altura: 2px;
@@ -359,8 +406,8 @@
   --transicao-carga: 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-:root[data-densidade='confortavel'] {
-  --altura-linha: var(--altura-linha-confortavel);
+:root[data-densidade='compacta'] {
+  --altura-linha: var(--altura-linha-compacta);
 }
 
 @media (prefers-reduced-motion: reduce) {

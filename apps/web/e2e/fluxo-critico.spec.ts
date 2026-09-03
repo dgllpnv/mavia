@@ -41,11 +41,36 @@ async function entrar(page: Page) {
   await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toBeVisible()
 }
 
-/** O saldo do rodapé do extrato, em centavos. */
+/**
+ * A barra de filtros nasce **recolhida**, como no Organizze: quem não vai
+ * filtrar não paga o espaço dela. Todo teste que filtra abre antes.
+ */
+async function abrirFiltros(page: Page) {
+  const abrir = page.getByRole('button', { name: 'filtrar por…' })
+  if (await abrir.isVisible()) await abrir.click()
+}
+
+/** O rodapé de resumo, pelo nome da região. */
+function rodapeDoMes(page: Page) {
+  return page.getByRole('region', { name: 'Resumo do mês' })
+}
+
+/**
+ * O saldo do rodapé, em centavos.
+ *
+ * `first()` porque a região tem dois valores com o mesmo tipo de rótulo —
+ * Saldo e Previsto —, e o primeiro é o realizado.
+ */
 async function saldoDoRodape(page: Page): Promise<bigint> {
-  const saldo = page.locator('[aria-label^="saldo de"]').last()
+  const saldo = rodapeDoMes(page).locator('[aria-label^="saldo de"]').first()
   await expect(saldo).toBeVisible()
   return centavosDe((await saldo.getAttribute('aria-label')) ?? '')
+}
+
+/** A despesa realizada, lida do detalhe expandido do rodapé. */
+async function despesaRealizada(rodape: ReturnType<typeof rodapeDoMes>): Promise<bigint> {
+  const linha = rodape.locator('div').filter({ hasText: /^Despesa realizada/ }).last()
+  return centavosDe((await linha.innerText()).replace('Despesa realizada', ''))
 }
 
 test.describe('entrada na plataforma', () => {
@@ -81,13 +106,18 @@ test.describe('entrada na plataforma', () => {
 test.describe('o extrato do mês', () => {
   test('agrupa por dia e fecha o rodapé', async ({ page }) => {
     await entrar(page)
-    await page.getByRole('link', { name: 'lançamentos' }).click()
+    await page
+      .getByRole('navigation', { name: 'Navegação principal' })
+      .getByRole('link', { name: 'lançamentos' })
+      .click()
 
     await expect(page.getByRole('heading', { name: 'Lançamentos' })).toBeVisible()
-    // Exato: "Salário" é descrição de um lançamento **e** aparece na coluna de
-    // categoria como "Renda · Salário". Sem `exact`, o seletor pega os dois.
+    // Exato: "Salário" é descrição de um lançamento **e** aparece no subtítulo
+    // como "Renda · Salário". Sem `exact`, o seletor pega os dois.
     await expect(page.getByText('Salário', { exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /sáb 5 set/i })).toBeVisible()
+    // O dia é cabeçalho de grupo, com o saldo do dia no mesmo lugar.
+    await expect(page.getByText(/sáb, 5 de set/i)).toBeVisible()
+    await expect(page.getByText('saldo no dia').first()).toBeVisible()
   })
 
   test('compra de cartão não mexe no saldo em caixa', async ({ page }) => {
@@ -103,23 +133,28 @@ test.describe('o extrato do mês', () => {
     const parcela = page.getByText(/^Pneus \d\/6$/)
     await expect(parcela).toBeVisible()
 
-    // A parcela fica em `cartão`, e não numa conta: é isso que a mantém fora do
-    // universo do eixo caixa.
+    // A parcela sai de `cartão`, e não de uma conta: é isso que a mantém fora
+    // do universo do eixo caixa. O subtítulo da linha diz a categoria e a
+    // origem do dinheiro, nessa ordem.
     const linha = page.locator('.linha').filter({ has: parcela })
-    await expect(linha.getByText('cartão', { exact: true })).toBeVisible()
+    await expect(linha).toContainText('cartão')
 
     // Os dias vêm do mais recente para o mais antigo. O saldo do dia da parcela
     // e o do dia imediatamente anterior são o mesmo número.
-    const dias = page.locator('section').filter({ hasText: 'saldo no dia' })
+    const dias = page.locator('div:has(> .cabecalho-dia)')
     const textos = await dias.allInnerTexts()
     const indice = textos.findIndex((t) => /Pneus \d\/6/.test(t))
+
+    // O saldo do dia vive no **cabeçalho** do grupo, e não no fim dele. Ler o
+    // texto do grupo inteiro depois de "saldo no dia" engoliria as linhas.
+    const cabecalhos = await page.locator('.cabecalho-dia').allInnerTexts()
 
     expect(indice, 'a parcela precisa estar num grupo de dia').toBeGreaterThanOrEqual(0)
     expect(indice, 'e precisa existir um dia anterior para comparar').toBeLessThan(
       textos.length - 1,
     )
 
-    const saldoDoDia = (i: number) => centavosDe(textos[i]!.split('saldo no dia')[1] ?? '')
+    const saldoDoDia = (i: number) => centavosDe(cabecalhos[i]!.split('saldo no dia')[1] ?? '')
 
     expect(saldoDoDia(indice)).toBe(saldoDoDia(indice + 1))
   })
@@ -129,7 +164,8 @@ test.describe('o extrato do mês', () => {
     await page.goto('/lancamentos')
     await expect(page.getByText('Para a reserva')).toBeVisible()
 
-    await page.getByRole('combobox').first().selectOption('despesa')
+    await abrirFiltros(page)
+    await page.getByLabel('Natureza').selectOption('despesa')
 
     // Transferência não é despesa (`CONTEXT.md`), e o filtro obedece ao vínculo
     // de transferência, não ao sinal do valor.
@@ -145,7 +181,7 @@ test.describe('lançar uma despesa', () => {
 
     const antes = await saldoDoRodape(page)
 
-    await page.getByRole('button', { name: '+ lançar' }).click()
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
     const descricao = `Café do teste ${MARCA}`
@@ -175,7 +211,7 @@ test.describe('lançar uma despesa', () => {
     // que nunca aparecem em relatório nenhum.
     await entrar(page)
     await page.goto('/lancamentos')
-    await page.getByRole('button', { name: '+ lançar' }).click()
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
 
     const categoria = page.getByLabel('Categoria')
     await expect(categoria).not.toHaveValue('')
@@ -186,12 +222,16 @@ test.describe('lançar uma despesa', () => {
   test('o rateio da parcela aparece antes de confirmar', async ({ page }) => {
     await entrar(page)
     await page.goto('/lancamentos')
-    await page.getByRole('button', { name: '+ lançar' }).click()
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
 
     await page.getByLabel('Conta ou cartão').selectOption({ label: 'Cartão principal' })
     for (const tecla of ['1', '0', '0', '0', '0', '0']) {
       await page.getByLabel('Valor').press(tecla)
     }
+
+    // Parcelar é atributo secundário, colapsado atrás de um rótulo — não um
+    // ícone nu, que obrigaria a clicar para descobrir o que faz.
+    await page.getByRole('button', { name: 'parcelar' }).click()
     await page.getByLabel('Parcelas').fill('3')
 
     // R$ 1.000,00 em 3x não divide. A frase diz o resto, em vez de esconder
@@ -203,7 +243,7 @@ test.describe('lançar uma despesa', () => {
   test('valor zero é recusado com uma frase, não com um lançamento vazio', async ({ page }) => {
     await entrar(page)
     await page.goto('/lancamentos')
-    await page.getByRole('button', { name: '+ lançar' }).click()
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
 
     await page.getByLabel('Descrição').fill('Sem valor')
     await page.getByRole('button', { name: 'salvar', exact: true }).click()
@@ -216,7 +256,10 @@ test.describe('lançar uma despesa', () => {
 test.describe('cartão', () => {
   test('a fatura é um objeto com ciclo, e as parcelas futuras aparecem', async ({ page }) => {
     await entrar(page)
-    await page.getByRole('link', { name: 'cartões' }).click()
+    await page
+      .getByRole('navigation', { name: 'Navegação principal' })
+      .getByRole('link', { name: 'cartões' })
+      .click()
 
     await expect(page.getByText('Cartão principal')).toBeVisible()
     await expect(page.getByText(/fecha dia 25 · vence dia 5/)).toBeVisible()
@@ -230,7 +273,11 @@ test.describe('cartão', () => {
 test.describe('sair', () => {
   test('revoga no ato, e o extrato deixa de abrir', async ({ page }) => {
     await entrar(page)
-    await page.getByRole('button', { name: 'sair' }).click()
+
+    // Sair vive no menu da conta, atrás do avatar de iniciais — como no
+    // Organizze, e como em todo produto que tem mais de uma ação de conta.
+    await page.getByRole('button', { name: 'Sua conta' }).click()
+    await page.getByRole('menuitem', { name: 'sair' }).click()
 
     await expect(page).toHaveURL(/\/entrar/)
 
@@ -254,10 +301,13 @@ test.describe('os três eixos de filtro', () => {
     await expect(page.getByText('saldo no dia').first()).toBeVisible()
 
     const antes = await page.locator('.linha').count()
+    await abrirFiltros(page)
     await page.getByLabel('Origem').selectOption('parcelado')
 
     await expect(page.getByText(/^Pneus \d\/6$/)).toBeVisible()
     expect(await page.locator('.linha').count()).toBeLessThan(antes)
+    // O saldo do dia some: acumular sobre um subconjunto produz um número que
+    // parece saldo e não é.
     await expect(page.getByText('saldo no dia')).toHaveCount(0)
     // E o rodapé avisa que os totais continuam sendo do mês inteiro.
     await expect(page.getByText('totais do mês inteiro, não do filtro')).toBeVisible()
@@ -267,6 +317,7 @@ test.describe('os três eixos de filtro', () => {
     await entrar(page)
     await page.goto('/lancamentos')
 
+    await abrirFiltros(page)
     await page.getByLabel('Natureza').selectOption('transferencia')
     await expect(page.getByText('Para a reserva')).toBeVisible()
     await expect(page.getByText('Aluguel')).toHaveCount(0)
@@ -285,12 +336,12 @@ test.describe('estornar', () => {
     await entrar(page)
     await page.goto('/lancamentos')
 
-    // A região nomeada, e não `getByText('despesas')` solto: "despesas" também
-    // é uma opção do filtro de natureza, e o seletor pegaria as duas.
-    const rodape = page.getByRole('region', { name: 'Resumo do mês' })
-    const despesaAntes = centavosDe(
-      (await rodape.getByText(/^despesas/).innerText()).replace('despesas', ''),
-    )
+    // O detalhe do rodapé é colapsado, como no Organizze: as duas linhas que
+    // interessam sempre ficam à vista, e o modelo realizado × previsto completo
+    // abre sob demanda.
+    const rodape = rodapeDoMes(page)
+    await rodape.getByRole('button', { name: 'ver detalhe' }).click()
+    const despesaAntes = await despesaRealizada(rodape)
 
     await page.getByText('Aluguel', { exact: true }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
@@ -310,10 +361,10 @@ test.describe('estornar', () => {
     await expect(page.getByText('Aluguel', { exact: true })).toBeVisible()
 
     await expect(async () => {
-      const despesaDepois = centavosDe(
-        (await rodape.getByText(/^despesas/).innerText()).replace('despesas', ''),
-      )
-      expect(despesaDepois).toBe(despesaAntes + 25000n)
+      const rodapeAtual = rodapeDoMes(page)
+      const ocultar = rodapeAtual.getByRole('button', { name: 'ver detalhe' })
+      if (await ocultar.isVisible()) await ocultar.click()
+      expect(await despesaRealizada(rodapeAtual)).toBe(despesaAntes + 25000n)
     }).toPass({ timeout: 10_000 })
   })
 

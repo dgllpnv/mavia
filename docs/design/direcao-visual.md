@@ -1,3 +1,21 @@
+> ## ⚠ SUBSTITUÍDA em 2026-09-02
+> 
+> Esta direção foi **substituída** por `docs/design/direcao-visual-2-familiar.md`,
+> por decisão do dono do produto (DP-31): a disposição das telas passa a seguir a
+> do Organizze, que é a que os clientes dele já sabem usar.
+> 
+> **O documento continua normativo no que não foi substituído** — a paleta (§2.5
+> a §2.9), a tipografia dos números (§3) e as regras de sinal seguem valendo
+> integralmente. O que caiu foi a disposição: o card volta, a linha vai a 56px, o
+> ícone de categoria em círculo volta, e o trilho sai das telas de listagem.
+> 
+> Ele fica aqui inteiro porque o raciocínio importa: quem for propor a próxima
+> direção precisa saber o que já foi tentado, e por que a premissa estava errada.
+> A premissa era que familiaridade é o custo que se paga pela identidade. Ela é o
+> ativo que o produto compra ao entrar nesta categoria.
+
+---
+
 # Direção visual da Mavia — "Papel e trilho"
 
 > **Status: APROVADA em 2026-09-01.** O dono do produto escolheu a direção **A — "Papel e trilho"**,

@@ -1,37 +1,46 @@
 'use client'
 
+import { competenciaDe } from '@mavia/domain'
+import { corDaCategoria } from '@mavia/ui'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { api } from '../../api/cliente'
+import { montarDicionarios } from '../../api/dicionarios'
 import { mesAnterior, mesSeguinte, periodoDe } from '../../api/periodo'
+import { Cartao, Vazio } from '../../componentes/cartao'
+import { FormularioDeLancamento } from '../../componentes/formulario-de-lancamento'
+import { IconeDeCategoria } from '../../componentes/icone-de-categoria'
 import { useEspaco } from '../../componentes/provedores'
-import { Trilho } from '../../componentes/trilho'
 import { Valor } from '../../componentes/valor'
-import { competenciaDe } from '@mavia/domain'
 
 /**
  * Visão geral.
  *
- * Grade **7fr / 4fr**, e não três colunas iguais: a coluna dominante carrega
- * estado e urgência, a de apoio carrega ação. Simetria é o default de quem não
- * decidiu (`docs/design.md` §2.5).
+ * Duas colunas de **cards independentes**, na disposição do Organizze (DP-31):
+ * à esquerda o que é estado e urgência — saldo, contas, a pagar; à direita o
+ * que é análise e o que exige ação — cartões, para onde o dinheiro foi.
  *
- * Um herói por tela — o saldo, em 56px, com o trilho logo abaixo. A frase que o
- * segue é **específica**, montada com os números do próprio usuário, e não um
- * slogan: "você tem R$ X hoje e R$ Y previstos até o fim do mês" diz algo;
- * "controle suas finanças" não diz nada.
+ * O cabeçalho carrega as **ações primárias** em vez de um botão flutuante. É
+ * deliberado no Organizze e vale herdar: lançar é o que a pessoa vem fazer, e o
+ * lugar de lançar é a primeira tela.
+ *
+ * Onde nos afastamos: os **estados vazios são compactos**. O teardown aponta
+ * (§8.5, item 3) que os vazios permanentes do Organizze ocupam o espaço de um
+ * widget cheio para sempre — bom no primeiro dia, ruim em todos os outros.
  */
 export default function VisaoGeral() {
   const espaco = useEspaco()
   const [mes, setMes] = useState(() => competenciaDe(new Date()))
+  const [lancando, setLancando] = useState<'despesa' | 'receita' | 'transferencia' | null>(null)
+  const [ocultarSaldo, setOcultarSaldo] = useState(false)
+
   const periodo = periodoDe(mes.ano, mes.mes)
 
   const resumo = useQuery({
     queryKey: ['resumo', espaco.id, periodo.janela, 'caixa'],
-    // O eixo é **caixa**: esta tela responde "quanto há e quanto haverá na
-    // conta". O eixo competência responde outra pergunta, e misturá-los foi o
-    // defeito RP-4.
+    // Eixo **caixa**: esta tela responde "quanto há e quanto haverá na conta".
+    // O eixo competência responde outra pergunta, e misturá-los foi o RP-4.
     queryFn: () => api.resumo(espaco.id, periodo.janela, 'caixa'),
   })
 
@@ -45,197 +54,399 @@ export default function VisaoGeral() {
     queryFn: () => api.cartoes(espaco.id),
   })
 
+  const categorias = useQuery({
+    queryKey: ['categorias', espaco.id],
+    queryFn: () => api.categorias(espaco.id),
+    staleTime: 5 * 60_000,
+  })
+
+  const lancamentos = useQuery({
+    queryKey: ['lancamentos', espaco.id, periodo.janela],
+    queryFn: () => api.lancamentos(espaco.id, periodo.janela),
+  })
+
   const saldosPorConta = useQueries({
     queries: (contas.data?.itens ?? []).map((c) => ({
       queryKey: ['resumo-conta', espaco.id, c.id, periodo.janela],
-      queryFn: () => api.resumo(espaco.id, periodo.janela, 'caixa', c.id),
+      queryFn: () => api.resumo(espaco.id, periodo.janela, 'caixa' as const, c.id),
     })),
   })
 
+  const faturas = useQueries({
+    queries: (cartoes.data?.itens ?? []).map((c) => ({
+      queryKey: ['faturas', espaco.id, c.id],
+      queryFn: () => api.faturas(espaco.id, c.id),
+    })),
+  })
+
+  const dicionarios = useMemo(
+    () => montarDicionarios(categorias.data?.itens ?? [], contas.data?.itens ?? []),
+    [categorias.data, contas.data],
+  )
+
+  const aPagar = useMemo(
+    () =>
+      (lancamentos.data?.itens ?? [])
+        .filter((l) => l.status !== 'efetivado' && BigInt(l.valorCentavos) < 0n)
+        .sort((a, b) => (a.postedAt < b.postedAt ? -1 : 1)),
+    [lancamentos.data],
+  )
+
+  const porCategoria = useMemo(
+    () => maioresGastos(lancamentos.data?.itens ?? [], categorias.data?.itens ?? []),
+    [lancamentos.data, categorias.data],
+  )
+
   return (
     <>
-      <div className="flex items-baseline justify-between gap-24">
-        <h1 className="sr-only">Visão geral</h1>
-        <p className="rotulo">Saldo geral · {periodo.rotulo}</p>
-        <NavegadorDeMes
-          rotulo={periodo.rotulo}
-          aoVoltar={() => setMes(mesAnterior(mes))}
-          aoAvancar={() => setMes(mesSeguinte(mes))}
-        />
+      {/* -----------------------------------------------------------------
+          Cabeçalho: período, totais do mês e as ações primárias
+          ----------------------------------------------------------------- */}
+      <div className="flex flex-wrap items-center gap-16">
+        <div className="flex items-center gap-8">
+          <button className="botao" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
+            ‹
+          </button>
+          <span className="min-w-[15ch] text-center font-numero text-2 font-semibold">
+            {periodo.rotulo}
+          </span>
+          <button className="botao" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
+            ›
+          </button>
+        </div>
+
+        {resumo.data && (
+          <div className="flex items-center gap-24">
+            <TotalDoMes rotulo="Receita do mês" centavos={resumo.data.receitaRealizada} />
+            <TotalDoMes rotulo="Despesa do mês" centavos={resumo.data.despesaRealizada} />
+          </div>
+        )}
+
+        <div className="ml-auto flex flex-wrap items-center gap-8">
+          <button className="botao botao--primario" onClick={() => setLancando('despesa')}>
+            despesa
+          </button>
+          <button className="botao botao--discreto" onClick={() => setLancando('receita')}>
+            receita
+          </button>
+          <button className="botao botao--discreto" onClick={() => setLancando('transferencia')}>
+            transferência
+          </button>
+        </div>
       </div>
 
-      <div className="mt-32 grid gap-44 lg:grid-cols-[7fr_4fr]">
+      <div className="mt-24 grid gap-24 lg:grid-cols-[7fr_5fr]">
         {/* ---------------------------------------------------------------
-            Coluna dominante — estado e urgência
+            Coluna esquerda — estado e urgência
             --------------------------------------------------------------- */}
-        <section>
-          {resumo.isPending ? (
-            <p className="text-corpo text-ink-3">Somando o período…</p>
-          ) : resumo.data ? (
-            <>
-              <p className="font-numero text-heroi font-bold leading-none tracking-tight text-ink-0">
-                <Valor centavos={resumo.data.saldo} isolado saldo />
-              </p>
+        <div className="flex flex-col gap-24">
+          <Cartao
+            titulo="Saldo geral"
+            acoes={
+              // O olho de ocultar é do Organizze, e serve a quem abre o
+              // aplicativo em lugar público. É estado da sessão, não do usuário.
+              <button
+                className="botao text-sm"
+                aria-pressed={ocultarSaldo}
+                onClick={() => setOcultarSaldo((v) => !v)}
+              >
+                {ocultarSaldo ? 'mostrar' : 'ocultar'}
+              </button>
+            }
+          >
+            {resumo.isPending ? (
+              <p className="text-corpo text-ink-3">Somando…</p>
+            ) : resumo.data ? (
+              <>
+                <p className="font-numero text-heroi font-bold leading-none tracking-tight text-ink-0">
+                  {ocultarSaldo ? (
+                    <span aria-label="Saldo oculto">••••••</span>
+                  ) : (
+                    <Valor centavos={resumo.data.saldo} isolado saldo />
+                  )}
+                </p>
+                <p className="mt-12 text-corpo text-ink-2">
+                  <FraseDoMes
+                    saldo={resumo.data.saldo}
+                    projetado={resumo.data.projetado}
+                    despesaPrevista={resumo.data.despesaPrevista}
+                  />
+                </p>
+              </>
+            ) : (
+              <p className="text-corpo text-despesa">Não foi possível somar o período.</p>
+            )}
+          </Cartao>
 
-              <div className="mt-16 max-w-[520px]">
-                {/*
-                  O trilho mede **despesa realizada contra despesa do mês**, e
-                  não saldo contra projeção.
-
-                  A §1.3 sugeria saldo contra previsto, e isso não fecha: quando
-                  ainda há dinheiro para sair, o saldo de hoje é MAIOR que a
-                  projeção, e a geometria — que existe para acusar estouro de
-                  gasto — leria a diferença como "R$ 149 acima do previsto".
-                  Estaria dizendo que a pessoa gastou demais justamente porque
-                  ela ainda não gastou.
-
-                  Despesa realizada contra despesa do mês é a mesma pergunta do
-                  documento — quanto disto já é fato, e onde estava previsto
-                  terminar — sobre um par em que ela tem resposta.
-                */}
-                <Trilho
-                  realizadoCentavos={resumo.data.despesaRealizada}
-                  previstoCentavos={(
-                    BigInt(resumo.data.despesaRealizada) + BigInt(resumo.data.despesaPrevista)
-                  ).toString()}
-                  tamanho="heroi"
-                  denominador={`do gasto previsto para ${periodo.rotulo.split(' de ')[0]}`}
-                />
+          <Cartao
+            titulo="Minhas contas"
+            semPadding
+            rodape={
+              <Link href="/contas" className="hover:underline">
+                gerenciar contas
+              </Link>
+            }
+          >
+            {contas.data?.itens.length === 0 ? (
+              <div className="px-20 py-8">
+                <Vazio
+                  acao={
+                    <Link href="/contas" className="botao botao--primario">
+                      criar conta
+                    </Link>
+                  }
+                >
+                  Toda movimentação sai de uma conta ou de um cartão. Comece pela
+                  conta em que o seu salário cai.
+                </Vazio>
               </div>
-
-              <p className="mt-24 max-w-[52ch] text-corpo text-ink-2">
-                <FraseDoMes
-                  saldo={resumo.data.saldo}
-                  projetado={resumo.data.projetado}
-                  despesaPrevista={resumo.data.despesaPrevista}
-                />
-              </p>
-            </>
-          ) : (
-            <p className="text-corpo text-despesa">Não foi possível somar o período.</p>
-          )}
-
-          <hr className="my-44 border-line" />
-
-          <p className="rotulo">Contas</p>
-          <ul className="mt-12">
-            {(contas.data?.itens ?? []).map((c, i) => (
-              <li key={c.id} className="linha grid-cols-[1fr_auto]">
-                <span className="truncate text-1">{c.nome}</span>
-                <span className="text-1">
-                  <Valor centavos={saldosPorConta[i]?.data?.saldo ?? c.saldoInicialCentavos} saldo />
-                </span>
-              </li>
-            ))}
-            {contas.data?.itens.length === 0 && (
-              <li className="flex h-[32px] items-center text-corpo text-ink-3">
-                Nenhuma conta ainda.
-              </li>
+            ) : (
+              (contas.data?.itens ?? []).map((c, i) => (
+                <div key={c.id} className="linha grid-cols-[auto_1fr_auto]">
+                  <IconeDeCategoria nome={c.nome} cor={corDaCategoria(c.id)} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-1">{c.nome}</span>
+                    <span className="block text-sm text-ink-3">
+                      {c.origem === 'conectado' ? 'conta conectada' : 'conta manual'}
+                      {!c.incluirNoSaldoGeral && ' · fora do saldo geral'}
+                    </span>
+                  </span>
+                  <span className="text-1">
+                    <Valor
+                      centavos={saldosPorConta[i]?.data?.saldo ?? c.saldoInicialCentavos}
+                      saldo
+                    />
+                  </span>
+                </div>
+              ))
             )}
-          </ul>
-        </section>
+          </Cartao>
+
+          <Cartao titulo="Contas a pagar" semPadding>
+            {aPagar.length === 0 ? (
+              <div className="px-20 py-8">
+                <Vazio>Nada previsto para sair em {periodo.rotulo}.</Vazio>
+              </div>
+            ) : (
+              aPagar.map((l) => {
+                const atrasado = l.status === 'pendente'
+                return (
+                  <div key={l.id} className="linha grid-cols-[auto_1fr_auto_auto]">
+                    <IconeDeCategoria
+                      nome={dicionarios.nomeDaCategoria(l.categoriaId)}
+                      cor={dicionarios.corDaCategoriaPorId(l.categoriaId) ?? 'var(--dado-outros)'}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-1">{l.descricao}</span>
+                      <span className="block truncate text-sm text-ink-3">
+                        {dicionarios.nomeDaCategoria(l.categoriaId)}
+                      </span>
+                    </span>
+                    <span className={`text-sm ${atrasado ? 'text-despesa' : 'text-ink-3'}`}>
+                      {atrasado ? 'em atraso' : diaCurto(l.postedAt)}
+                    </span>
+                    <span className="text-1">
+                      <Valor centavos={l.valorCentavos} previsto />
+                    </span>
+                  </div>
+                )
+              })
+            )}
+          </Cartao>
+        </div>
 
         {/* ---------------------------------------------------------------
-            Coluna de apoio — ação e cartões
+            Coluna direita — cartões e análise
             --------------------------------------------------------------- */}
-        <aside>
-          <p className="rotulo">Cartões</p>
-          <ul className="mt-12 flex flex-col gap-24">
-            {(cartoes.data?.itens ?? []).map((c) => (
-              <li key={c.id}>
-                <Link href={`/cartoes/${c.id}`} className="block hover:text-primaria">
-                  <p className="text-1 font-medium">{c.nome}</p>
-                  <p className="mt-4 text-sm text-ink-3">
-                    fecha dia {c.closingDay} · vence dia {c.dueDay}
-                  </p>
-                </Link>
-              </li>
-            ))}
-            {cartoes.data?.itens.length === 0 && (
-              // Vazio ocupa uma linha de 32px e convida com algo específico —
-              // não um widget permanente roubando a coluna para sempre.
-              <li className="flex h-[32px] items-center text-corpo text-ink-3">
-                Nenhum cartão ainda.
-              </li>
+        <div className="flex flex-col gap-24">
+          <Cartao
+            titulo="Cartões de crédito"
+            semPadding
+            {...((cartoes.data?.itens.length ?? 0) > 0
+              ? {
+                  rodape: (
+                    <Link href="/cartoes" className="hover:underline">
+                      ver faturas
+                    </Link>
+                  ),
+                }
+              : {})}
+          >
+            {cartoes.data?.itens.length === 0 ? (
+              <div className="px-20 py-8">
+                <Vazio
+                  acao={
+                    <Link href="/cartoes" className="botao botao--primario">
+                      adicionar cartão
+                    </Link>
+                  }
+                >
+                  Nenhum cartão. O ciclo — dia de fechamento e de vencimento — é o
+                  que decide em qual fatura cada compra entra.
+                </Vazio>
+              </div>
+            ) : (
+              (cartoes.data?.itens ?? []).map((cartao, i) => {
+                const aberta = [...(faturas[i]?.data?.itens ?? [])]
+                  .sort((a, b) => (a.competencia < b.competencia ? -1 : 1))
+                  .find((f) => f.estado === 'aberta')
+
+                return (
+                  <Link
+                    key={cartao.id}
+                    href={`/cartoes/${cartao.id}`}
+                    className="linha grid-cols-[auto_1fr_auto]"
+                  >
+                    <IconeDeCategoria nome={cartao.nome} cor={corDaCategoria(cartao.id)} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-1">{cartao.nome}</span>
+                      <span className="block truncate text-sm text-ink-3">
+                        {aberta
+                          ? `fatura aberta · vence ${aberta.dataVencimento}`
+                          : `fecha dia ${cartao.closingDay}`}
+                      </span>
+                    </span>
+                    <span className="text-1">
+                      {aberta && <Valor centavos={aberta.totalCentavos} />}
+                    </span>
+                  </Link>
+                )
+              })
             )}
-          </ul>
+          </Cartao>
 
-          <hr className="my-44 border-line" />
-
-          <p className="rotulo">No mês</p>
-          {resumo.data && (
-            <dl className="mt-12">
-              <LinhaDeResumo rotulo="Receitas" centavos={resumo.data.receitaRealizada} />
-              <LinhaDeResumo rotulo="Despesas" centavos={resumo.data.despesaRealizada} />
-              <LinhaDeResumo
-                rotulo="Ainda previsto"
-                centavos={resumo.data.despesaPrevista}
-                previsto
-              />
-              {/* Transferência tem linha própria e neutra: ela não é receita nem
-                  despesa, e somá-la a qualquer um dos dois duplica o gasto. */}
-              <LinhaDeResumo
-                rotulo="Transferências"
-                centavos={resumo.data.transferenciaLiquidaRealizada}
-                transferencia
-              />
-            </dl>
-          )}
-        </aside>
+          <Cartao
+            titulo="Onde o dinheiro foi"
+            semPadding
+            {...(porCategoria.length > 0
+              ? {
+                  rodape: (
+                    <Link href="/lancamentos" className="hover:underline">
+                      ver lançamentos
+                    </Link>
+                  ),
+                }
+              : {})}
+          >
+            {porCategoria.length === 0 ? (
+              <div className="px-20 py-8">
+                <Vazio>Nenhuma despesa em {periodo.rotulo} ainda.</Vazio>
+              </div>
+            ) : (
+              porCategoria.map((c) => (
+                <div key={c.id} className="linha grid-cols-[auto_1fr_auto]">
+                  <IconeDeCategoria nome={c.nome} cor={c.cor} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-1">{c.nome}</span>
+                    {/* A barra de participação: o teardown mostra uma rosca, e a
+                        barra responde à mesma pergunta sem a leitura angular,
+                        que é justamente a parte que a rosca faz mal. */}
+                    <span
+                      className="mt-6 block h-[4px] rounded-1"
+                      style={{ width: `${c.fracao * 100}%`, background: c.cor, minWidth: 2 }}
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <span className="text-right">
+                    <span className="block text-1">
+                      <Valor centavos={c.centavos.toString()} />
+                    </span>
+                    <span className="block text-sm text-ink-3">
+                      {(c.fracao * 100).toFixed(0)}%
+                    </span>
+                  </span>
+                </div>
+              ))
+            )}
+          </Cartao>
+        </div>
       </div>
+
+      {lancando && (
+        <FormularioDeLancamento
+          tenantId={espaco.id}
+          naturezaInicial={lancando}
+          contas={contas.data?.itens ?? []}
+          cartoes={cartoes.data?.itens ?? []}
+          categorias={categorias.data?.itens ?? []}
+          aoFechar={() => setLancando(null)}
+        />
+      )}
     </>
   )
 }
 
-function LinhaDeResumo({
-  rotulo,
-  centavos,
-  previsto = false,
-  transferencia = false,
-}: {
-  rotulo: string
-  centavos: string
-  previsto?: boolean
-  transferencia?: boolean
-}) {
+function TotalDoMes({ rotulo, centavos }: { rotulo: string; centavos: string }) {
   return (
-    <div className="linha grid-cols-[1fr_auto]">
-      <dt className="text-corpo text-ink-2">{rotulo}</dt>
-      <dd className="text-1">
-        <Valor centavos={centavos} previsto={previsto} transferencia={transferencia} />
-      </dd>
+    <div>
+      <p className="rotulo">{rotulo}</p>
+      <p className="mt-2 font-numero text-2 font-semibold">
+        <Valor centavos={centavos} />
+      </p>
     </div>
   )
 }
 
-function NavegadorDeMes({
-  rotulo,
-  aoVoltar,
-  aoAvancar,
-}: {
-  rotulo: string
-  aoVoltar(): void
-  aoAvancar(): void
-}) {
-  return (
-    <div className="flex items-center gap-12">
-      <button className="botao botao--discreto" onClick={aoVoltar} aria-label="Mês anterior">
-        ‹
-      </button>
-      <span className="min-w-[15ch] text-center text-corpo">{rotulo}</span>
-      <button className="botao botao--discreto" onClick={aoAvancar} aria-label="Mês seguinte">
-        ›
-      </button>
-    </div>
-  )
+interface FatiaDeCategoria {
+  readonly id: string
+  readonly nome: string
+  readonly cor: string
+  readonly centavos: bigint
+  readonly fracao: number
 }
 
 /**
- * A frase específica.
+ * Os maiores gastos do mês, agrupados pela **categoria-raiz**.
  *
- * Ela é montada com os números do próprio usuário porque uma frase genérica no
- * lugar mais visível da tela é espaço gasto sem informar nada. Quando não há o
- * que dizer de específico, ela some — em vez de virar slogan.
+ * Raiz, e não folha: "Mercado" e "Restaurante" respondem juntas a pergunta
+ * "quanto foi para alimentação", e é essa a pergunta do painel. A quebra por
+ * subcategoria é do relatório.
+ *
+ * Transferência fica de fora por construção — ela não é gasto (regra 12b), e
+ * somá-la faria o pagamento de fatura aparecer como despesa.
+ */
+function maioresGastos(
+  lancamentos: readonly {
+    categoriaId: string | null
+    valorCentavos: string
+    transferGroupId: string | null
+  }[],
+  categorias: readonly { id: string; nome: string; parentId: string | null }[],
+): FatiaDeCategoria[] {
+  const porId = new Map(categorias.map((c) => [c.id, c]))
+  const soma = new Map<string, bigint>()
+
+  for (const l of lancamentos) {
+    if (l.transferGroupId !== null) continue
+    const valor = BigInt(l.valorCentavos)
+    if (valor >= 0n) continue
+    if (!l.categoriaId) continue
+
+    const c = porId.get(l.categoriaId)
+    const raiz = c?.parentId ?? l.categoriaId
+    soma.set(raiz, (soma.get(raiz) ?? 0n) + valor)
+  }
+
+  const total = [...soma.values()].reduce((a, b) => a + b, 0n)
+  if (total === 0n) return []
+
+  return [...soma.entries()]
+    .sort(([, a], [, b]) => (a < b ? -1 : 1))
+    .slice(0, 6)
+    .map(([id, centavos]) => ({
+      id,
+      nome: porId.get(id)?.nome ?? 'Sem categoria',
+      cor: corDaCategoria(id),
+      centavos,
+      fracao: Number((centavos * 1000n) / total) / 1000,
+    }))
+}
+
+/**
+ * A frase específica, montada com os números do próprio usuário.
+ *
+ * Uma frase genérica no lugar mais visível da tela é espaço gasto sem informar
+ * nada. Quando não há o que dizer de específico, ela some.
  */
 function FraseDoMes({
   saldo,
@@ -247,15 +458,20 @@ function FraseDoMes({
   despesaPrevista: string
 }) {
   const aPagar = -BigInt(despesaPrevista)
-  if (aPagar <= 0n) {
-    return <>Nada mais previsto para sair este mês.</>
-  }
+  if (aPagar <= 0n) return <>Nada mais previsto para sair este mês.</>
 
   const cai = BigInt(saldo) > BigInt(projetado)
   return (
     <>
-      Ainda há <Valor centavos={(-aPagar).toString()} previsto /> previstos para sair este mês
+      Ainda há <Valor centavos={(-aPagar).toString()} previsto /> previstos para sair
       {cai ? ', e o saldo fecha menor do que está hoje.' : '.'}
     </>
   )
+}
+
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+function diaCurto(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`
 }

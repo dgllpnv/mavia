@@ -1,51 +1,45 @@
 'use client'
 
-import { competenciaDe, dataCivilDe, formatarDataCivil } from '@mavia/domain'
 import type { Lancamento } from '@mavia/contracts'
+import { competenciaDe, dataCivilDe, formatarDataCivil } from '@mavia/domain'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { api } from '../../../api/cliente'
 import { montarDicionarios, type Dicionarios } from '../../../api/dicionarios'
 import { mesAnterior, mesSeguinte, periodoDe } from '../../../api/periodo'
-import { useEspaco } from '../../../componentes/provedores'
-import { Trilho } from '../../../componentes/trilho'
-import { Valor } from '../../../componentes/valor'
-import { FormularioDeLancamento } from '../../../componentes/formulario-de-lancamento'
+import { Cartao } from '../../../componentes/cartao'
 import { DetalheDoLancamento } from '../../../componentes/detalhe-do-lancamento'
+import { FormularioDeLancamento } from '../../../componentes/formulario-de-lancamento'
+import { IconeDeCategoria } from '../../../componentes/icone-de-categoria'
+import { useEspaco } from '../../../componentes/provedores'
+import { Valor } from '../../../componentes/valor'
 
 /**
- * Extrato.
+ * Lançamentos — a tela central.
  *
- * Coluna única, linhas de **36px**, agrupadas por dia. Sem ícone em círculo,
- * sem card, sem faixa de alerta permanente: são exatamente as três remoções que
- * levam a tela de 6 lançamentos visíveis para 15, num viewport de 900px.
- * Densidade aqui não é estética — é a diferença entre comparar e lembrar.
+ * Estrutura do Organizze (DP-31), que é a que os clientes já sabem ler:
  *
- * **Os três eixos de filtro são independentes.** O `Tipo` do Organizze colapsa
- * natureza, estado e origem em 13 opções lineares; aqui são três seletores de
- * três a quatro. O que era uma lista de 13 vira três perguntas simples.
+ * - um **card** com cabeçalho: título, navegador de período, ação de lançar;
+ * - **barra de filtros** recolhida, que só se abre quando alguém quer filtrar;
+ * - lista **agrupada por dia**, com o dia como cabeçalho discreto e o **saldo
+ *   no dia** ao fim de cada grupo;
+ * - **rodapé de resumo**, colapsado em duas linhas e expansível para o modelo
+ *   realizado × previsto completo — o coração conceitual do produto.
+ *
+ * Onde corrigimos o Organizze: o filtro `Tipo` deles colapsa **três eixos
+ * ortogonais** em treze opções lineares (teardown §8.5, item 4). Aqui são três
+ * seletores independentes — natureza, estado e origem.
  */
 export default function Lancamentos() {
   const espaco = useEspaco()
   const [mes, setMes] = useState(() => competenciaDe(new Date()))
-  const [natureza, setNatureza] = useState<'todas' | 'receita' | 'despesa' | 'transferencia'>(
-    'todas',
-  )
+  const [natureza, setNatureza] = useState<'todas' | 'receita' | 'despesa' | 'transferencia'>('todas')
   const [estado, setEstado] = useState<'todos' | 'previsto' | 'pendente' | 'efetivado'>('todos')
+  const [origem, setOrigem] = useState<'todas' | 'parcelado' | 'importado' | 'digitado'>('todas')
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  const [resumoAberto, setResumoAberto] = useState(false)
   const [lancando, setLancando] = useState(false)
   const [aberto, setAberto] = useState<Lancamento | null>(null)
-
-  /**
-   * O terceiro eixo: **origem**.
-   *
-   * O `Tipo` do Organizze colapsa natureza, estado e origem em treze opções
-   * lineares; aqui são três seletores independentes de três a quatro valores.
-   *
-   * `fixo` não está aqui porque recorrência ainda não existe (épico 8). Ele
-   * entra junto com ela — oferecer um filtro que devolve sempre vazio é pior do
-   * que não oferecer.
-   */
-  const [origem, setOrigem] = useState<'todas' | 'parcelado' | 'importado' | 'digitado'>('todas')
 
   const periodo = periodoDe(mes.ano, mes.mes)
 
@@ -59,9 +53,6 @@ export default function Lancamentos() {
     queryFn: () => api.resumo(espaco.id, periodo.janela, 'caixa'),
   })
 
-  // Dois dicionários que a listagem precisa e o extrato não carrega por linha:
-  // o servidor devolve o vínculo por identificador porque o nome muda, e uma
-  // cópia por lançamento renomearia só as linhas futuras.
   const categorias = useQuery({
     queryKey: ['categorias', espaco.id],
     queryFn: () => api.categorias(espaco.id),
@@ -104,151 +95,182 @@ export default function Lancamentos() {
     [lista.data, natureza, estado, origem, resumo.data],
   )
 
+  const visiveis = dias.reduce((n, d) => n + d.itens.length, 0)
+
   return (
-    <div className="flex flex-col">
-      <div className="flex items-baseline justify-between gap-24">
-        <h1>Lançamentos</h1>
-        <div className="flex items-center gap-12">
-          <button className="botao botao--primario" onClick={() => setLancando(true)}>
-            + lançar
+    <>
+      <Cartao
+        titulo="Lançamentos"
+        semPadding
+        acoes={
+          <>
+            <button className="botao" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
+              ‹
+            </button>
+            <span className="min-w-[15ch] text-center text-corpo">{periodo.rotulo}</span>
+            <button className="botao" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
+              ›
+            </button>
+            <button className="botao botao--primario" onClick={() => setLancando(true)}>
+              lançar
+            </button>
+          </>
+        }
+      >
+        {/* ---------------------------------------------------------------
+            Barra de filtros — recolhida por padrão, como no Organizze
+            --------------------------------------------------------------- */}
+        <div className="flex flex-wrap items-center gap-12 border-b border-line px-20 py-12">
+          <button
+            className="botao botao--discreto"
+            aria-expanded={filtrosAbertos}
+            onClick={() => setFiltrosAbertos((v) => !v)}
+          >
+            {filtrosAbertos ? 'ocultar filtros' : 'filtrar por…'}
           </button>
-          <button className="botao botao--discreto" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
-            ‹
-          </button>
-          <span className="min-w-[15ch] text-center text-corpo">{periodo.rotulo}</span>
-          <button className="botao botao--discreto" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
-            ›
-          </button>
-        </div>
-      </div>
 
-      {/* Barra de filtros achatada em 32px, acima de tudo que ela escopa. */}
-      <div className="mt-24 flex h-[32px] items-center gap-16 border-b border-line">
-        <Seletor<typeof natureza>
-          rotulo="Natureza"
-          valor={natureza}
-          opcoes={[
-            ['todas', 'natureza: todas'],
-            ['receita', 'receitas'],
-            ['despesa', 'despesas'],
-            ['transferencia', 'transferências'],
-          ]}
-          aoMudar={setNatureza}
-        />
-        <Seletor<typeof estado>
-          rotulo="Estado"
-          valor={estado}
-          opcoes={[
-            ['todos', 'estado: todos'],
-            ['previsto', 'previstos'],
-            ['pendente', 'pendentes'],
-            ['efetivado', 'efetivados'],
-          ]}
-          aoMudar={setEstado}
-        />
-        <Seletor<typeof origem>
-          rotulo="Origem"
-          valor={origem}
-          opcoes={[
-            ['todas', 'origem: todas'],
-            ['digitado', 'digitados'],
-            ['parcelado', 'parcelados'],
-            ['importado', 'importados'],
-          ]}
-          aoMudar={setOrigem}
-        />
-        <span className="ml-auto text-sm text-ink-3">
-          {filtrado
-            ? `${dias.reduce((n, d) => n + d.itens.length, 0)} de ${lista.data?.itens.length ?? 0} lançamentos`
-            : `${dias.reduce((n, d) => n + d.itens.length, 0)} lançamentos`}
-        </span>
-      </div>
-
-      {/* Cabeçalho de colunas sticky, 28px. O Organizze não tem — e sem ele o
-          usuário reencontra o significado de cada coluna a cada rolagem. */}
-      <div className="linha sticky top-[var(--altura-nav)] z-[1] h-[28px] grid-cols-[24px_72px_1fr_160px_120px_160px] border-b border-line-forte bg-surface-2">
-        <span />
-        <span className="rotulo">Data</span>
-        <span className="rotulo">Descrição</span>
-        <span className="rotulo">Categoria</span>
-        <span className="rotulo">Conta</span>
-        <span className="rotulo text-right">Valor</span>
-      </div>
-
-      {lista.isPending && <p className="mt-24 text-corpo text-ink-3">Carregando o extrato…</p>}
-
-      {lista.data && dias.length === 0 && (
-        <p className="mt-24 text-corpo text-ink-3">
-          Nenhum lançamento em {periodo.rotulo} com estes filtros.
-        </p>
-      )}
-
-      {dias.map((dia) => (
-        <section key={dia.chave}>
-          <h2 className="cabecalho-dia rotulo">{dia.rotulo}</h2>
-          {dia.itens.map((l) => (
-            <LinhaDoExtrato
-              key={l.id}
-              lancamento={l}
-              dicionarios={dicionarios}
-              aoAbrir={() => setAberto(l)}
-            />
-          ))}
-          {/* O saldo ao fim do dia: o usuário rola o extrato e lê, dia a dia,
-              quanto o dia já se cumpriu.
-
-              Com filtro ativo ele **some**, e some de propósito: acumular sobre
-              um subconjunto produz um número que parece saldo e não é. */}
-          {!filtrado && (
-            <div className="flex h-[var(--altura-cabecalho-dia)] items-center justify-end gap-12 border-b border-line pr-8">
-              <span className="rotulo">saldo no dia</span>
-              <span className="text-sm">
-                <Valor centavos={dia.saldoAoFim} saldo />
-              </span>
-            </div>
+          {filtrosAbertos && (
+            <>
+              <Seletor<typeof natureza>
+                rotulo="Natureza"
+                valor={natureza}
+                opcoes={[
+                  ['todas', 'natureza: todas'],
+                  ['receita', 'receitas'],
+                  ['despesa', 'despesas'],
+                  ['transferencia', 'transferências'],
+                ]}
+                aoMudar={setNatureza}
+              />
+              <Seletor<typeof estado>
+                rotulo="Estado"
+                valor={estado}
+                opcoes={[
+                  ['todos', 'estado: todos'],
+                  ['previsto', 'previstos'],
+                  ['pendente', 'pendentes'],
+                  ['efetivado', 'efetivados'],
+                ]}
+                aoMudar={setEstado}
+              />
+              <Seletor<typeof origem>
+                rotulo="Origem"
+                valor={origem}
+                opcoes={[
+                  ['todas', 'origem: todas'],
+                  ['digitado', 'digitados'],
+                  ['parcelado', 'parcelados'],
+                  ['importado', 'importados'],
+                ]}
+                aoMudar={setOrigem}
+              />
+            </>
           )}
-        </section>
-      ))}
 
-      {/* Rodapé fixo, 56px, com o trilho do mês — o mesmo do painel. A
-          continuidade entre as telas é o ponto do elemento-assinatura. */}
-      {/* Região nomeada: quem usa leitor de tela navega até "Resumo do mês" em
-          vez de tabular por trinta linhas de extrato para chegar ao total. */}
+          <span className="ml-auto text-sm text-ink-3">
+            {filtrado
+              ? `${visiveis} de ${lista.data?.itens.length ?? 0} lançamentos`
+              : `${visiveis} lançamentos`}
+          </span>
+        </div>
+
+        {lista.isPending && <p className="px-20 py-16 text-corpo text-ink-3">Carregando…</p>}
+
+        {lista.data && dias.length === 0 && (
+          <p className="px-20 py-16 text-corpo text-ink-3">
+            Nenhum lançamento em {periodo.rotulo}
+            {filtrado ? ' com estes filtros.' : '.'}
+          </p>
+        )}
+
+        {dias.map((dia) => (
+          <div key={dia.chave}>
+            <div className="cabecalho-dia">
+              <span className="rotulo">{dia.rotulo}</span>
+              {/* O saldo do dia vem no próprio cabeçalho do grupo, e não numa
+                  linha extra: é o mesmo dado com 32px a menos por dia.
+                  Com filtro ativo ele some — acumular sobre um subconjunto
+                  produz um número que parece saldo e não é. */}
+              {!filtrado && (
+                <span className="text-sm text-ink-3">
+                  saldo no dia <Valor centavos={dia.saldoAoFim} saldo />
+                </span>
+              )}
+            </div>
+
+            {dia.itens.map((l) => (
+              <LinhaDoExtrato
+                key={l.id}
+                lancamento={l}
+                dicionarios={dicionarios}
+                aoAbrir={() => setAberto(l)}
+              />
+            ))}
+          </div>
+        ))}
+      </Cartao>
+
+      {/* -----------------------------------------------------------------
+          Rodapé de resumo — colapsado em duas linhas, expansível para o
+          modelo realizado × previsto completo
+          ----------------------------------------------------------------- */}
       {resumo.data && (
         <section
           role="region"
           aria-label="Resumo do mês"
-          className="sticky bottom-0 mt-32 border-t border-line-forte bg-paper py-12"
+          className="cartao sticky bottom-0 z-10 mt-24"
         >
-          <div className="flex flex-wrap items-baseline gap-x-24 gap-y-4 text-sm text-ink-3">
+          <div className="flex flex-wrap items-center gap-24 px-20 py-12">
+            <div>
+              <p className="rotulo">Saldo</p>
+              <p className="font-numero text-3 font-semibold">
+                <Valor centavos={resumo.data.saldo} saldo />
+              </p>
+            </div>
+            <div>
+              <p className="rotulo">Previsto</p>
+              <p className="font-numero text-3">
+                <Valor centavos={resumo.data.projetado} saldo previsto />
+              </p>
+            </div>
+
             {filtrado && (
-              <span className="text-atencao">totais do mês inteiro, não do filtro</span>
+              <span className="text-sm text-atencao">totais do mês inteiro, não do filtro</span>
             )}
-            <span>
-              saldo anterior <Valor centavos={resumo.data.saldoAnterior} saldo />
-            </span>
-            <span>
-              receitas <Valor centavos={resumo.data.receitaRealizada} />
-            </span>
-            <span>
-              despesas <Valor centavos={resumo.data.despesaRealizada} />
-            </span>
+
+            <button
+              className="botao botao--discreto ml-auto"
+              aria-expanded={resumoAberto}
+              onClick={() => setResumoAberto((v) => !v)}
+            >
+              {resumoAberto ? 'ocultar detalhe' : 'ver detalhe'}
+            </button>
           </div>
-          <div className="mt-8 flex items-baseline gap-24">
-            <span className="rotulo">Saldo</span>
-            <span className="font-numero text-4 font-semibold tracking-tight text-ink-0">
-              <Valor centavos={resumo.data.saldo} isolado saldo />
-            </span>
-            <span className="min-w-[200px] flex-1">
-              <Trilho
-                realizadoCentavos={resumo.data.despesaRealizada}
-                previstoCentavos={(
-                  BigInt(resumo.data.despesaRealizada) + BigInt(resumo.data.despesaPrevista)
-                ).toString()}
-                denominador={`do gasto previsto para ${periodo.rotulo.split(' de ')[0]}`}
+
+          {resumoAberto && (
+            <dl className="grid grid-cols-2 gap-x-24 border-t border-line px-20 py-12 sm:grid-cols-3">
+              <LinhaDoResumo rotulo="Saldo anterior" centavos={resumo.data.saldoAnterior} saldo />
+              <LinhaDoResumo rotulo="Receita realizada" centavos={resumo.data.receitaRealizada} />
+              <LinhaDoResumo
+                rotulo="Receita prevista"
+                centavos={resumo.data.receitaPrevista}
+                previsto
               />
-            </span>
-          </div>
+              <LinhaDoResumo rotulo="Despesa realizada" centavos={resumo.data.despesaRealizada} />
+              <LinhaDoResumo
+                rotulo="Despesa prevista"
+                centavos={resumo.data.despesaPrevista}
+                previsto
+              />
+              {/* Transferência tem linha própria e neutra: ela não é receita nem
+                  despesa, e somá-la a qualquer um dos dois duplica o gasto. */}
+              <LinhaDoResumo
+                rotulo="Transferências"
+                centavos={resumo.data.transferenciaLiquidaRealizada}
+                transferencia
+              />
+            </dl>
+          )}
         </section>
       )}
 
@@ -271,16 +293,45 @@ export default function Lancamentos() {
           aoFechar={() => setLancando(false)}
         />
       )}
+    </>
+  )
+}
+
+function LinhaDoResumo({
+  rotulo,
+  centavos,
+  previsto = false,
+  transferencia = false,
+  saldo = false,
+}: {
+  rotulo: string
+  centavos: string
+  previsto?: boolean
+  transferencia?: boolean
+  saldo?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-12 py-4">
+      <dt className="text-sm text-ink-3">{rotulo}</dt>
+      <dd className="text-1">
+        <Valor
+          centavos={centavos}
+          previsto={previsto}
+          transferencia={transferencia}
+          saldo={saldo}
+        />
+      </dd>
     </div>
   )
 }
 
 /**
- * A linha, em 36px.
+ * A linha, em 56px, com o ícone de categoria em círculo.
  *
- * O estado é um glifo na primeira coluna — `✓` efetivado, `○` previsto, `⇄`
- * transferência. É o que o Organizze acerta e vale herdar: o estado fica onde o
- * olho já está, e não atrás de um menu.
+ * O glifo de estado fica à direita e é **clicável no Organizze** — alterna pago
+ * ali mesmo. Aqui ele ainda é indicador; alternar exige a rota de edição de
+ * lançamento, que não existe (a listagem é de leitura, e o detalhe é onde se
+ * age). Está registrado como o próximo passo natural desta tela.
  */
 function LinhaDoExtrato({
   lancamento,
@@ -292,52 +343,58 @@ function LinhaDoExtrato({
   aoAbrir(): void
 }) {
   const transferencia = lancamento.transferGroupId !== null
-  const glifo = transferencia ? '⇄' : lancamento.status === 'efetivado' ? '✓' : '○'
   const cor = dicionarios.corDaCategoriaPorId(lancamento.categoriaId)
+  const parcela =
+    lancamento.installmentNumero !== null && lancamento.installmentTotal !== null
+      ? `${lancamento.installmentNumero}/${lancamento.installmentTotal}`
+      : null
 
   return (
-    // `button` e não `div` com `onClick`: a linha inteira é o alvo, e quem
-    // navega por teclado precisa chegar nela com Tab e abrir com Enter.
     <button
       type="button"
       onClick={aoAbrir}
-      className="linha w-full grid-cols-[24px_72px_1fr_160px_120px_160px] text-left"
+      className="linha w-full grid-cols-[auto_1fr_auto_auto] text-left"
     >
+      <IconeDeCategoria
+        nome={transferencia ? 'transferência' : dicionarios.nomeDaCategoria(lancamento.categoriaId)}
+        cor={cor ?? 'var(--dado-outros)'}
+        transferencia={transferencia}
+      />
+
+      <span className="min-w-0">
+        <span className="flex items-baseline gap-8">
+          <span className="truncate text-1">{lancamento.descricao}</span>
+          {parcela && <span className="shrink-0 text-sm text-ink-3">{parcela}</span>}
+        </span>
+        <span className="block truncate text-sm text-ink-3">
+          {transferencia ? 'transferência' : dicionarios.nomeDaCategoria(lancamento.categoriaId)}
+          {' · '}
+          {dicionarios.nomeDaConta(lancamento.contaId)}
+        </span>
+      </span>
+
+      <span className="text-right">
+        <span className="block text-1">
+          <Valor
+            centavos={lancamento.valorCentavos}
+            previsto={lancamento.status !== 'efetivado'}
+            transferencia={transferencia}
+            status={lancamento.status}
+          />
+        </span>
+        {lancamento.status !== 'efetivado' && (
+          <span className="block text-sm text-ink-3">
+            {lancamento.status === 'pendente' ? 'em atraso' : 'previsto'}
+          </span>
+        )}
+      </span>
+
       <span
-        className="text-sm text-ink-3"
+        className={`text-sm ${lancamento.status === 'efetivado' ? 'text-receita' : 'text-ink-4'}`}
         title={transferencia ? 'transferência' : lancamento.status}
         aria-label={transferencia ? 'transferência' : lancamento.status}
       >
-        {glifo}
-      </span>
-      <span className="valor text-sm text-ink-3">{diaCurto(lancamento.postedAt)}</span>
-      <span className="truncate text-1">{lancamento.descricao}</span>
-      <span className="flex items-center gap-6 truncate text-sm text-ink-3">
-        {transferencia ? (
-          '⇄ transferência'
-        ) : (
-          <>
-            {/* Quadrado de 8px, e não ícone em círculo colorido de 32px: a
-                mesma informação, 24px a menos de altura de linha. */}
-            <span
-              className="marca-categoria"
-              style={{ background: cor ?? 'var(--dado-outros)' }}
-              aria-hidden="true"
-            />
-            <span className="truncate">{dicionarios.nomeDaCategoria(lancamento.categoriaId)}</span>
-          </>
-        )}
-      </span>
-      <span className="truncate text-sm text-ink-3">
-        {dicionarios.nomeDaConta(lancamento.contaId)}
-      </span>
-      <span className="text-right text-1">
-        <Valor
-          centavos={lancamento.valorCentavos}
-          previsto={lancamento.status !== 'efetivado'}
-          transferencia={transferencia}
-          status={lancamento.status}
-        />
+        {lancamento.status === 'efetivado' ? '✓' : '○'}
       </span>
     </button>
   )
@@ -358,7 +415,7 @@ function Seletor<T extends string>({
     <label className="flex items-center gap-6">
       <span className="sr-only">{rotulo}</span>
       <select
-        className="rounded-1 border border-line-forte bg-paper px-8 py-2 text-sm"
+        className="rounded-2 border border-line-forte bg-card px-8 py-4 text-sm"
         value={valor}
         onChange={(e) => aoMudar(e.target.value as T)}
       >
@@ -375,8 +432,8 @@ function Seletor<T extends string>({
 /**
  * O filtro de natureza olha o **sinal e o vínculo de transferência**, e não um
  * enum `tipo`. Inferir natureza de um enum ao lado do valor é o que a regra 6
- * proíbe: os dois podem discordar, e aí a tela mostra uma coisa e o total
- * soma outra.
+ * proíbe: os dois podem discordar, e aí a tela mostra uma coisa e o total soma
+ * outra.
  */
 function filtrar(
   itens: readonly Lancamento[],
@@ -408,7 +465,6 @@ interface DiaDoExtrato {
   readonly chave: string
   readonly rotulo: string
   readonly itens: Lancamento[]
-  /** Saldo ao fim daquele dia. Preenchido por `comSaldoAcumulado`. */
   readonly saldoAoFim: string
 }
 
@@ -417,8 +473,7 @@ interface DiaDoExtrato {
  *
  * A lista vem do mais recente para o mais antigo — é a ordem em que se lê um
  * extrato —, mas o acúmulo tem de andar no sentido do tempo. Acumular na ordem
- * de exibição daria o saldo de trás para a frente, e o número do primeiro dia
- * do mês sairia igual ao do último.
+ * de exibição daria o saldo de trás para a frente.
  *
  * Só o que **se moveu** entra: um lançamento previsto ainda não mexeu no saldo,
  * e somá-lo aqui seria o eixo competência entrando no rodapé do eixo caixa.
@@ -476,13 +531,8 @@ const MESES_CURTOS = [
 
 function rotuloDoDia(chave: string): string {
   const [ano, mes, dia] = chave.split('-').map(Number)
-  // `Date.UTC` e leitura em UTC: a data já é civil, e reinterpretá-la no fuso
-  // do navegador a moveria de volta um dia.
+  // `Date.UTC` e leitura em UTC: a data já é civil, e reinterpretá-la no fuso do
+  // navegador a moveria de volta um dia.
   const d = new Date(Date.UTC(ano!, mes! - 1, dia!))
-  return `${DIAS_DA_SEMANA[d.getUTCDay()]} ${dia} ${MESES_CURTOS[mes! - 1]}`
-}
-
-function diaCurto(iso: string): string {
-  const c = dataCivilDe(new Date(iso))
-  return `${String(c.dia).padStart(2, '0')}/${String(c.mes).padStart(2, '0')}`
+  return `${DIAS_DA_SEMANA[d.getUTCDay()]}, ${dia} de ${MESES_CURTOS[mes! - 1]}`
 }

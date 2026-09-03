@@ -34,6 +34,8 @@
   --color-receita: var(--receita);
   --color-despesa: var(--despesa);
   --color-atencao: var(--atencao);
+  --color-card: var(--card-fundo);
+  --color-fundo: var(--fundo-da-pagina);
 
   --font-numero: var(--fonte-numero);
   --font-corpo: var(--fonte-corpo);
@@ -78,7 +80,7 @@
  * Base
  * ----------------------------------------------------------------------- */
 html {
-  background: var(--paper-0);
+  background: var(--fundo-da-pagina);
   color: var(--ink-1);
   font-family: var(--fonte-corpo);
   font-size: 16px;
@@ -271,14 +273,77 @@ select {
 }
 
 /* --------------------------------------------------------------------------
- * Extrato — 36px de altura, sem ícone em círculo, sem card
+ * O card
+ *
+ * Ele voltou a existir por decisão do dono do produto (DP-31). O argumento
+ * anterior — que ele custa 32px de altura e não informa nada — continua
+ * verdadeiro; o que pesa mais é que o card é o que separa "estado", "urgência"
+ * e "análise" num painel, e é a forma que os clientes reconhecem.
+ *
+ * Fundo branco sobre página cinza: é o contraste que faz o card existir. Sem
+ * ele, o card vira uma borda decorativa em volta de nada.
+ * ----------------------------------------------------------------------- */
+.cartao {
+  background: var(--card-fundo);
+  border: 1px solid var(--card-borda);
+  border-radius: var(--card-raio);
+  box-shadow: var(--card-sombra);
+}
+
+.cartao__cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--s-16);
+  min-height: 56px;
+  padding: 0 var(--s-20);
+  border-bottom: 1px solid var(--line);
+}
+
+.cartao__titulo {
+  font-family: var(--fonte-numero);
+  font-size: var(--text-2);
+  font-weight: var(--peso-realizado);
+  letter-spacing: var(--tracking-2);
+}
+
+.cartao__corpo {
+  padding: var(--card-padding);
+}
+
+/* Lista dentro de card não tem padding lateral próprio: as linhas encostam nas
+   bordas, e o respiro vem do padding de cada linha. É o que faz o separador
+   atravessar o card inteiro, como no Organizze. */
+.cartao__lista {
+  padding: 0;
+}
+
+.cartao__rodape {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-corpo);
+  color: var(--primaria);
+}
+
+/* --------------------------------------------------------------------------
+ * A linha — 56px, com ícone de categoria em círculo
+ *
+ * A altura não é escolha estética: é o que o círculo de 32px impõe. E o
+ * círculo é o que torna a lista escaneável por cor antes de ser lida.
  * ----------------------------------------------------------------------- */
 .linha {
   display: grid;
   align-items: center;
-  height: var(--altura-linha);
+  gap: var(--s-12);
+  min-height: var(--altura-linha);
+  padding: 0 var(--s-20);
   border-bottom: 1px solid var(--line);
-  padding: 0 var(--s-8);
+}
+
+.linha:last-child {
+  border-bottom: 0;
 }
 
 .linha:hover {
@@ -289,21 +354,73 @@ select {
   height: var(--altura-cabecalho-dia);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--s-16);
   background: var(--surface-2);
-  padding: 0 var(--s-8);
+  padding: 0 var(--s-20);
+  border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
-/* Categoria é um quadrado de 8px, não um ícone em círculo colorido de 32px.
-   Carrega a mesma informação e custa 24px a menos de altura de linha. */
+/* O ícone de categoria: círculo cheio na cor da raiz, com a inicial dentro.
+   Sem biblioteca de ícones — a inicial diz o mesmo, em português, e não
+   depende de alguém ter escolhido um desenho para "Alimentação". */
+.icone-categoria {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icone-categoria);
+  height: var(--icone-categoria);
+  border-radius: 50%;
+  flex: none;
+  color: #fff;
+  font-family: var(--fonte-numero);
+  font-size: var(--text-corpo);
+  font-weight: var(--peso-realizado);
+  line-height: 1;
+  user-select: none;
+}
+
+/* Quadrado pequeno, para onde o círculo não cabe — legenda de gráfico e
+   lista compacta. */
 .marca-categoria {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-0);
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   flex: none;
+}
+
+/* --------------------------------------------------------------------------
+ * A barra de navegação — sólida, na cor da marca
+ * ----------------------------------------------------------------------- */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: var(--s-24);
+  height: var(--altura-nav);
+  padding: 0 var(--s-24);
+  background: var(--primaria);
+  color: var(--primaria-sobre);
+}
+
+.barra__destino {
+  font-size: var(--text-corpo);
+  color: color-mix(in srgb, var(--primaria-sobre) 78%, transparent);
+  padding: var(--s-8) 0;
+  border-bottom: 2px solid transparent;
+}
+
+.barra__destino:hover {
+  color: var(--primaria-sobre);
+}
+
+.barra__destino[aria-current='page'] {
+  color: var(--primaria-sobre);
+  border-bottom-color: var(--primaria-sobre);
+  font-weight: var(--peso-rotulo);
 }
 
 /* --------------------------------------------------------------------------
@@ -312,15 +429,17 @@ select {
 .botao {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--s-8);
   border: 1px solid transparent;
-  border-radius: var(--r-1);
+  border-radius: var(--r-2);
   padding: var(--s-8) var(--s-16);
   font-size: var(--text-corpo);
   font-weight: var(--peso-rotulo);
   cursor: pointer;
   background: transparent;
   color: var(--ink-1);
+  white-space: nowrap;
 }
 
 .botao--primario {
@@ -349,7 +468,7 @@ select {
 .campo {
   width: 100%;
   border: 1px solid var(--line-forte);
-  border-radius: var(--r-1);
+  border-radius: var(--r-2);
   background: var(--paper-0);
   padding: var(--s-8) var(--s-12);
   font-size: var(--text-1);
@@ -357,4 +476,67 @@ select {
 
 .campo:hover {
   border-color: var(--ink-4);
+}
+
+/* --------------------------------------------------------------------------
+ * Interruptor
+ *
+ * Existe porque o Organizze resolve "Lançamento pago" com um, e é a peça que
+ * os clientes usam mais. Aqui ele é `role="switch"` de verdade: o leitor de
+ * tela anuncia ligado/desligado, e a barra de espaço alterna.
+ * ----------------------------------------------------------------------- */
+.interruptor {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--line-forte);
+  border: 0;
+  cursor: pointer;
+  flex: none;
+  transition: background 160ms ease;
+}
+
+.interruptor[aria-checked='true'] {
+  background: var(--receita);
+}
+
+.interruptor::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+.interruptor[aria-checked='true']::after {
+  transform: translateX(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interruptor,
+  .interruptor::after {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Faixa de alerta — o padrão do Organizze para "há algo em atraso"
+ * ----------------------------------------------------------------------- */
+.faixa {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-12) var(--s-20);
+  border-radius: var(--card-raio);
+  font-size: var(--text-corpo);
+}
+
+.faixa--atraso {
+  background: var(--despesa-fundo);
+  color: var(--despesa);
 }

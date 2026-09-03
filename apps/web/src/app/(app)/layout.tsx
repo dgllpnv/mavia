@@ -2,19 +2,20 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSessao } from '../../componentes/provedores'
 
 /**
- * O cromo do produto: 48px de navegação e nada mais.
+ * O cromo do produto: barra sólida na cor da marca, cinco destinos à esquerda,
+ * conta à direita.
  *
- * Navegação **plana**, quatro destinos, sem menu lateral e sem submenu. É o que
- * o Organizze acerta e o que o teardown recomendou herdar: em finanças pessoais
- * o usuário vai a um de poucos lugares, e uma hierarquia de dois níveis só
- * acrescenta um clique para todo mundo.
+ * A disposição é a do Organizze (DP-31), porque é a que os clientes já sabem
+ * usar. Navegação **plana**: cinco lugares, sem menu lateral e sem hierarquia —
+ * em finanças pessoais a pessoa vai a um de poucos lugares, e dois níveis só
+ * acrescentam um clique para todo mundo.
  *
- * O cromo inteiro soma 228px contra 312px do Organizze — a diferença é o que
- * permite 15 lançamentos por tela em vez de 6.
+ * A cor é nossa, não a deles: petróleo no lugar do verde. O pedido foi a
+ * disposição, não a pele.
  */
 
 const DESTINOS = [
@@ -29,6 +30,7 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
   const { eu, carregando, espaco, sair } = useSessao()
   const router = useRouter()
   const caminho = usePathname()
+  const [menuAberto, setMenuAberto] = useState(false)
 
   useEffect(() => {
     if (!carregando && !eu) router.replace('/entrar')
@@ -36,10 +38,17 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
 
   if (carregando || !eu || !espaco) return null
 
+  const iniciais = eu.usuario.nome
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toLocaleUpperCase('pt-BR') ?? '')
+    .join('')
+
   return (
-    <div className="min-h-dvh bg-paper">
-      <header className="sticky top-0 z-10 flex h-[var(--altura-nav)] items-center gap-24 border-b border-line bg-paper px-24">
-        <span className="font-numero text-2 font-bold tracking-tight text-primaria">mavia</span>
+    <div className="min-h-dvh bg-fundo">
+      <header className="barra sticky top-0 z-20">
+        <span className="font-numero text-2 font-bold tracking-tight">mavia</span>
 
         <nav className="flex items-center gap-20" aria-label="Navegação principal">
           {DESTINOS.map((d) => {
@@ -49,11 +58,7 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
                 key={d.href}
                 href={d.href}
                 aria-current={ativo ? 'page' : undefined}
-                className={
-                  ativo
-                    ? 'rotulo text-ink-0 underline decoration-primaria decoration-2 underline-offset-8'
-                    : 'rotulo hover:text-ink-1'
-                }
+                className="barra__destino"
               >
                 {d.rotulo}
               </Link>
@@ -61,15 +66,42 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-16">
-          <span className="text-sm text-ink-3">{espaco.nome}</span>
-          <button className="botao botao--discreto" onClick={() => void sair()}>
-            sair
+        <div className="relative ml-auto flex items-center gap-16">
+          <span className="hidden text-sm opacity-80 sm:inline">{espaco.nome}</span>
+
+          {/* Avatar de iniciais, e não foto. O teardown registra que o Organizze
+              busca `picture` do provedor, o que cria uma requisição de saída da
+              nossa página para um terceiro em toda tela que o exibe. */}
+          <button
+            className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-[rgb(255_255_255/18%)] font-numero text-sm font-semibold"
+            aria-haspopup="menu"
+            aria-expanded={menuAberto}
+            aria-label="Sua conta"
+            onClick={() => setMenuAberto((v) => !v)}
+          >
+            {iniciais || '?'}
           </button>
+
+          {menuAberto && (
+            <div
+              role="menu"
+              className="absolute top-[44px] right-0 min-w-[220px] rounded-3 border border-[var(--card-borda)] bg-card p-8 text-ink-1 shadow-[var(--elev-2)]"
+            >
+              <p className="px-12 py-8 text-sm text-ink-3">{eu.usuario.email}</p>
+              <hr className="my-4 border-line" />
+              <button
+                role="menuitem"
+                className="botao w-full justify-start"
+                onClick={() => void sair()}
+              >
+                sair
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1240px] px-24 py-32">{children}</main>
+      <main className="mx-auto max-w-[1240px] px-24 py-24">{children}</main>
     </div>
   )
 }
