@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -94,8 +95,39 @@ const zSaida = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(false), erro: z.string().max(500) }),
 ])
 
-/** Onde mora o filho. Em produção é o `dist` do pacote; em dev, o fonte. */
-const CLI = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..', '..', 'packages', 'parser', 'src', 'cli.ts')
+/**
+ * Onde mora o filho.
+ *
+ * Em produção é um `parser-cli.js` **ao lado** do bundle da API, emitido pelo
+ * mesmo build; em desenvolvimento é o fonte `.ts`, executado com `tsx`.
+ *
+ * A última linha é a que importa: se nenhum dos dois existir, isto falha **na
+ * inicialização**, com os caminhos no erro — e não na primeira importação de
+ * extrato de um cliente, semanas depois do deploy.
+ */
+function localizarCli(): string {
+  const aqui = fileURLToPath(new URL('.', import.meta.url))
+  const doAmbiente = process.env['MAVIA_PARSER_CLI']
+
+  const candidatos = [
+    ...(doAmbiente ? [doAmbiente] : []),
+    // Produção: irmão do bundle.
+    join(aqui, 'parser-cli.js'),
+    // Desenvolvimento: o fonte, no workspace.
+    join(aqui, '..', '..', '..', '..', 'packages', 'parser', 'src', 'cli.ts'),
+  ]
+
+  const encontrado = candidatos.find((c) => existsSync(c))
+  if (!encontrado) {
+    throw new Error(
+      `Não encontrei o executável do parser. Procurei em: ${candidatos.join(', ')}. ` +
+        'Em produção ele é emitido pelo build, ao lado do bundle da API.',
+    )
+  }
+  return encontrado
+}
+
+const CLI = localizarCli()
 
 /**
  * O ambiente do filho. Vazio, e exportado para que o teste use **este** valor.

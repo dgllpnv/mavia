@@ -12,3 +12,8 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 /tmp/
+
+# Segredos de produção, gerados na VPS pelo `implantar.sh`. Perder este arquivo
+# com o volume do Postgres vivo torna o banco inacessível — as senhas estão
+# dentro dele, e só dentro dele.
+infra/producao/.env

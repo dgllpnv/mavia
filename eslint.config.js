@@ -65,6 +65,9 @@ export default tseslint.config(
             'apps/web/*.config.ts',
             'apps/api/*.config.ts',
             'apps/web/e2e/*.ts',
+            // Script de build. Não entra no `tsconfig` do app — ele constrói o
+            // app, não faz parte dele.
+            'apps/*/construir.mjs',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

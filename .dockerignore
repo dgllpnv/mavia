@@ -1,0 +1,30 @@
+# O que nunca entra numa imagem.
+#
+# `node_modules` acima de tudo: a imagem instala as dependências dela mesma, com
+# o lockfile, para o sistema operacional dela. Copiar as da máquina de
+# desenvolvimento traria binários nativos compilados para outro sistema — e,
+# como se descobriu ao montar este build, traria também o que houver de
+# instrumentação de editor no ambiente de quem construiu.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.expo
+**/build
+
+# Artefatos de teste e de ferramenta.
+**/test-results
+**/playwright-report
+**/coverage
+**/*.log
+**/.vscode
+**/.idea
+
+# Segredo nunca entra em imagem. Ele entra em variável de ambiente, no deploy.
+**/.env
+**/.env.*
+!**/.env.example
+
+.git
+.github
+docs

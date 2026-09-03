@@ -1,0 +1,191 @@
+# A Mavia em produção — pendência 1D.
+#
+# ## Por que containers avulsos, e não um stack do EasyPanel
+#
+# A VPS roda vinte e quatro containers de produção de outros negócios, em Docker
+# Swarm, orquestrados pelo EasyPanel. A Mavia entra **ao lado**, como containers
+# comuns, e não dentro daquela orquestração. Três razões, em ordem de peso:
+#
+# 1. **Um erro aqui não pode alcançar o que já está lá.** O painel controla
+#    Chatwoot, Evolution API e três bancos de clientes; mexer na configuração
+#    dele para acomodar a Mavia é aceitar esse risco sem precisar.
+# 2. **Duas peças da nossa arquitetura não cabem no modelo de app do EasyPanel.**
+#    O `parser` precisa de `network_mode: none` e o `guardião` precisa de `stdin`
+#    interativo para o desselamento manual.
+# 3. `docker compose down` desfaz tudo. Um stack meio-criado no painel, não.
+#
+# O Traefik do EasyPanel tem o provider Docker ligado (`TRAEFIK_PROVIDERS_DOCKER
+# =true`), então ele descobre estes containers por **label** — sem que a gente
+# escreva no arquivo que o painel gera e sobrescreve.
+#
+# ## O que encara a internet
+#
+# Só o `web`. A API **não é publicada**: o navegador chama `/api/...` na origem
+# do web, e o servidor do Next repassa pela rede interna. É a mesma topologia do
+# ambiente local, e é o que faz o cookie de sessão funcionar sem CORS.
+#
+# Nenhum serviço publica porta no host. A regra 47xx-em-127.0.0.1 do ambiente
+# local existe para não expor banco na rede do escritório; aqui a resposta é
+# mais forte — não há porta publicada nenhuma.
+
+name: mavia
+
+services:
+  # -------------------------------------------------------------------------
+  # Postgres — o banco da Mavia, e só dela
+  # -------------------------------------------------------------------------
+  # **Instância própria, e não a `auri_lumina-postgres` que já está na máquina.**
+  # As migrations criam papéis (`mavia_migrate`, `mavia_app`, `mavia_auth`,
+  # `mavia_jobs`), tornam `mavia_migrate` dono do esquema `public` e ligam RLS.
+  # Instalar isso no cluster de outro produto seria sujar o banco alheio com a
+  # topologia de papéis do nosso.
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mavia
+      POSTGRES_PASSWORD: ${SENHA_POSTGRES:?defina SENHA_POSTGRES}
+      POSTGRES_DB: mavia
+      # UTC no banco, sempre. A conversão para `America/Sao_Paulo` é do
+      # domínio — `CLAUDE.md` regra 7.
+      TZ: UTC
+      PGTZ: UTC
+      SENHA_MIGRATE: ${SENHA_MIGRATE:?defina SENHA_MIGRATE}
+      SENHA_APP: ${SENHA_APP:?defina SENHA_APP}
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+      # Roda uma vez, na criação do volume. Ver `10-papeis.sh`.
+      - ./10-papeis.sh:/docker-entrypoint-initdb.d/10-papeis.sh:ro
+    networks: [dados]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mavia -d mavia']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # Redis — cofre do access token e fila do BullMQ
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # `appendonly`: perder o Redis não desloga ninguém — os clientes renovam
+    # pelo refresh, que vive no Postgres. Mas perder a fila do BullMQ perderia
+    # jobs de materialização de recorrência, e esses não se recuperam sozinhos.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-dados:/data
+    networks: [dados]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # -------------------------------------------------------------------------
+  # API
+  # -------------------------------------------------------------------------
+  api:
+    image: mavia/api:${VERSAO:-mais-recente}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://mavia_app:${SENHA_APP:?}@postgres:5432/mavia
+      REDIS_URL: redis://redis:6379
+      MAVIA_PEPPER_TENTATIVAS: ${PEPPER_TENTATIVAS:?defina PEPPER_TENTATIVAS}
+      MAVIA_URL_PUBLICA: ${URL_PUBLICA:?defina URL_PUBLICA}
+      # Sem SMTP, cadastro e recuperação respondem 503 em vez de fingir. Sem
+      # `GOOGLE_*`, a entrada pelo Google responde 503 e a tela diz para usar
+      # e-mail e senha. Os dois são estados legítimos — ver P-3 e P-4.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORTA: ${SMTP_PORTA:-587}
+      SMTP_USUARIO: ${SMTP_USUARIO:-}
+      SMTP_SENHA: ${SMTP_SENHA:-}
+      SMTP_REMETENTE: ${SMTP_REMETENTE:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${URL_PUBLICA}/entrar/google
+      # Sem `MAVIA_GUARDIAO_SOCKET`: não há agregador bancário ligado, e o
+      # guardião só é necessário quando houver (ADR 0003). Toda operação sobre
+      # segredo de conexão lança `GuardiaoIndisponivel` — que é a verdade.
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # `dados` para alcançar Postgres e Redis; `saida` para alcançar o mundo.
+    #
+    # A API **precisa** de saída para a internet, e essa é a lição que quase
+    # virou defeito: com uma rede só, marcada `internal`, o SMTP do cadastro e a
+    # troca de código do Google falhariam em produção — e as duas só falham no
+    # primeiro cadastro de um cliente, não no deploy.
+    networks: [dados, saida]
+    # O parser é filho deste processo, com `env: {}` e prazo duro. O isolamento
+    # de rede e o cgroup dele são a metade que ainda falta da P-12 — ver o
+    # `README.md` desta pasta.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4711/v1/eu').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"
+      interval: 20s
+      timeout: 8s
+      retries: 6
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
+  # Web — o único que o Traefik alcança
+  # -------------------------------------------------------------------------
+  web:
+    image: mavia/web:${VERSAO:-mais-recente}
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [dados, easypanel]
+    labels:
+      traefik.enable: 'true'
+      # `easypanel` e não `interna`: sem isto o Traefik pode escolher o IP da
+      # rede errada e falhar em alcançar o container, com um 502 que não explica
+      # nada.
+      traefik.docker.network: easypanel
+
+      traefik.http.routers.mavia.rule: Host(`${DOMINIO:?defina DOMINIO}`)
+      traefik.http.routers.mavia.entrypoints: https
+      traefik.http.routers.mavia.tls: 'true'
+      traefik.http.services.mavia.loadbalancer.server.port: '4710'
+
+      # HTTP existe só para mandar embora. O cookie de sessão tem prefixo
+      # `__Host-`, que obriga `Secure` — em `http://` o navegador o descarta e
+      # ninguém consegue ficar logado. Servir a Mavia sem TLS não é degradação:
+      # é o login não funcionar.
+      traefik.http.routers.mavia-http.rule: Host(`${DOMINIO}`)
+      traefik.http.routers.mavia-http.entrypoints: http
+      # `@file` porque o middleware é definido pelo provider de arquivo do
+      # EasyPanel, e este router vem do provider Docker. Sem o sufixo, o Traefik
+      # procura um middleware do próprio provider e não encontra.
+      traefik.http.routers.mavia-http.middlewares: redirect-to-https@file
+
+networks:
+  # Onde os dados vivem. **Sem saída para a internet**, e é o ponto: um Postgres
+  # comprometido não tem por onde exfiltrar. Postgres, Redis, API e web
+  # conversam aqui.
+  dados:
+    driver: bridge
+    internal: true
+
+  # A saída, e **só a API a tem**. É ela que fala com o SMTP e com o Google.
+  # Postgres e Redis ficam de fora de propósito: eles não precisam alcançar nada
+  # lá fora, e um banco sem rota de saída é um banco que não vaza sozinho.
+  #
+  # Sem porta publicada, uma bridge comum não é alcançável **de fora** do host —
+  # ela dá saída, não entrada.
+  saida:
+    driver: bridge
+
+  # A rede do EasyPanel, onde o Traefik vive. `external` porque ela já existe e
+  # **não é nossa** — declarar sem isso faria o compose tentar criá-la.
+  easypanel:
+    external: true
+
+volumes:
+  postgres-dados:
+  redis-dados:

@@ -8,6 +8,25 @@
  */
 const config = {
   reactStrictMode: true,
+
+  /**
+   * `standalone` — o que torna a imagem de produção viável.
+   *
+   * Sem isto, servir o Next exige o `node_modules` inteiro do monorepo dentro
+   * da imagem: centenas de megabytes, com dependências de desenvolvimento e
+   * binários nativos compilados para o sistema de quem construiu. Com
+   * `standalone`, o Next emite um servidor com **só** o que a aplicação
+   * alcança de fato, e a imagem final não precisa de pnpm nem de workspace.
+   */
+  output: 'standalone',
+  /**
+   * A raiz do monorepo, e não a do app. Sem isto o rastreamento de arquivos do
+   * `standalone` para na pasta do `apps/web` e deixa fora `packages/domain`,
+   * `contracts` e `ui` — que são justamente os que o `transpilePackages`
+   * compila para dentro.
+   */
+  outputFileTracingRoot: new URL('../../', import.meta.url).pathname,
+
   transpilePackages: ['@mavia/domain', '@mavia/contracts', '@mavia/ui'],
   eslint: { ignoreDuringBuilds: true },
   experimental: {
@@ -48,8 +67,26 @@ const config = {
     return config
   },
 
+  /**
+   * **O destino é resolvido no build, não em runtime.** Isto custou um ciclo de
+   * depuração: `rewrites()` entra no manifesto de rotas que o `next build`
+   * emite, então passar `MAVIA_API_URL` ao container **não** tem efeito — o
+   * valor lido foi o do momento em que a imagem foi construída.
+   *
+   * Daí o padrão depender de `NODE_ENV` em vez de exigir configuração:
+   *
+   * - em produção, `api` é o nome do serviço na rede interna do compose, e é
+   *   sempre o endereço certo lá;
+   * - fora dela, `127.0.0.1:4711` é sempre o endereço certo.
+   *
+   * As duas situações ficam corretas sem ninguém configurar nada, e
+   * `MAVIA_API_URL` continua existindo para o caso de a topologia mudar — mas
+   * como **argumento de build**, que é o que ela de fato é.
+   */
   async rewrites() {
-    const api = process.env.MAVIA_API_URL ?? 'http://127.0.0.1:4711'
+    const padrao =
+      process.env.NODE_ENV === 'production' ? 'http://api:4711' : 'http://127.0.0.1:4711'
+    const api = process.env.MAVIA_API_URL ?? padrao
     return [{ source: '/api/:caminho*', destination: `${api}/:caminho*` }]
   },
 }

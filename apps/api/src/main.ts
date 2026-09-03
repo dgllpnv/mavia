@@ -45,7 +45,25 @@ async function principal(): Promise<void> {
 
   // Bloco 47xx, longe de 80 e 8080 — ver infra/README.md.
   const porta = Number(process.env['PORT'] ?? 4711)
-  await app.listen({ port: porta, host: '127.0.0.1' })
+
+  /**
+   * `127.0.0.1` por padrão, e a regra continua valendo.
+   *
+   * O padrão é o do ambiente local, onde `0.0.0.0` exporia a API para a rede
+   * inteira do escritório — é a razão de a regra existir.
+   *
+   * **Dentro de um container, `0.0.0.0` significa outra coisa.** O container tem
+   * o próprio espaço de rede: escutar em todas as interfaces *dele* é escutar
+   * numa rede privada onde só o Traefik e o web entram, e nenhuma porta é
+   * publicada no host. Ligado em `127.0.0.1`, ninguém o alcançaria — nem o web
+   * do lado, e o deploy subiria um serviço que responde só a si mesmo.
+   *
+   * Por isso é variável, e não uma constante trocada no deploy: quem sobe o
+   * container declara o endereço, e o padrão protege quem roda na própria
+   * máquina.
+   */
+  const endereco = process.env['HOST'] ?? '127.0.0.1'
+  await app.listen({ port: porta, host: endereco })
   console.log(`API em http://127.0.0.1:${porta}`)
 
   for (const sinal of ['SIGINT', 'SIGTERM'] as const) {
