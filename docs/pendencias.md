@@ -284,3 +284,41 @@ acrescentaria uma **fonte** de lançamento; a inteligência sobre ele já existe
 dentro dele.
 
 ---
+
+## P-14 · A cobrança não cobra
+
+**Onde:** `apps/api/src/cobranca/cobranca.controller.ts`
+**Depende de:** conta na Stripe, com `price_id` dos seis produtos e o segredo do webhook
+
+O que **está** pronto e testado sem a Stripe: a máquina de cinco estados, o
+catálogo de planos em código, a contagem de cotas no servidor e o webhook
+idempotente com verificação de assinatura em tempo constante. São 17 testes de
+integração, e a verificação da assinatura tem teste que morde — sem a captura do
+corpo cru, seis deles caem.
+
+O que falta é a chamada de saída: criar a sessão de checkout e o portal do
+cliente. Quando a chave existir, é uma requisição HTTP — **o estado já sabe
+reagir ao que a Stripe responde**.
+
+Sem `STRIPE_WEBHOOK_SECRET` configurado, a rota de webhook recusa **tudo**. É o
+padrão certo: um webhook aberto porque a variável não foi definida é uma rota
+que qualquer um usa para mudar o estado de cobrança de um cliente.
+
+**Condição de saída:** conta na Stripe do dono do produto.
+
+---
+
+## P-15 · Nota fiscal
+
+**Onde:** não existe
+**Decisão do dono:** **não emitir automaticamente**
+
+Registrado aqui para que a ausência seja escolha visível, e não esquecimento. A
+coleta do documento fiscal do cliente e a emissão ficam fora do produto por
+decisão do dono; a Stripe guarda o recibo de pagamento, que é o que o cliente
+recebe.
+
+Se um dia a obrigação mudar, o que falta é o campo de documento no cadastro e a
+integração com o emissor — nada no modelo atual impede.
+
+---

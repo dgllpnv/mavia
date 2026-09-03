@@ -103,6 +103,14 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
               >
                 pessoas do espaço
               </Link>
+              <Link
+                role="menuitem"
+                href="/plano"
+                className="botao w-full justify-start"
+                onClick={() => setMenuAberto(false)}
+              >
+                plano e cobrança
+              </Link>
               <hr className="my-4 border-line" />
               <button
                 role="menuitem"

@@ -143,6 +143,15 @@ const CONJUNTOS = [
     colunas: `id, email, papel, criado_em, expira_em, aceito_em, revogado_em`,
   },
   {
+    nome: 'assinatura',
+    tabela: 'assinaturas',
+    // **Sem os identificadores da Stripe.** Eles são referência a um sistema de
+    // terceiro, não dizem nada ao titular, e um identificador de cliente numa
+    // operadora de pagamento é o tipo de coisa que não deve circular em arquivo.
+    colunas: `estado, plano, intervalo, periodo_inicio, periodo_fim, graca_ate,
+              criado_em, atualizado_em`,
+  },
+  {
     nome: 'saldo_snapshots',
     tabela: 'saldo_snapshots',
     colunas: null,
@@ -170,6 +179,10 @@ export const EXPORTADA_JUNTO: ReadonlyMap<string, string> = new Map([
  * aparecer uma tabela nova que ninguém classificou.
  */
 export const FORA_DA_EXPORTACAO: ReadonlyMap<string, string> = new Map([
+  [
+    'eventos_de_cobranca',
+    'registro de integração com a operadora: é o que ela nos disse, não o que o titular fez',
+  ],
   ['sessoes', 'material criptográfico: exportar hash de refresh seria exportar a chave de casa'],
   ['mutacoes_idempotentes', 'cópia duplicada de dados que já saem pelas tabelas de origem'],
   ['auditoria', 'registro do sistema sobre o titular, não dado do titular; sai por outro fluxo'],
@@ -240,5 +253,15 @@ async function umaLinha(c: PoolClient, sql: string, tenantId: string): Promise<u
   return r.rows[0] ?? null
 }
 
-/** Os nomes exportados, para o teste de completude. */
+/**
+ * As tabelas exportadas, para o teste de completude.
+ *
+ * `tabela` e `nome` são coisas distintas de propósito: a chave no arquivo é o
+ * que o titular lê — `assinatura`, no singular, porque há uma —, e a tabela é
+ * onde o dado mora. Confundi-los faria o nome do arquivo depender do nome da
+ * coluna, e renomear uma tabela quebraria o formato de exportação de todo mundo.
+ */
 export const TABELAS_EXPORTADAS: readonly string[] = CONJUNTOS.map((c) => c.tabela)
+
+/** As chaves do arquivo. É por elas que o titular encontra as coisas. */
+export const CHAVES_DA_EXPORTACAO: readonly string[] = CONJUNTOS.map((c) => c.nome)

@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { Readable } from 'node:stream'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import type { Pool } from 'pg'
@@ -43,6 +44,31 @@ export async function criarAplicacao(
   // A autenticação entra como parâmetro, e não embutida: é um seam de
   // verdade. O processo passa o autenticador de sessão; um teste passa outro.
   // Nenhum código só-de-teste vive na aplicação por causa disso.
+  /**
+   * O corpo **cru** do webhook de cobrança.
+   *
+   * A assinatura da Stripe é um HMAC sobre os bytes que ela mandou. Verificá-la
+   * contra `JSON.stringify(corpoParseado)` funciona por acidente enquanto o
+   * espaçamento coincide, e falha em toda assinatura legítima no dia em que não
+   * coincidir — o tipo de defeito que só aparece em produção, na primeira
+   * cobrança real.
+   *
+   * `preParsing`, e não um parser de tipo de conteúdo: o Nest registra o parser
+   * de JSON dele no `init`, e substituí-lo seria disputar com o framework a
+   * porta de entrada de **toda** requisição por causa de uma rota. O hook lê o
+   * fluxo, guarda os bytes e devolve um fluxo novo — e só para esta rota.
+   */
+  instancia.addHook('preParsing', async (req, _resposta, fluxo) => {
+    if (!req.url.startsWith('/v1/cobranca/webhook')) return fluxo
+
+    const pedacos: Buffer[] = []
+    for await (const pedaco of fluxo) pedacos.push(pedaco as Buffer)
+    const bruto = Buffer.concat(pedacos)
+
+    ;(req as unknown as { rawBody?: string }).rawBody = bruto.toString('utf8')
+    return Readable.from(bruto)
+  })
+
   instancia.addHook('preHandler', async (req, resposta) => {
     // A resolução do espaço depende da rota: `GET /v1/eu` existe para
     // descobrir quais espaços o usuário tem, e exigir o cabeçalho ali seria

@@ -270,13 +270,39 @@ P-3, e prender o compartilhamento a ele adiaria o épico 11 inteiro. O convite �
 
 ---
 
-## Épico 11 — Cobrança
+## Épico 11 — Cobrança — **entregue, menos a chamada à Stripe**
 
 **Entrega:** Stripe · três planos · teste de 7 dias · cotas · ciclo de vida da assinatura · webhook idempotente · coleta do documento fiscal.
 
 > **Condição, não sugestão:** esta etapa exige os épicos 6 e 10 prontos. Cobrar R$ 59 por um produto só manual, contra um concorrente de R$ 35 que importa extrato, não se sustenta.
+>
+> **Os dois pré-requisitos estão cumpridos.** O 6 entregou a importação e o 10, o compartilhamento.
 
-**Ao fim você consegue:** vender.
+### O que está de pé
+
+O **catálogo em código**, como o spec exige: preço e cota versionados, não
+editáveis em produção sem deploy e sem teste. O anual é declarado, e não
+multiplicado em tempo de execução — preço derivado por aritmética diverge entre
+a vitrine, a Stripe e o reembolso.
+
+A **máquina de cinco estados**, como tabela e não como `if`s: cinco por nove são
+quarenta e cinco combinações, e a maioria **não** deve acontecer. A tabela torna
+o "não deve" visível. Propriedade: nenhuma transição é identidade, e toda
+`expirada` tem volta.
+
+**`em_atraso` não degrada nada** — catorze dias de produto inteiro. Bloquear no
+instante em que um cartão falha é a forma mais comum de perder um cliente que
+queria ficar.
+
+O **webhook idempotente**, com duas defesas testadas: o id do evento é chave
+primária, e a máquina recusa o que não se aplica registrando a recusa. A
+assinatura é HMAC sobre o **corpo cru**, em tempo constante.
+
+A **cota conferida no servidor**, na mesma transação da criação — e a mensagem
+nomeia a cota e a contagem, porque quem esbarra nela precisa entender o porquê.
+
+Falta a chamada de saída à Stripe: P-14, à espera da conta do dono. A nota
+fiscal fica fora por decisão dele: P-15.
 
 ---
 

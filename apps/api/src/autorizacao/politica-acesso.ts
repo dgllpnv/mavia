@@ -118,6 +118,14 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // controlador — a matriz não tem como expressar "só sobre o próprio id".
   ['DELETE /v1/membros/:usuarioId', { papeis: TODOS }],
 
+  // **`TODOS` para ler.** Um membro que esbarra numa cota precisa entender por
+  // que o botão recusou, e a mensagem nomeia a cota e a contagem. O que ele
+  // nunca vê é preço pago, meio de pagamento e documento fiscal — e nenhum dos
+  // três está na resposta.
+  ['GET /v1/cobranca', { papeis: TODOS }],
+  // Trocar de plano é `billing`, e billing é do dono (matriz §2.3).
+  ['POST /v1/cobranca/plano', { papeis: SO_DONO }],
+
   ['GET /v1/alertas', { papeis: TODOS }],
 
   ['GET /v1/categorias', { papeis: TODOS }],
@@ -162,6 +170,7 @@ export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
   // Quem aceita o convite ainda não pertence ao espaço: exigir o cabeçalho
   // seria pedir a resposta como pergunta. Quem escolhe o espaço é o token.
   'POST /v1/convites/aceitar',
+  'POST /v1/cobranca/webhook',
   // Renovar é pública **pela sessão**: quem chega aqui é justamente quem já não
   // tem access token válido. A credencial que ela exige é o refresh, e a
   // própria rota o valida.
@@ -175,6 +184,10 @@ export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
 export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   'POST /v1/sessoes',
   'POST /v1/sessoes/renovar',
+  // A Stripe não tem conta na Mavia. A autenticação dela é o HMAC do corpo,
+  // verificado em tempo constante na própria rota — sem segredo configurado,
+  // nenhuma assinatura confere, e a rota recusa tudo.
+  'POST /v1/cobranca/webhook',
 ])
 
 export function chaveDaRota(rota: Rota): string {

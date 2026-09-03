@@ -1,0 +1,217 @@
+import { dinheiro, type Money } from './money.js'
+
+/**
+ * O catálogo de planos — **em código, não em tabela**.
+ *
+ * `docs/produto/spec-planos-e-assinatura.md` §3: configuração versionada em
+ * código não é alterável em produção sem deploy e sem teste. Uma tabela de
+ * preços é uma tabela que alguém edita às pressas numa madrugada, e o preço
+ * errado só aparece na fatura do cliente.
+ *
+ * A Stripe guarda os `price_id`; **o catálogo guarda o mapa**.
+ *
+ * ## O preço anual não é derivado
+ *
+ * "Dois meses grátis" é `anual = 10 × mensal`, e ainda assim o anual é uma
+ * `Money` **própria**, declarada em centavos. Multiplicar em tempo de execução
+ * daria um preço que diverge entre a vitrine, a Stripe e o reembolso — três
+ * lugares que precisam concordar sobre o mesmo número.
+ *
+ * Nenhuma divisão acontece no caminho do dinheiro. "≈ R$ 29,17/mês" é texto de
+ * vitrine, arredondado só para exibir, e não entra em cálculo nenhum.
+ */
+
+export type CodigoDoPlano = 'pessoal' | 'familia' | 'negocio'
+export type Intervalo = 'mensal' | 'anual'
+
+/**
+ * As cotas. **`Cota`, nunca "limite"** — `Limite` é termo proibido no
+ * `CONTEXT.md`, reservado ao que virou `Planejamento`. Uma cota de plano e um
+ * teto de gasto são coisas diferentes e não podem dividir palavra.
+ */
+export interface Cotas {
+  /** Membros ativos **mais** convites pendentes. Todos os papéis contam. */
+  readonly pessoas: number
+  /** Espaços em que a pessoa é proprietária. */
+  readonly espacos: number
+  readonly anexosBytes: number
+  /** Épico 12. Fica no catálogo desde já para o cliente saber o que terá. */
+  readonly conexoes: number
+}
+
+export interface Plano {
+  readonly codigo: CodigoDoPlano
+  readonly nome: string
+  readonly mensal: Money
+  readonly anual: Money
+  readonly cotas: Cotas
+  readonly disponivelParaCompra: boolean
+}
+
+const GB = 1024 * 1024 * 1024
+
+/**
+ * Os três planos.
+ *
+ * Nomes decididos em DP-18: dizem **para quem é**. "Básico" foi descartado por
+ * ensinar o cliente a se sentir mal, e "Conectado/Conectado Plus" por prometer
+ * o agregador no nome.
+ */
+export const PLANOS: Readonly<Record<CodigoDoPlano, Plano>> = {
+  pessoal: {
+    codigo: 'pessoal',
+    nome: 'Mavia Pessoal',
+    mensal: dinheiro(5900n, 'BRL'),
+    anual: dinheiro(59000n, 'BRL'),
+    cotas: { pessoas: 2, espacos: 1, anexosBytes: 5 * GB, conexoes: 0 },
+    disponivelParaCompra: true,
+  },
+  familia: {
+    codigo: 'familia',
+    nome: 'Mavia Família',
+    mensal: dinheiro(7900n, 'BRL'),
+    anual: dinheiro(79000n, 'BRL'),
+    cotas: { pessoas: 5, espacos: 1, anexosBytes: 20 * GB, conexoes: 3 },
+    disponivelParaCompra: true,
+  },
+  negocio: {
+    codigo: 'negocio',
+    nome: 'Mavia Negócio',
+    mensal: dinheiro(9900n, 'BRL'),
+    anual: dinheiro(99000n, 'BRL'),
+    cotas: { pessoas: 10, espacos: 3, anexosBytes: 50 * GB, conexoes: 10 },
+    disponivelParaCompra: true,
+  },
+}
+
+/**
+ * As cotas durante o teste: as do **Família**.
+ *
+ * Não as do Pessoal, e a escolha é do spec §6: quem testa precisa poder
+ * convidar a família, senão o teste não exercita o produto que ele está
+ * avaliando — e a pessoa decide sobre uma coisa que não experimentou.
+ */
+export const COTAS_DO_TESTE: Cotas = PLANOS.familia.cotas
+
+/** Sete dias, contados da criação do espaço. Sem prorrogação automática. */
+export const DIAS_DE_TESTE = 7
+
+/** Catorze dias, alinhados à janela de retentativa da Stripe. */
+export const DIAS_DE_GRACA = 14
+
+export function plano(codigo: string): Plano | null {
+  return codigo in PLANOS ? PLANOS[codigo as CodigoDoPlano] : null
+}
+
+/**
+ * O preço de um plano num intervalo.
+ *
+ * Função, e não campo calculado: é o único ponto por onde o preço sai do
+ * catálogo, e ter um só ponto é o que permite auditá-lo.
+ */
+export function preco(codigo: CodigoDoPlano, intervalo: Intervalo): Money {
+  const p = PLANOS[codigo]
+  return intervalo === 'anual' ? p.anual : p.mensal
+}
+
+/**
+ * As cotas que valem agora, dado o estado.
+ *
+ * `expirada` não tem cotas de escrita — a escrita está bloqueada —, e devolver
+ * as do plano ali faria a tela prometer o que a API vai recusar.
+ */
+export function cotasVigentes(estado: EstadoDaAssinatura, codigo: CodigoDoPlano): Cotas {
+  if (estado === 'teste') return COTAS_DO_TESTE
+  return PLANOS[codigo].cotas
+}
+
+// ---------------------------------------------------------------------------
+// A máquina de estados
+// ---------------------------------------------------------------------------
+
+/**
+ * Cinco estados, uma `Assinatura` por `Tenant` — spec §6.
+ *
+ * A propriedade que domina o desenho: **`em_atraso` não degrada nada**.
+ * Bloquear o produto no instante em que um cartão falha é a forma mais comum de
+ * perder um cliente que queria ficar, e a maioria das falhas é cartão vencido ou
+ * limite momentâneo, não desistência.
+ */
+export type EstadoDaAssinatura = 'teste' | 'ativa' | 'em_atraso' | 'cancelada' | 'expirada'
+
+export type EventoDaAssinatura =
+  | 'assinou'
+  | 'pagamento_falhou'
+  | 'pagamento_recuperado'
+  | 'cancelou'
+  | 'desfez_cancelamento'
+  | 'periodo_terminou'
+  | 'prazo_de_teste_acabou'
+  | 'graca_acabou'
+  | 'reativou'
+
+/**
+ * A transição, ou `null` quando o evento não se aplica.
+ *
+ * Tabela explícita, e não `if`s: cinco estados por nove eventos são quarenta e
+ * cinco combinações, e a maioria **não** deve acontecer. Uma tabela torna o
+ * "não deve" visível; uma cadeia de `if`s o esconde no `else`.
+ */
+const TRANSICOES: Readonly<
+  Record<EstadoDaAssinatura, Partial<Record<EventoDaAssinatura, EstadoDaAssinatura>>>
+> = {
+  teste: {
+    assinou: 'ativa',
+    prazo_de_teste_acabou: 'expirada',
+  },
+  ativa: {
+    pagamento_falhou: 'em_atraso',
+    cancelou: 'cancelada',
+  },
+  em_atraso: {
+    pagamento_recuperado: 'ativa',
+    graca_acabou: 'expirada',
+    cancelou: 'cancelada',
+  },
+  cancelada: {
+    // Desfazer o cancelamento é sem atrito, e só vale enquanto o período pago
+    // não acabou: depois dele não há o que desfazer.
+    desfez_cancelamento: 'ativa',
+    periodo_terminou: 'expirada',
+  },
+  expirada: {
+    reativou: 'ativa',
+  },
+}
+
+export function transicao(
+  atual: EstadoDaAssinatura,
+  evento: EventoDaAssinatura,
+): EstadoDaAssinatura | null {
+  return TRANSICOES[atual][evento] ?? null
+}
+
+/**
+ * A escrita está liberada?
+ *
+ * Quatro dos cinco estados escrevem. **Só `expirada` bloqueia**, e mesmo ela
+ * mantém leitura e exportação completas: nunca apagamos nada (DP-5), e quem
+ * parou de pagar continua dono do que registrou.
+ */
+export function podeEscrever(estado: EstadoDaAssinatura): boolean {
+  return estado !== 'expirada'
+}
+
+/**
+ * Os jobs rodam?
+ *
+ * `expirada` pausa a materialização de recorrência e a avaliação de alertas —
+ * os dois **geram dado novo**, e gerar dado novo para quem não paga é continuar
+ * prestando o serviço. Leitura, saldo e exportação continuam.
+ *
+ * Ao reativar, a materialização preenche as competências passadas: o job é
+ * idempotente por `(tenant, recorrencia, competência)` e nada se perde.
+ */
+export function jobsAtivos(estado: EstadoDaAssinatura): boolean {
+  return estado !== 'expirada'
+}

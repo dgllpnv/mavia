@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
 import { subirApi, type ApiDeTeste } from './aplicacao-de-teste.js'
 import {
+  CHAVES_DA_EXPORTACAO,
   EXPORTADA_JUNTO,
   FORA_DA_EXPORTACAO,
   TABELAS_EXPORTADAS,
@@ -211,9 +212,9 @@ describe('exportação — o direito de portabilidade', () => {
 
     expect(dados.espaco.id).toBe(TENANT_A)
     expect(dados.lancamentos.length).toBeGreaterThan(0)
-    for (const tabela of TABELAS_EXPORTADAS) {
-      expect(dados[tabela === 'saldo_snapshots' ? 'saldo_snapshots' : tabela]).toBeDefined()
-    }
+    // Pelas **chaves do arquivo**, e não pelos nomes de tabela: é por elas que
+    // o titular encontra as coisas, e são elas que não podem sumir.
+    for (const chave of CHAVES_DA_EXPORTACAO) expect(dados[chave]).toBeDefined()
   })
 
   it('**nenhum material criptográfico sai**', async () => {

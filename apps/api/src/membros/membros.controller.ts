@@ -26,6 +26,7 @@ import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { COFRE } from '../redis/tokens.js'
 import type { CofreDeAcesso } from '../redis/cofre-de-acesso.js'
+import { exigirCotaDePessoas } from '../cobranca/cobranca.controller.js'
 import { comTenant, comUsuario } from '../tenancy/tenancy.js'
 
 /**
@@ -151,6 +152,11 @@ export class MembrosController {
 
     try {
       return await comTenant(this.pool, ctx, async (c) => {
+        // A cota é conferida **na mesma transação** da criação. Conferi-la
+        // antes, fora da transação, deixaria uma janela em que dois convites
+        // simultâneos passam pelo mesmo último lugar.
+        await exigirCotaDePessoas(c, ctx.tenantId)
+
         const r = await c.query<{ id: string; expira_em: Date }>(
           `INSERT INTO convites (tenant_id, email, papel, token_hash, criado_por, expira_em)
            VALUES ($1,$2,$3::papel_no_tenant,$4,$5, now() + ($6 || ' days')::interval)
