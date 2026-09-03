@@ -52,12 +52,33 @@ const SENHA = process.env['SENHA_DEMO'] || SENHA_PUBLICA
 const TENANT = 'dbdbdbdb-0000-4000-8000-000000000001'
 const USUARIO = 'dbdbdbdb-0000-4000-8000-0000000000a1'
 
+/**
+ * O endereço é local?
+ *
+ * **Analisado, e não procurado por substring.** A versão anterior fazia
+ * `url.includes('127.0.0.1')`, e isso aceita
+ * `postgres://u:s@banco-de-producao/db?opcao=127.0.0.1` como "local" — a trava
+ * inteira cai com um parâmetro na string de conexão.
+ *
+ * `new URL` extrai o host de verdade. Se a string não for uma URL válida, a
+ * resposta é **não local**: recusar o que não se entende é o único desfecho
+ * seguro para uma trava.
+ */
+function enderecoEhLocal(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]'
+  } catch {
+    return false
+  }
+}
+
 /** Meio-dia em São Paulo: longe de qualquer borda de fuso. */
 const meioDia = (dia: string): string => `${dia}T15:00:00Z`
 
 async function principal(): Promise<void> {
   const url = process.env['DATABASE_URL_SEED'] ?? URL_PADRAO
-  const ehLocal = url.includes('127.0.0.1') || url.includes('localhost')
+  const ehLocal = enderecoEhLocal(url)
 
   // A trava, escrita sobre o que ela de fato protege: a senha publicada.
   if (!ehLocal && SENHA === SENHA_PUBLICA) {
@@ -83,7 +104,17 @@ async function principal(): Promise<void> {
     // `mavia_app` nasce NOLOGIN na migration: quem concede credencial é o
     // provisionamento do ambiente, não a migration. Em produção isso é o SRE;
     // aqui é a semente, que já é o script do ambiente local.
-    await c.query(`ALTER ROLE mavia_app LOGIN PASSWORD 'mavia_local_dev'`)
+    //
+    // **Só no ambiente local.** Esta linha existe porque `mavia_app` nasce
+    // NOLOGIN na migration e o ambiente local não tem SRE para provisioná-lo.
+    // Rodada contra um banco remoto ela **reescreve a credencial da API** com
+    // uma senha do repositório público — e a aplicação para de conectar.
+    //
+    // Não é hipótese: aconteceu, na primeira vez que esta semente rodou contra
+    // a VPS. O login de produção respondeu 500 até a credencial ser restaurada.
+    if (ehLocal) {
+      await c.query(`ALTER ROLE mavia_app LOGIN PASSWORD 'mavia_local_dev'`)
+    }
 
     const jaTem = await c.query('SELECT 1 FROM tenants WHERE id = $1', [TENANT])
     if (jaTem.rowCount) {
@@ -214,7 +245,15 @@ async function principal(): Promise<void> {
 
     console.log('espaço de demonstração criado.')
     console.log(`  entre com: ${EMAIL}`)
-    console.log(`  senha:     ${SENHA}`)
+    // A senha só é impressa quando é a **pública**, no ambiente local, onde ela
+    // já está no repositório e serve de lembrete. Quando vem de `SENHA_DEMO`,
+    // quem semeou já a tem — e imprimi-la a jogaria no log do deploy, que é
+    // gravado, compartilhado e não tem por que guardar segredo.
+    console.log(
+      SENHA === SENHA_PUBLICA
+        ? `  senha:     ${SENHA}`
+        : '  senha:     a que você informou em SENHA_DEMO',
+    )
     console.log(`  cartão ${cartao.slice(0, 8)}… fecha dia 25 e vence dia 5.`)
     console.log('  compre nele por POST /v1/cartoes/:id/compras — a fatura abre sozinha.')
   } catch (erro) {
