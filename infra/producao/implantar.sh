@@ -106,11 +106,18 @@ docker compose run --rm --no-deps \
 # `mavia_app` nasce NOLOGIN na migration 0001. Aqui ele ganha senha — e só aqui.
 # `ALTER ROLE` é idempotente, então rodar de novo não quebra nada.
 echo "==> concedendo credencial a mavia_app"
+# Pela **entrada padrão**, e não com `-c`: o `psql -c` não interpola variável, e
+# `:'senha'` chegaria literal ao servidor. Custou uma execução do deploy
+# descobrir, e a mensagem — `syntax error at or near ":"` — não menciona isso.
+#
+# A senha continua vindo por variável do psql, e não interpolada pelo shell:
+# assim ela não aparece na lista de processos nem num `set -x`.
 docker compose exec -T \
   -e PGPASSWORD="$SENHA_POSTGRES" \
   postgres psql -U mavia -d mavia -v ON_ERROR_STOP=1 \
-    -v senha="$SENHA_APP" \
-    -c "ALTER ROLE mavia_app LOGIN PASSWORD :'senha'" > /dev/null
+    -v senha="$SENHA_APP" > /dev/null <<'SQL'
+ALTER ROLE mavia_app LOGIN PASSWORD :'senha';
+SQL
 
 # ---------------------------------------------------------------------------
 # 5 · aplicação
