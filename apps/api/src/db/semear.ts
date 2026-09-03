@@ -8,18 +8,46 @@ import { registrarCompra } from '../cartoes/compras.js'
  * Existe porque o cadastro por e-mail ainda não tem rota (P-3 em
  * `docs/pendencias.md`): sem semente, não há como entrar na aplicação local.
  *
- * **Só para desenvolvimento.** Roda como superusuário e grava uma senha
- * conhecida, o que em produção seria uma porta dos fundos. A checagem de que a
- * URL é local não é cerimônia — é o que impede alguém de apontar a variável de
- * ambiente para a VPS e criar lá um usuário com senha pública.
+ * **A trava é a senha conhecida, não o endereço do banco.**
+ *
+ * A versão anterior recusava qualquer URL que não fosse local, e a razão escrita
+ * era exata: a semente grava `mavia-demonstracao`, que está no repositório
+ * público — numa instância aberta na internet, é porta dos fundos literal.
+ *
+ * O que a trava protege, então, não é "banco remoto": é **senha publicada**. Com
+ * `SENHA_DEMO` no ambiente, a senha deixa de ser conhecida e o perigo descrito
+ * deixa de existir — e aí semear um ambiente de demonstração remoto passa a ser
+ * legítimo. Sem ela, a recusa continua valendo, inclusive contra quem apontar a
+ * variável de ambiente para a VPS por engano.
+ *
+ * Os **dados** são fictícios nos dois casos, e nunca foram o risco.
  *
  * É idempotente: rodar duas vezes não duplica nada.
  */
 
 const URL_PADRAO = 'postgres://mavia:mavia_local_dev@127.0.0.1:4732/mavia'
 
-const EMAIL = 'demo@mavia.local'
-const SENHA = 'mavia-demonstracao'
+const EMAIL = process.env['EMAIL_DEMO'] || 'demo@mavia.local'
+
+/**
+ * A senha do espaço de demonstração.
+ *
+ * O padrão é público de propósito — está no repositório, e o ambiente local
+ * escuta em `127.0.0.1` e é apagado pelo `mavia reset`. Fora dali, quem semeia
+ * **precisa** informar uma senha própria; ver a checagem em `principal`.
+ */
+const SENHA_PUBLICA = 'mavia-demonstracao'
+
+/**
+ * **`||` e não `??`.** Um `SENHA_DEMO=` vazio — que é o que sai de um `export`
+ * sem valor, ou de um `ARG` de Docker não passado — cairia como "senha
+ * informada" sob `??`, e a trava abaixo deixaria passar uma senha vazia contra
+ * um banco remoto. O `??` só recua para `null` e `undefined`.
+ *
+ * Foi um teste que encontrou isso, e é o segundo lugar nesta base onde o mesmo
+ * engano apareceu: o outro derrubava o `rewrite` de `/api` em produção.
+ */
+const SENHA = process.env['SENHA_DEMO'] || SENHA_PUBLICA
 
 const TENANT = 'dbdbdbdb-0000-4000-8000-000000000001'
 const USUARIO = 'dbdbdbdb-0000-4000-8000-0000000000a1'
@@ -29,10 +57,22 @@ const meioDia = (dia: string): string => `${dia}T15:00:00Z`
 
 async function principal(): Promise<void> {
   const url = process.env['DATABASE_URL_SEED'] ?? URL_PADRAO
-  if (!url.includes('127.0.0.1') && !url.includes('localhost')) {
+  const ehLocal = url.includes('127.0.0.1') || url.includes('localhost')
+
+  // A trava, escrita sobre o que ela de fato protege: a senha publicada.
+  if (!ehLocal && SENHA === SENHA_PUBLICA) {
     throw new Error(
-      'A semente só roda contra banco local. Ela grava uma senha conhecida, ' +
-        'e num banco de verdade isso é uma porta dos fundos.',
+      'Esta semente grava uma senha que está no repositório público. Contra um ' +
+        'banco que não é local, isso é uma porta dos fundos — qualquer pessoa ' +
+        'que leia o repositório entra. Informe `SENHA_DEMO` com uma senha ' +
+        'própria para semear um ambiente remoto.',
+    )
+  }
+
+  if (!ehLocal) {
+    console.warn(
+      'Semeando um banco REMOTO com dados de demonstração. Os dados são ' +
+        'fictícios; a conta criada é real e entra na aplicação.',
     )
   }
 
