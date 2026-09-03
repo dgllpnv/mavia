@@ -45,7 +45,45 @@ uma lista de quem tentou entrar.
 
 ---
 
-## P-3 · Cadastro por e-mail e recuperação de senha
+## ~~P-3 · Cadastro por e-mail e recuperação de senha~~ ✅ **fechada**
+
+**Fechada em:** 2026-09-03. `apps/api/src/mensageiro/`,
+`apps/api/src/autenticacao/cadastro.controller.ts`, e as telas `/cadastrar`,
+`/confirmar`, `/recuperar` e `/redefinir` no web.
+
+Quatro rotas, e uma propriedade que domina as quatro: **a resposta é a mesma
+tenha o endereço uma conta ou não**. O que muda é qual e-mail sai, e isso só quem
+tem a caixa postal observa.
+
+O mensageiro fala **SMTP**, escrito à mão. SMTP porque nenhum provedor foi
+escolhido e todos oferecem SMTP — amarrar o código à API REST de um deles seria
+tomar a decisão do dono por acidente de implementação. À mão porque as três
+mensagens do produto são texto puro e curtas, e uma dependência de árvore grande
+num processo que tem a `DATABASE_URL` custa mais do que entrega.
+
+**STARTTLS é obrigatório quando a conexão sai da máquina**, e a exceção para o
+servidor local é derivada do endereço, não de uma variável: um `SMTP_TLS=false`
+seria a linha que alguém copia para produção para fazer um provedor difícil
+funcionar.
+
+O cliente é exercitado contra um **Mailpit de verdade**: protocolo escrito à mão
+que nunca falou com um servidor real é código que ainda não existe. Foi essa
+suíte que encontrou o descarte das linhas de continuação da resposta multilinha
+— sem elas o anúncio de STARTTLS era invisível.
+
+O E2E vai do formulário à conta **pela caixa de entrada**. Ele encontrou dois
+defeitos que nenhum teste de unidade encontraria: a tela de confirmação guardava
+o access em memória sem avisar o provedor, e a aplicação redirecionava para a
+entrada logo depois de autenticar; e o formulário perguntava o nome do espaço
+para descartá-lo — a migration 0027 conserta o segundo.
+
+**O que ainda depende do dono:** escolher o provedor e configurar `SMTP_HOST`,
+`SMTP_PORTA` e `SMTP_REMETENTE`. Sem eles as rotas respondem **503** em vez de
+202 — um 202 que não manda e-mail deixaria a pessoa esperando para sempre com o
+log dizendo que deu certo. E o provedor será **operador** de dados pessoais:
+precisa entrar em `docs/compliance/subprocessadores.md` antes do primeiro envio.
+
+### O texto original
 
 **Onde:** não existe rota
 **Spec:** `docs/produto/spec-autenticacao.md` §2.6 e §3.4
