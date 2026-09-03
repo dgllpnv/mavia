@@ -51,6 +51,31 @@ services:
       timeout: 3s
       retries: 20
 
+  # O servidor de e-mail do desenvolvimento.
+  #
+  # Sem ele, cadastro e recuperação não funcionam no ambiente local — as duas
+  # rotas **recusam** quando não há SMTP, em vez de responderem 202 sem mandar
+  # nada. Mailpit aceita tudo, não entrega nada para fora e mostra a caixa numa
+  # tela, que é exatamente o que se quer aqui: o link de confirmação precisa ser
+  # legível por um humano e por um teste.
+  #
+  # 1025 é a porta SMTP dentro do container; publicamos só a tela, no bloco 47xx.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mavia-mailpit
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      - '127.0.0.1:4725:8025'
+      - '127.0.0.1:4726:1025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 volumes:
   postgres-dados:
   redis-dados:

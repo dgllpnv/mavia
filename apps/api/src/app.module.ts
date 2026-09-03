@@ -22,6 +22,8 @@ import { PlanejamentosController } from './planejamentos/planejamentos.controlle
 import { RecorrenciasController } from './recorrencias/recorrencias.controller.js'
 import { ConexoesController } from './conexoes/conexoes.controller.js'
 import { ClienteDoGuardiao, GUARDIAO } from './guardiao/cliente.js'
+import { CadastroController } from './autenticacao/cadastro.controller.js'
+import { MENSAGEIRO, mensageiroDoAmbiente, type Mensageiro } from './mensageiro/mensageiro.js'
 
 @Module({})
 export class AppModule {
@@ -29,11 +31,14 @@ export class AppModule {
     pool: Pool,
     cofre: CofreDeAcesso,
     limite: LimiteDeTentativas,
+    /** O arreio de teste injeta um mensageiro que guarda em vez de enviar. */
+    mensageiro?: Mensageiro,
   ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
         SessoesController,
+        CadastroController,
         ContasController,
         CategoriasController,
         AlertasController,
@@ -61,6 +66,7 @@ export class AppModule {
         // Uma instância por processo. Ela não guarda chave nenhuma: o estado
         // que importa vive no processo do guardião, do outro lado do socket.
         { provide: GUARDIAO, useValue: new ClienteDoGuardiao() },
+        { provide: MENSAGEIRO, useValue: mensageiro ?? mensageiroDoAmbiente() },
         // Global de propósito: idempotência escrita rota a rota é idempotência
         // que falta na rota nova. Aqui é propriedade do transporte, e vale para
         // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda

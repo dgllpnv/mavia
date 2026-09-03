@@ -210,6 +210,40 @@ export const api = {
   },
 
   /**
+   * As quatro rotas de credencial. Nenhuma delas exige sessão — quem cadastra
+   * não tem conta, e quem recupera não tem senha.
+   *
+   * `cadastrar` e `recuperar` devolvem **a mesma coisa** tenha o endereço uma
+   * conta ou não. A interface repete essa frase e não tenta ser mais útil: ser
+   * mais útil aqui é enumerar a base de clientes.
+   */
+  cadastrar: (dados: { email: string; nome: string; senha: string; espaco?: string }) =>
+    chamar<{ mensagem: string }>('/cadastro', { metodo: 'POST', corpo: dados }),
+
+  /**
+   * O nome do espaço **não** viaja aqui: ele foi guardado junto do cadastro
+   * pendente. Quem abre o link vem de um e-mail, possivelmente noutro aparelho,
+   * e não tem como saber o que foi digitado no formulário.
+   */
+  async confirmarCadastro(token: string): Promise<Eu> {
+    const r = await chamar<Eu & { acesso: string }>('/cadastro/confirmar', {
+      metodo: 'POST',
+      corpo: { token, plataforma: 'web' },
+    })
+    guardarAcesso(r.acesso)
+    return r
+  },
+
+  recuperarSenha: (email: string) =>
+    chamar<{ mensagem: string }>('/senha/recuperar', { metodo: 'POST', corpo: { email } }),
+
+  redefinirSenha: (token: string, senha: string) =>
+    chamar<{ sessoesEncerradas: number }>('/senha/redefinir', {
+      metodo: 'POST',
+      corpo: { token, senha },
+    }),
+
+  /**
    * Quem sou eu — e, no primeiro carregamento da página, também o gatilho da
    * renovação: sem access em memória, `chamar` leva 401, renova pelo cookie e
    * repete. É por isso que esta rota é a primeira que a aplicação faz.

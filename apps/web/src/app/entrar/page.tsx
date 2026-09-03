@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ErroDaApi } from '../../api/cliente'
@@ -91,10 +92,16 @@ export default function Entrar() {
         </button>
       </form>
 
-      <p className="mt-44 text-sm text-ink-3">
-        Ainda não há cadastro por aqui — ele depende do envio de e-mail, que é a
-        pendência P-3. No ambiente local, <code className="font-mono">pnpm db:seed</code> cria um
-        espaço de demonstração.
+      <p className="mt-44 flex flex-col gap-8 text-sm text-ink-3">
+        <Link className="underline" href="/recuperar">
+          Esqueci minha senha
+        </Link>
+        <span>
+          Ainda não tem conta?{' '}
+          <Link className="underline" href="/cadastrar">
+            Crie uma
+          </Link>
+        </span>
       </p>
     </main>
   )

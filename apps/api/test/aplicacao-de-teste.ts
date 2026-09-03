@@ -7,6 +7,7 @@ import { criarAplicacao } from '../src/aplicacao.js'
 import { autenticadorDeSessao } from '../src/autenticacao/autenticador.js'
 import { CofreDeAcesso } from '../src/redis/cofre-de-acesso.js'
 import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
+import type { Mensageiro, Mensagem } from '../src/mensageiro/mensageiro.js'
 import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTeste } from './postgres.js'
 
 /**
@@ -25,6 +26,15 @@ export interface ApiDeTeste {
   readonly redis: Redis
   /** O refresh emitido para cada usuário na semeadura. */
   readonly refresh: ReadonlyMap<string, string>
+  /**
+   * As mensagens que teriam saído.
+   *
+   * Um mensageiro que **guarda** em vez de enviar, e não um que descarta: o
+   * token do link é a credencial inteira, e o fluxo de cadastro só é testável
+   * de ponta a ponta se o teste puder abrir a caixa. Um duplo que devolvesse
+   * sucesso e jogasse fora deixaria a metade que importa sem prova.
+   */
+  readonly caixaDeEntrada: Mensagem[]
   /** Requisição autenticada. Sem `usuario` não vai token; sem `tenant`, sem espaço. */
   pedir(opcoes: {
     metodo: string
@@ -65,7 +75,21 @@ export async function subirApi(): Promise<ApiDeTeste> {
   const cofre = new CofreDeAcesso(redis)
   const limite = new LimiteDeTentativas(redis, 'pepper-de-teste-suficientemente-longo')
 
-  const app = await criarAplicacao(pool, autenticadorDeSessao(pool, cofre), cofre, limite)
+  const caixaDeEntrada: Mensagem[] = []
+  const mensageiro: Mensageiro = {
+    configurado: true,
+    enviar: async (m) => {
+      caixaDeEntrada.push(m)
+    },
+  }
+
+  const app = await criarAplicacao(
+    pool,
+    autenticadorDeSessao(pool, cofre),
+    cofre,
+    limite,
+    mensageiro,
+  )
   await app.init()
 
   // Uma sessão por usuário: refresh no Postgres, access no cofre. Exatamente o
@@ -93,6 +117,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
     app,
     redis,
     refresh,
+    caixaDeEntrada,
     pedir(opcoes) {
       const cabecalhos: Record<string, string> = { ...(opcoes.cabecalhos ?? {}) }
       if (opcoes.usuario) cabecalhos['authorization'] = `Bearer ${tokens.get(opcoes.usuario)}`

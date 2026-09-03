@@ -1,7 +1,15 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { api, renovarAcesso, SemSessao, type Eu, type Espaco } from '../api/cliente'
 
 /**
@@ -22,6 +30,17 @@ interface Sessao {
   readonly espaco: Espaco | null
   escolherEspaco(id: string): void
   entrar(email: string, senha: string): Promise<void>
+  /**
+   * Adota uma sessão que **nasceu fora daqui**.
+   *
+   * A confirmação de cadastro emite sessão pela própria rota: quem clicou no
+   * link já provou o endereço, e pedir de novo a senha escolhida há dois
+   * minutos seria cerimônia. Sem este caminho, aquela tela guardaria o access
+   * em memória e o provedor continuaria com `eu` nulo — a aplicação
+   * redirecionaria para a entrada logo depois de autenticar, que é o defeito
+   * mais confuso possível de diagnosticar.
+   */
+  adotar(eu: Eu): void
   sair(): Promise<void>
 }
 
@@ -105,6 +124,15 @@ function ProvedorDeSessao({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const adotar = useCallback((r: Eu) => {
+    setEu(r)
+    const primeiro = r.tenants[0]
+    if (primeiro) {
+      window.localStorage.setItem(CHAVE_DO_ESPACO, primeiro.id)
+      setEspacoId(primeiro.id)
+    }
+  }, [])
+
   const valor = useMemo<Sessao>(() => {
     const espaco = eu?.tenants.find((t) => t.id === espacoId) ?? null
 
@@ -117,14 +145,9 @@ function ProvedorDeSessao({ children }: { children: ReactNode }) {
         setEspacoId(id)
       },
       async entrar(email, senha) {
-        const r = await api.entrar(email, senha)
-        setEu(r)
-        const primeiro = r.tenants[0]
-        if (primeiro) {
-          window.localStorage.setItem(CHAVE_DO_ESPACO, primeiro.id)
-          setEspacoId(primeiro.id)
-        }
+        adotar(await api.entrar(email, senha))
       },
+      adotar,
       async sair() {
         await api.sair()
         window.localStorage.removeItem(CHAVE_DO_ESPACO)
@@ -132,7 +155,7 @@ function ProvedorDeSessao({ children }: { children: ReactNode }) {
         setEspacoId(null)
       },
     }
-  }, [eu, carregando, espacoId])
+  }, [eu, carregando, espacoId, adotar])
 
   return <ContextoDeSessao.Provider value={valor}>{children}</ContextoDeSessao.Provider>
 }

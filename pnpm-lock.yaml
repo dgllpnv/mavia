@@ -81,6 +81,9 @@ importers:
       '@types/pg':
         specifier: ^8
         version: 8.23.1
+      testcontainers:
+        specifier: ^12.1.0
+        version: 12.1.0(supports-color@8.1.1)
       vitest:
         specifier: ^2
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)(supports-color@8.1.1)(terser@5.51.2)

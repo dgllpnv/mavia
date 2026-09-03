@@ -21,6 +21,8 @@ set "RAIZ=%~dp0"
 set "COMPOSE=%RAIZ%infra\docker-compose.yml"
 set "PORTA_PG=4732"
 set "PORTA_REDIS=4779"
+set "PORTA_MAILPIT=4725"
+set "PORTA_MAILPIT_SMTP=4726"
 
 REM Sem argumento, o padrao e subir o ambiente.
 set "ACAO=%~1"
@@ -102,9 +104,16 @@ echo   ------------------------------------------------------------------
 echo.
 echo    Postgres   127.0.0.1:%PORTA_PG%    usuario: mavia   senha: mavia_local_dev
 echo    Redis      127.0.0.1:%PORTA_REDIS%
+echo    Mailpit    http://127.0.0.1:%PORTA_MAILPIT%   (a caixa de entrada local)
 echo.
 echo    DATABASE_URL=postgresql://mavia:mavia_local_dev@127.0.0.1:%PORTA_PG%/mavia
 echo    REDIS_URL=redis://127.0.0.1:%PORTA_REDIS%
+echo    SMTP_HOST=127.0.0.1
+echo    SMTP_PORTA=%PORTA_MAILPIT_SMTP%
+echo    SMTP_REMETENTE=Mavia ^<ola@mavia.local^>
+echo.
+echo    Sem as tres SMTP_, cadastro e recuperacao RECUSAM em vez de fingir:
+echo    um 202 que nao manda e-mail deixaria a pessoa esperando para sempre.
 echo.
 echo    Credenciais e senha valem SO neste ambiente local. Nunca reutilize.
 echo.

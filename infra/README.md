@@ -21,7 +21,8 @@ O script está em `mavia.bat`, na raiz. Ele não devolve o prompt antes de o Pos
 | Redis | **4779** | 6379 | ativo |
 | API | **4711** | — | reservada |
 | Web | **4710** | — | reservada |
-| Mailpit | **4725** | — | reservada |
+| Mailpit (tela) | **4725** | 8025 | ativo |
+| Mailpit (SMTP) | **4726** | 1025 | ativo |
 
 Duas razões para não usar as portas padrão:
 

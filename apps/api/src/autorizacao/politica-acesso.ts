@@ -186,6 +186,13 @@ export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
   'GET /v1/eu',
   'DELETE /v1/sessoes/atual',
   'POST /v1/sessoes/revogar-outras',
+  // O cadastro e a recuperação acontecem **antes** de existir espaço. Quem
+  // confirma o cadastro ganha o espaço na mesma transação; quem redefine a
+  // senha pode ter três espaços ou nenhum, e a rota não precisa saber qual.
+  'POST /v1/cadastro',
+  'POST /v1/cadastro/confirmar',
+  'POST /v1/senha/recuperar',
+  'POST /v1/senha/redefinir',
 ])
 
 /** Dispensa até a sessão. Uma entrada a mais aqui é uma porta a mais. */
@@ -196,6 +203,17 @@ export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   // verificado em tempo constante na própria rota — sem segredo configurado,
   // nenhuma assinatura confere, e a rota recusa tudo.
   'POST /v1/cobranca/webhook',
+  // As quatro rotas de credencial. Quem cadastra não tem conta; quem recupera
+  // não tem senha. Exigir sessão em qualquer uma delas seria exigir o que elas
+  // existem para produzir.
+  //
+  // A defesa aqui não é sessão: é o contador por endereço e por origem — o
+  // mesmo do login —, a resposta idêntica para endereço existente e
+  // inexistente, e o token de 256 bits com prazo e uso único.
+  'POST /v1/cadastro',
+  'POST /v1/cadastro/confirmar',
+  'POST /v1/senha/recuperar',
+  'POST /v1/senha/redefinir',
 ])
 
 export function chaveDaRota(rota: Rota): string {
