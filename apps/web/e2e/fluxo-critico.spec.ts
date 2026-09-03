@@ -316,6 +316,11 @@ test.describe('os três eixos de filtro', () => {
   test('estado e natureza continuam independentes da origem', async ({ page }) => {
     await entrar(page)
     await page.goto('/lancamentos')
+    // Espera a tela **ter dado**, e não só ter pintado. Um clique antes da
+    // hidratação não vira nada: o botão existe no HTML e o React ainda não
+    // atende. O teste irmão já esperava; este não, e a diferença só apareceu
+    // quando a renovação de sessão acrescentou uma ida ao carregamento.
+    await expect(page.getByText('saldo no dia').first()).toBeVisible()
 
     await abrirFiltros(page)
     await page.getByLabel('Natureza').selectOption('transferencia')
@@ -416,7 +421,24 @@ test.describe('planejamento', () => {
     await page.goto('/planejamento')
 
     const seguinte = page.getByRole('button', { name: 'Mês seguinte' })
-    for (let i = 0; i < MESES_A_FRENTE; i++) await seguinte.click()
+    // O primeiro clique é o que prova que o React já atende: sem ele, os
+    // cliques seguintes se perdem e o teste acaba num mês que não é o sorteado
+    // — e falha afirmando algo verdadeiro sobre o mês errado.
+    // O rótulo do mês é o irmão imediato do botão de voltar. Localizá-lo pela
+    // estrutura evita um atributo que só existiria para o teste ver.
+    const rotulo = page
+      // `exact`: sem isso "Mês anterior" também casa com "copiar do mês
+      // anterior", e o localizador vira ambíguo assim que o estado vazio
+      // aparece.
+      .getByRole('button', { name: 'Mês anterior', exact: true })
+      .locator('xpath=following-sibling::span[1]')
+    const inicial = await rotulo.textContent()
+    await expect(async () => {
+      await seguinte.click()
+      expect(await rotulo.textContent()).not.toBe(inicial)
+    }).toPass({ timeout: 15_000 })
+
+    for (let i = 1; i < MESES_A_FRENTE; i++) await seguinte.click()
 
     await expect(page.getByText(/Nenhum planejamento em/)).toBeVisible()
 
@@ -452,8 +474,25 @@ test.describe('planejamento', () => {
     await page.getByRole('button', { name: 'copiar do mês anterior' }).first().click()
     await expect(page.getByText(/Nada a copiar/)).toBeVisible()
     await expect(page.getByText('Todas as categorias')).toHaveCount(1)
+
+    // --- devolve os dois meses -------------------------------------------
+    // Sem isto cada execução consome dois meses do espaço sorteado, e a colisão
+    // deixa de ser improvável para virar rotina. Limpar é o que torna o teste
+    // repetível de verdade — a mesma lição do estorno, que comia a semente.
+    await removerPlanejamento(page)
+    await page.getByRole('button', { name: 'Mês anterior', exact: true }).click()
+    await removerPlanejamento(page)
   })
 })
+
+/** Abre o planejamento da tela e o exclui. */
+async function removerPlanejamento(page: Page): Promise<void> {
+  await page.getByText('Todas as categorias').click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button', { name: 'excluir', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText(/Nenhum planejamento em/)).toBeVisible()
+}
 
 /**
  * Recorrência.

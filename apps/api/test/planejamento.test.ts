@@ -313,6 +313,57 @@ describe('copiar para outra competência', () => {
   })
 })
 
+describe('excluir', () => {
+  it('**libera a identidade: dá para criar outro no lugar**', async () => {
+    // O motivo de a exclusão existir. O índice único de identidade impedia
+    // criar um segundo planejamento do mesmo escopo, e sem exclusão quem
+    // errasse o escopo ficava com uma linha que não queria e sem saída.
+    const alvo = '2027-03'
+    const primeiro = await criar({ competencia: alvo, valorCentavos: '-100000' })
+    expect(primeiro.statusCode).toBe(201)
+
+    // Enquanto ele existe, o mesmo escopo é recusado.
+    expect((await criar({ competencia: alvo, valorCentavos: '-200000' })).statusCode).toBe(409)
+
+    const apagar = await api.pedir({
+      metodo: 'DELETE',
+      url: `/v1/planejamentos/${primeiro.json().id}`,
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+    })
+    expect(apagar.statusCode).toBe(204)
+
+    expect((await listar(alvo)).json().itens).toHaveLength(0)
+    expect((await criar({ competencia: alvo, valorCentavos: '-200000' })).statusCode).toBe(201)
+  })
+
+  it('excluir o que não existe é 404', async () => {
+    const r = await api.pedir({
+      metodo: 'DELETE',
+      url: '/v1/planejamentos/00000000-0000-0000-0000-000000000000',
+      usuario: USUARIO_A,
+      tenant: TENANT_A,
+    })
+
+    expect(r.statusCode).toBe(404)
+  })
+
+  it('não alcança o planejamento de outro espaço', async () => {
+    const alvo = '2027-05'
+    const criado = await criar({ competencia: alvo, valorCentavos: '-50000' })
+
+    const r = await api.pedir({
+      metodo: 'DELETE',
+      url: `/v1/planejamentos/${criado.json().id}`,
+      usuario: USUARIO_B,
+      tenant: TENANT_B,
+    })
+
+    expect(r.statusCode).toBe(404)
+    expect((await listar(alvo)).json().itens).toHaveLength(1)
+  })
+})
+
 describe('isolamento e acesso', () => {
   it('o planejamento de um espaço não aparece no outro', async () => {
     const r = await listar(COMP, { usuario: USUARIO_B, tenant: TENANT_B })

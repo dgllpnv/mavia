@@ -10,18 +10,82 @@ import type {
 /**
  * O cliente da API — o único lugar do web que sabe falar HTTP.
  *
- * Duas coisas ele carrega sempre, e nenhuma tela precisa lembrar:
+ * Três coisas ele carrega sempre, e nenhuma tela precisa lembrar:
  *
- * 1. `credentials: 'same-origin'`, para o cookie `HttpOnly` da sessão viajar.
- *    O token nunca passa pelo JavaScript — nem aqui.
- * 2. `X-Mavia-Tenant`, **explícito**. A API responde 400 quando ele falta,
+ * 1. o **access token**, em `Authorization`. Ele vive numa variável de módulo,
+ *    dura quinze minutos e some ao recarregar a página;
+ * 2. `credentials: 'same-origin'`, para o cookie `HttpOnly` do **refresh**
+ *    viajar nas rotas de sessão. Esse cookie nunca passa pelo JavaScript;
+ * 3. `X-Mavia-Tenant`, **explícito**. A API responde 400 quando ele falta,
  *    inclusive para quem tem um espaço só (decisão D9): escolha implícita fica
  *    errada no dia em que a pessoa aceita um segundo convite, e nesse dia
  *    ninguém lembra de procurar aqui.
  *
  * A URL é relativa. O `rewrite` do Next põe a API na mesma origem, o que evita
  * CORS e mantém a topologia local igual à de produção.
+ *
+ * ## Por que o access token mora em memória
+ *
+ * `localStorage` sobrevive à aba, ao reinício do navegador e a qualquer script
+ * que a página venha a carregar. Uma variável de módulo morre com a página.
+ * Um XSS continua roubando quinze minutos — não semanas —, e o refresh, que é
+ * o que vale semanas, ele não alcança: está num cookie `HttpOnly`.
  */
+
+/**
+ * O access token corrente. Deliberadamente **não** persistido.
+ *
+ * Ao recarregar a página ele some, e a primeira chamada renova pelo cookie —
+ * um ida e volta a mais no carregamento, em troca de a credencial não existir
+ * em nenhum lugar que sobreviva à aba.
+ */
+let acesso: string | null = null
+
+/**
+ * A renovação em curso, quando há uma.
+ *
+ * Sem isto, dez consultas do TanStack Query recebendo 401 ao mesmo tempo
+ * disparariam dez rotações concorrentes — e a rotação é destrutiva: a segunda
+ * apresentaria um refresh que a primeira acabou de consumir, o que o servidor
+ * lê, corretamente, como **reuso**. O usuário seria deslogado por segurança
+ * por ter aberto o app com o token vencido.
+ */
+let renovacaoEmCurso: Promise<boolean> | null = null
+
+export function guardarAcesso(token: string | null): void {
+  acesso = token
+}
+
+/**
+ * Renova o access token pelo cookie de refresh. Devolve se conseguiu.
+ *
+ * Uma renovação por vez, compartilhada por todos os chamadores.
+ */
+export async function renovarAcesso(): Promise<boolean> {
+  renovacaoEmCurso ??= (async () => {
+    try {
+      const r = await fetch('/api/v1/sessoes/renovar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'x-mavia-client': 'web' },
+      })
+      if (!r.ok) {
+        acesso = null
+        return false
+      }
+      const dados = (await r.json()) as { acesso?: string }
+      acesso = dados.acesso ?? null
+      return acesso !== null
+    } catch {
+      acesso = null
+      return false
+    } finally {
+      renovacaoEmCurso = null
+    }
+  })()
+
+  return renovacaoEmCurso
+}
 
 export class ErroDaApi extends Error {
   constructor(
@@ -48,16 +112,20 @@ interface Opcoes {
 }
 
 export async function chamar<T>(caminho: string, opcoes: Opcoes = {}): Promise<T> {
-  const cabecalhos: Record<string, string> = {}
-  if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json'
-  if (opcoes.tenantId) cabecalhos['x-mavia-tenant'] = opcoes.tenantId
+  let r = await enviar(caminho, opcoes)
 
-  const r = await fetch(`/api/v1${caminho}`, {
-    method: opcoes.metodo ?? 'GET',
-    headers: cabecalhos,
-    credentials: 'same-origin',
-    ...(opcoes.corpo !== undefined ? { body: JSON.stringify(opcoes.corpo) } : {}),
-  })
+  /**
+   * 401 numa rota autenticada é a coisa mais comum do mundo neste desenho: o
+   * access dura quinze minutos. Renovar e repetir **uma** vez é o caminho
+   * normal, não o de exceção.
+   *
+   * Uma repetição só, e nunca em `/sessoes`: repetir um login recusado
+   * multiplicaria as tentativas contra o limite do servidor, e o usuário
+   * levaria um 429 por ter errado a senha uma vez.
+   */
+  if (r.status === 401 && !caminho.startsWith('/sessoes')) {
+    if (await renovarAcesso()) r = await enviar(caminho, opcoes)
+  }
 
   if (r.status === 204) return undefined as T
 
@@ -85,6 +153,20 @@ export async function chamar<T>(caminho: string, opcoes: Opcoes = {}): Promise<T
     throw new ErroDaApi(r.status, mensagemDoErro(dados) ?? 'Não foi possível concluir.')
   }
   return dados as T
+}
+
+function enviar(caminho: string, opcoes: Opcoes): Promise<Response> {
+  const cabecalhos: Record<string, string> = {}
+  if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json'
+  if (opcoes.tenantId) cabecalhos['x-mavia-tenant'] = opcoes.tenantId
+  if (acesso) cabecalhos['authorization'] = `Bearer ${acesso}`
+
+  return fetch(`/api/v1${caminho}`, {
+    method: opcoes.metodo ?? 'GET',
+    headers: cabecalhos,
+    credentials: 'same-origin',
+    ...(opcoes.corpo !== undefined ? { body: JSON.stringify(opcoes.corpo) } : {}),
+  })
 }
 
 /**
@@ -116,17 +198,28 @@ export interface Eu {
 }
 
 export const api = {
-  entrar: (email: string, senha: string) =>
-    chamar<Eu>('/sessoes', {
+  async entrar(email: string, senha: string): Promise<Eu> {
+    const r = await chamar<Eu & { acesso: string }>('/sessoes', {
       metodo: 'POST',
-      // `web` e não `mobile`: é o que faz a API devolver o token em cookie
-      // `HttpOnly` em vez de no corpo.
+      // `web` e não `mobile`: é o que faz a API mandar o **refresh** em cookie
+      // `HttpOnly` em vez de no corpo. O access vem no corpo nas duas.
       corpo: { email, senha, plataforma: 'web' },
-    }),
+    })
+    guardarAcesso(r.acesso)
+    return r
+  },
 
+  /**
+   * Quem sou eu — e, no primeiro carregamento da página, também o gatilho da
+   * renovação: sem access em memória, `chamar` leva 401, renova pelo cookie e
+   * repete. É por isso que esta rota é a primeira que a aplicação faz.
+   */
   eu: () => chamar<Eu>('/eu'),
 
-  sair: () => chamar<void>('/sessoes/atual', { metodo: 'DELETE' }),
+  async sair(): Promise<void> {
+    await chamar<void>('/sessoes/atual', { metodo: 'DELETE' })
+    guardarAcesso(null)
+  },
 
   contas: (tenantId: string) => chamar<{ itens: Conta[] }>('/contas', { tenantId }),
 

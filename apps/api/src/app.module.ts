@@ -1,5 +1,8 @@
 import { Module, type DynamicModule } from '@nestjs/common'
 import type { Pool } from 'pg'
+import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
+import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
+import { COFRE, LIMITE } from './redis/tokens.js'
 import { ContasController, POOL } from './contas/contas.controller.js'
 import { LancamentosController } from './lancamentos/lancamentos.controller.js'
 import { CartoesController } from './cartoes/cartoes.controller.js'
@@ -12,7 +15,11 @@ import { RecorrenciasController } from './recorrencias/recorrencias.controller.j
 
 @Module({})
 export class AppModule {
-  static comPool(pool: Pool): DynamicModule {
+  static comPool(
+    pool: Pool,
+    cofre: CofreDeAcesso,
+    limite: LimiteDeTentativas,
+  ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
@@ -26,7 +33,11 @@ export class AppModule {
         LancamentosController,
         CartoesController,
       ],
-      providers: [{ provide: POOL, useValue: pool }],
+      providers: [
+        { provide: POOL, useValue: pool },
+        { provide: COFRE, useValue: cofre },
+        { provide: LIMITE, useValue: limite },
+      ],
     }
   }
 }

@@ -3,6 +3,8 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import type { Pool } from 'pg'
 import { AppModule } from './app.module.js'
+import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
+import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
 import {
   chaveDaRota,
   ROTAS_SEM_TENANT,
@@ -22,9 +24,11 @@ import { TenantNaoInformado, TenantNaoPertence, type Autenticador } from './aute
 export async function criarAplicacao(
   pool: Pool,
   autenticar: Autenticador,
+  cofre: CofreDeAcesso,
+  limite: LimiteDeTentativas,
 ): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.comPool(pool),
+    AppModule.comPool(pool, cofre, limite),
     new FastifyAdapter(),
     { logger: false },
   )

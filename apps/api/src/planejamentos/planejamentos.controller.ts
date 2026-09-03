@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -171,6 +172,33 @@ export class PlanejamentosController {
     } catch (erro) {
       throw this.traduzir(erro)
     }
+  }
+
+  /**
+   * Excluir um planejamento.
+   *
+   * Faltava, e a falta era um buraco de produto antes de ser um problema de
+   * teste: quem criava um teto por engano só podia **editar o valor**, nunca
+   * remover a linha. O índice único de identidade tornava isso pior — com um
+   * global já criado, a pessoa ficava com um planejamento que não queria e sem
+   * caminho de saída.
+   *
+   * Soft delete, como todo dado financeiro: o planejamento entrou em relatório
+   * de mês fechado, e apagá-lo de verdade reescreveria o passado.
+   */
+  @Delete(':id')
+  @HttpCode(204)
+  async excluir(@Req() req: FastifyRequest, @Param('id') id: string): Promise<void> {
+    const ctx = this.contexto(req)
+    const apagou = await comTenant(this.pool, ctx, async (c) => {
+      const r = await c.query(
+        `UPDATE planejamentos SET deleted_at = now()
+          WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+        [ctx.tenantId, id],
+      )
+      return (r.rowCount ?? 0) > 0
+    })
+    if (!apagou) throw new NotFoundException('Planejamento não encontrado.')
   }
 
   /**

@@ -10,7 +10,12 @@ packages:
 #   @nestjs/core ............ postinstall do Nest
 # O binding nativo do ssh2 é opcional e falha sem toolchain de C++; o
 # testcontainers funciona com o fallback em JS.
+#   msgpackr-extract ........ aceleração nativa opcional do BullMQ; negada de
+#                             propósito — o fallback em JS é suficiente para a
+#                             nossa carga, e um binário a menos é uma superfície
+#                             a menos na instalação.
 allowBuilds:
+  "msgpackr-extract": false
   esbuild: true
   ssh2: true
   cpu-features: true

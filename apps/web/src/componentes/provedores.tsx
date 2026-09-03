@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, SemSessao, type Eu, type Espaco } from '../api/cliente'
+import { api, renovarAcesso, SemSessao, type Eu, type Espaco } from '../api/cliente'
 
 /**
  * Sessão e espaço, para a árvore inteira.
@@ -70,10 +70,21 @@ function ProvedorDeSessao({ children }: { children: ReactNode }) {
   const [carregando, setCarregando] = useState(true)
   const [espacoId, setEspacoId] = useState<string | null>(null)
 
+  /**
+   * O arranque: **renova primeiro, pergunta depois**.
+   *
+   * O access token vive em memória e some ao recarregar a página, então a
+   * primeira chamada sempre precisaria renovar. Chamar `/eu` antes custaria um
+   * 401 seguido da renovação — duas idas para quem está logado e, pior, duas
+   * para quem **não** está, que é a visita mais comum de todas.
+   *
+   * Nesta ordem, quem não tem cookie descobre isso em uma ida e vai para a
+   * entrada; quem tem paga as mesmas duas de antes.
+   */
   useEffect(() => {
     let vivo = true
-    api
-      .eu()
+    renovarAcesso()
+      .then((renovou) => (renovou ? api.eu() : Promise.reject(new Error('sem sessão'))))
       .then((r) => {
         if (!vivo) return
         setEu(r)

@@ -1,5 +1,5 @@
 /**
- * O cookie de sessão do web — escrito à mão, e de propósito.
+ * O cookie de **refresh** do web — escrito à mão, e de propósito.
  *
  * `@fastify/cookie` na versão atual exige Fastify 5, e trocar a versão do
  * servidor por um único cookie opaco seria acoplar a porta de entrada do
@@ -10,9 +10,18 @@
  * cookie **precisa** ser `Secure`, ter `Path=/` e **não pode** declarar
  * `Domain`. Sem esse prefixo, um subdomínio comprometido — inclusive um que
  * ainda não existe — pode fixar a sessão do domínio inteiro.
+ *
+ * ## O que este cookie carrega, e o que não carrega
+ *
+ * Carrega o **refresh**, que vale semanas e nunca chega ao JavaScript da
+ * página. **Não** carrega o access token: esse vive quinze minutos numa
+ * variável de módulo do cliente e viaja em `Authorization`. A separação é o que
+ * faz um XSS roubar quinze minutos em vez de semanas — ler o cookie ele não
+ * consegue, e a variável some ao recarregar a página.
  */
 
-export const NOME_DO_COOKIE = '__Host-mavia_sessao'
+/** `rt` de refresh token. O nome mudou junto com o papel do cookie. */
+export const NOME_DO_COOKIE = '__Host-mavia_rt'
 
 export interface OpcoesDoCookie {
   /**
@@ -44,7 +53,7 @@ export function cookieDeSaida(): string {
 }
 
 /**
- * Lê o valor do cookie de sessão do cabeçalho `Cookie`.
+ * Lê o valor do cookie do cabeçalho `Cookie`.
  *
  * Aceita **só** o formato que emitimos: token opaco em hexadecimal. Qualquer
  * outra coisa é tratada como ausência, e não como valor a ser decodificado —

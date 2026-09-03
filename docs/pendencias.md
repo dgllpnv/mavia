@@ -10,46 +10,38 @@ gatilho, ou vira ticket, ou sai.
 
 ---
 
-## P-1 · Token de acesso curto e refresh rotacionado (D6)
+## ~~P-1 · Token de acesso curto e refresh rotacionado (D6)~~ ✅ **fechada**
 
-**Onde:** `apps/api/src/autenticacao/sessoes.controller.ts`
-**Spec:** `docs/produto/spec-autenticacao.md` §4, decisão D6
-**Depende de:** Redis (épico 5)
+**Fechada em:** 2026-09-03, migration 0019 e `apps/api/src/redis/`.
 
-O spec fixa token de acesso **opaco de 15 minutos** resolvido no Redis, com
-refresh opaco rotacionado a cada uso e detecção de reuso por família. O que
-existe hoje é o token de sessão opaco com validade deslizante de 14 dias e teto
-absoluto de 30, resolvido direto em `sessoes`.
+O access token passou a ser **opaco de 15 minutos resolvido no Redis**, e o
+refresh a ser **rotacionado a cada uso**, com detecção de reuso que revoga a
+família inteira. `sessoes` já modelava família, geração e `substituida_por`
+desde a 0003 — a rotação não precisou de coluna nova, só da função.
 
-O que **já está pronto** e só espera o Redis: a tabela `sessoes` (migration
-0003) modela família, geração e `substituida_por` desde o primeiro dia. A
-rotação não precisa de migration.
-
-O que se perde enquanto isso: um token roubado vale até 14 dias em vez de 15
-minutos, e a detecção de reuso — que é o que transforma roubo de refresh em
-revogação automática da família — não tem o que detectar, porque não há rotação.
-
-**Condição de saída:** Redis no `docker-compose` (porta 4779, já reservada).
+O que a mudança comprou, além do que estava escrito: revogação **imediata**.
+"Desconectar os outros dispositivos" apaga os access tokens no mesmo instante,
+porque o cofre mantém um índice reverso por sessão. O requisito da matriz era
+60 segundos; o resultado é zero.
 
 ---
 
-## P-2 · Limite de tentativas de login
+## ~~P-2 · Limite de tentativas de login~~ ✅ **fechada**
 
-**Onde:** `POST /v1/sessoes`
-**Spec:** `docs/seguranca/matriz-de-acesso.md` §3.1
-**Depende de:** Redis (épico 5)
+**Fechada em:** 2026-09-03, `apps/api/src/redis/limite-de-tentativas.ts`.
 
-Não há limite por endereço nem por IP. As defesas que **existem** hoje são a
-verificação fantasma (tempo constante entre endereço inexistente e senha
-errada) e o Argon2id, que impõe ~20 ms por tentativa — o que torna a força
-bruta cara, mas não impossível numa lista de senhas comuns contra muitos
-endereços.
+Duas janelas, e a assimetria entre elas é a parte que importa: **por endereço
+conta tudo**, inclusive os acertos, senão um atacante com uma credencial válida
+entre mil inválidas passaria sem acionar nada; **por origem conta só falhas**,
+porque spraying é feito de erro e contar acertos trancaria um escritório
+inteiro atrás do mesmo NAT.
 
-Contador em memória do processo foi **descartado de propósito**: ele dá a
-sensação de proteção e evapora no primeiro segundo processo, além de contar
-errado atrás de qualquer balanceador.
+A segunda metade dessa regra foi descoberta do jeito difícil: a versão que
+contava tudo por origem começou a derrubar a própria suíte E2E depois da
+sexagésima entrada bem-sucedida, com falhas diferentes a cada execução.
 
-**Condição de saída:** a mesma do P-1.
+Nem o endereço nem o IP entram na chave em claro — um dump do Redis não vira
+uma lista de quem tentou entrar.
 
 ---
 
@@ -150,10 +142,24 @@ config na raiz herdado pelos pacotes, ligado no CI junto do typecheck.
 
 ---
 
-## P-8 · O horizonte da recorrência não anda sozinho
+## ~~P-8 · O horizonte da recorrência não anda sozinho~~ ✅ **fechada**
+
+**Fechada em:** 2026-09-03, `apps/api/src/recorrencias/agendador.ts`.
+
+Job BullMQ de hora em hora, worker no mesmo processo. A frequência não compra
+ocorrência nenhuma a mais — a materialização é idempotente pela identidade —,
+compra resiliência: uma janela de manutenção de duas horas não custa um dia de
+horizonte.
+
+O job atravessa todos os espaços, e a RLS bloqueia isso corretamente. A saída é
+a exceção **declarada** da migration 0020: uma função `SECURITY DEFINER`
+estreita que devolve três colunas de identificação e nada que descreva
+dinheiro. Cada regra continua sendo materializada sob o contexto do seu espaço.
+
+### O texto original
 
 **Onde:** `apps/api/src/recorrencias/recorrencias.controller.ts`
-**Depende de:** agendador (BullMQ sobre Redis, épico 5)
+**Dependia de:** agendador (BullMQ sobre Redis, épico 5)
 
 O `CONTEXT.md` diz que "um job materializa as ocorrências dentro de um
 horizonte". O job precisa de agendador, o agendador precisa de Redis, e o Redis

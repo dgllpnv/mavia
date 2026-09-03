@@ -31,9 +31,9 @@ import {
 import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
-import { registrarCompra, type CartaoDaCompra } from '../cartoes/compras.js'
 import { POOL } from '../contas/contas.controller.js'
 import { comTenant } from '../tenancy/tenancy.js'
+import { limparFuturoPendente, materializarRecorrencia } from './materializar.js'
 
 /**
  * Recorrencia — a regra que gera lançamentos repetidos.
@@ -109,7 +109,7 @@ export class RecorrenciasController {
         const id = r.rows[0]?.id
         if (!id) throw new ConflictException('Não foi possível criar a recorrência.')
 
-        await this.materializar(c, ctx, id)
+        await materializarRecorrencia(c, ctx, id)
 
         const criada = (await this.carregar(c, ctx.tenantId, id))[0]
         if (!criada) throw new ConflictException('Não foi possível ler a recorrência criada.')
@@ -172,8 +172,8 @@ export class RecorrenciasController {
         )
         if (!r.rows[0]) throw new NotFoundException('Recorrência não encontrada.')
 
-        await this.limparFuturoPendente(c, ctx.tenantId, id)
-        await this.materializar(c, ctx, id)
+        await limparFuturoPendente(c, ctx.tenantId, id)
+        await materializarRecorrencia(c, ctx, id)
 
         const atual = (await this.carregar(c, ctx.tenantId, id))[0]
         if (!atual) throw new NotFoundException('Recorrência não encontrada.')
@@ -190,7 +190,7 @@ export class RecorrenciasController {
     const ctx = this.contexto(req)
     const apagou = await comTenant(this.pool, ctx, async (c) => {
       // O passado fica. Excluir a regra não apaga o aluguel que já foi pago.
-      await this.limparFuturoPendente(c, ctx.tenantId, id)
+      await limparFuturoPendente(c, ctx.tenantId, id)
       const r = await c.query(
         `UPDATE recorrencias SET deleted_at = now()
           WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
@@ -220,170 +220,11 @@ export class RecorrenciasController {
         [ctx.tenantId],
       )
       let total = 0
-      for (const linha of r.rows) total += await this.materializar(c, ctx, linha.id)
+      for (const linha of r.rows) total += await materializarRecorrencia(c, ctx, linha.id)
       return total
     })
 
     return { criadas }
-  }
-
-  /** Quantos meses à frente materializar. Um ano é o que cabe numa tela. */
-  private static readonly HORIZONTE_EM_MESES = 12
-
-  /**
-   * Materializa as ocorrências que faltam, do mês corrente ao fim do horizonte.
-   *
-   * **Nunca materializa o passado.** Uma regra que começa em janeiro, criada em
-   * setembro, não inventa oito lançamentos que a pessoa nunca teve. O mês
-   * corrente entra: quem cadastra o aluguel no dia 15 com vencimento no dia 10
-   * quer ver a parcela deste mês, e ela nasce pendente — `settled_at` só é
-   * escrito quando o dinheiro se move.
-   */
-  private async materializar(
-    c: PoolClient,
-    ctx: { tenantId: string; usuarioId: string },
-    id: string,
-  ): Promise<number> {
-    const r = await c.query<{
-      conta_id: string | null
-      cartao_id: string | null
-      categoria_id: string
-      valor_centavos: string
-      moeda: string
-      descricao: string
-      dia_do_mes: number
-      intervalo_meses: number
-      inicio: Date
-      fim: Date | null
-      pausada_em: Date | null
-    }>(
-      `SELECT conta_id, cartao_id, categoria_id, valor_centavos::text, moeda, descricao,
-              dia_do_mes, intervalo_meses, inicio, fim, pausada_em
-         FROM recorrencias
-        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [ctx.tenantId, id],
-    )
-    const regraNoBanco = r.rows[0]
-    if (!regraNoBanco || regraNoBanco.pausada_em !== null) return 0
-
-    const regra: RegraDeRecorrencia = {
-      diaDoMes: regraNoBanco.dia_do_mes,
-      intervaloMeses: regraNoBanco.intervalo_meses,
-      inicio: competenciaDaData(regraNoBanco.inicio),
-      fim: regraNoBanco.fim === null ? null : competenciaDaData(regraNoBanco.fim),
-    }
-
-    // O horizonte é contado do **mês corrente**, e o dia de hoje vem do
-    // servidor: data de negócio nunca vem do relógio do cliente.
-    const agora = competenciaDe(new Date())
-    const ate = avancar(agora, RecorrenciasController.HORIZONTE_EM_MESES)
-
-    let criadas = 0
-    for (const o of ocorrencias(regra, agora, ate)) {
-      const competencia = `${o.competencia.ano}-${doisDigitos(o.competencia.mes)}-01`
-
-      // O índice único já impediria a duplicata; conferir antes evita abortar a
-      // transação inteira por causa de um mês que já existia.
-      const jaExiste = await c.query(
-        `SELECT 1 FROM lancamentos
-          WHERE tenant_id = $1 AND recorrencia_id = $2 AND recorrencia_competencia = $3::date
-            AND deleted_at IS NULL`,
-        [ctx.tenantId, id, competencia],
-      )
-      if ((jaExiste.rowCount ?? 0) > 0) continue
-
-      const postedAt = inicioDoDiaCivil(o.data)
-
-      if (regraNoBanco.cartao_id !== null) {
-        const cartao = await this.cartaoDaRegra(c, ctx.tenantId, regraNoBanco.cartao_id)
-        // Pela **mesma** porta da compra à vista: é ela que sabe qual fatura
-        // recebe o lançamento, e essa escolha não pode existir em dois lugares.
-        await registrarCompra(
-          c,
-          ctx,
-          cartao,
-          {
-            categoriaId: regraNoBanco.categoria_id,
-            valorCentavos: regraNoBanco.valor_centavos,
-            parcelas: 1,
-            postedAt: postedAt.toISOString(),
-            descricao: regraNoBanco.descricao,
-          },
-          { recorrenciaId: id, competencia },
-        )
-      } else {
-        await c.query(
-          `INSERT INTO lancamentos (tenant_id, conta_id, categoria_id, valor_centavos, moeda,
-                                    posted_at, descricao, origem, criado_por,
-                                    recorrencia_id, recorrencia_competencia)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'recorrencia',$8,$9,$10::date)`,
-          [
-            ctx.tenantId,
-            regraNoBanco.conta_id,
-            regraNoBanco.categoria_id,
-            regraNoBanco.valor_centavos,
-            regraNoBanco.moeda,
-            postedAt,
-            regraNoBanco.descricao,
-            ctx.usuarioId,
-            id,
-            competencia,
-          ],
-        )
-      }
-      criadas++
-    }
-
-    return criadas
-  }
-
-  /**
-   * Apaga as ocorrências **futuras e não compensadas**.
-   *
-   * As duas condições importam. `posted_at` no futuro é previsão, e previsão a
-   * regra pode redesenhar; `settled_at` nulo é dinheiro que não se moveu, e
-   * dinheiro que se moveu não se apaga por causa de uma edição de regra — o
-   * extrato mentiria sobre um fato.
-   */
-  private async limparFuturoPendente(
-    c: PoolClient,
-    tenantId: string,
-    id: string,
-  ): Promise<void> {
-    await c.query(
-      `UPDATE lancamentos SET deleted_at = now()
-        WHERE tenant_id = $1 AND recorrencia_id = $2 AND deleted_at IS NULL
-          AND settled_at IS NULL
-          AND posted_at > now()`,
-      [tenantId, id],
-    )
-  }
-
-  private async cartaoDaRegra(
-    c: PoolClient,
-    tenantId: string,
-    cartaoId: string,
-  ): Promise<CartaoDaCompra> {
-    const r = await c.query<{
-      id: string
-      moeda: CartaoDaCompra['moeda']
-      closing_day: number
-      due_day: number
-      conta_pagamento_id: string | null
-    }>(
-      `SELECT id, moeda, closing_day, due_day, conta_pagamento_id
-         FROM cartoes WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
-      [tenantId, cartaoId],
-    )
-    const cartao = r.rows[0]
-    if (!cartao) throw new NotFoundException('Cartão não encontrado.')
-    return {
-      id: cartao.id,
-      moeda: cartao.moeda,
-      closingDay: cartao.closing_day,
-      dueDay: cartao.due_day,
-      contaPagamentoId: cartao.conta_pagamento_id,
-    }
   }
 
   private async carregar(

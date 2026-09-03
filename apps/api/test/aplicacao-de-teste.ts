@@ -1,8 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { Pool } from 'pg'
+import Redis from 'ioredis'
+import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis'
 import type { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { criarAplicacao } from '../src/aplicacao.js'
 import { autenticadorDeSessao } from '../src/autenticacao/autenticador.js'
+import { CofreDeAcesso } from '../src/redis/cofre-de-acesso.js'
+import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
 import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTeste } from './postgres.js'
 
 /**
@@ -17,6 +21,10 @@ import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTes
 export interface ApiDeTeste {
   readonly banco: BancoDeTeste
   readonly app: NestFastifyApplication
+  /** Exposto para os testes de sessão, que precisam olhar dentro do cofre. */
+  readonly redis: Redis
+  /** O refresh emitido para cada usuário na semeadura. */
+  readonly refresh: ReadonlyMap<string, string>
   /** Requisição autenticada. Sem `usuario` não vai token; sem `tenant`, sem espaço. */
   pedir(opcoes: {
     metodo: string
@@ -45,26 +53,44 @@ export async function subirApi(): Promise<ApiDeTeste> {
     password: 'mavia_local_dev',
   })
 
-  const app = await criarAplicacao(pool, autenticadorDeSessao(pool))
+  // **Redis de verdade, num contêiner.** O cofre do access token é a peça que
+  // decide se uma requisição entra; provar isso contra um dublê provaria que o
+  // dublê funciona. É a mesma razão de o Postgres ser real: RLS não se mocka, e
+  // expiração de chave também não.
+  const redisContainer = await new RedisContainer('redis:7-alpine').start()
+  const redis = new Redis(redisContainer.getConnectionUrl(), { maxRetriesPerRequest: null })
+
+  const cofre = new CofreDeAcesso(redis)
+  const limite = new LimiteDeTentativas(redis, 'pepper-de-teste-suficientemente-longo')
+
+  const app = await criarAplicacao(pool, autenticadorDeSessao(pool, cofre), cofre, limite)
   await app.init()
 
+  // Uma sessão por usuário: refresh no Postgres, access no cofre. Exatamente o
+  // que o login produz — o arreio não inventa um caminho de autenticação que a
+  // aplicação não tem.
   const tokens = new Map<string, string>()
+  const refresh = new Map<string, string>()
   for (const usuario of [USUARIO_A, USUARIO_B]) {
     const token = randomBytes(32).toString('hex')
     const hash = createHash('sha256').update(token, 'utf8').digest()
-    await banco.cliente.query(
+    const r = await banco.cliente.query<{ id: string }>(
       `INSERT INTO sessoes (usuario_id, familia_id, refresh_hash, plataforma,
                             expira_em, expira_absoluto_em)
        VALUES ($1, gen_random_uuid(), $2, 'web', now() + interval '14 days',
-               now() + interval '30 days')`,
+               now() + interval '30 days')
+       RETURNING id`,
       [usuario, hash],
     )
-    tokens.set(usuario, token)
+    refresh.set(usuario, token)
+    tokens.set(usuario, await cofre.emitir({ sessaoId: r.rows[0]!.id, usuarioId: usuario }))
   }
 
   return {
     banco,
     app,
+    redis,
+    refresh,
     pedir(opcoes) {
       const cabecalhos: Record<string, string> = {}
       if (opcoes.usuario) cabecalhos['authorization'] = `Bearer ${tokens.get(opcoes.usuario)}`
@@ -79,6 +105,8 @@ export async function subirApi(): Promise<ApiDeTeste> {
     async encerrar() {
       await app.close()
       await pool.end()
+      redis.disconnect()
+      await redisContainer.stop()
       await banco.encerrar()
     },
   }

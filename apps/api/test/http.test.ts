@@ -2,7 +2,11 @@ import { createHash, randomBytes } from 'node:crypto'
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { NestFastifyApplication } from '@nestjs/platform-fastify'
+import Redis from 'ioredis'
+import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis'
 import { criarAplicacao } from '../src/aplicacao.js'
+import { CofreDeAcesso } from '../src/redis/cofre-de-acesso.js'
+import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
 import { autenticadorDeSessao } from '../src/autenticacao/autenticador.js'
 import {
   semearDoisTenants,
@@ -30,17 +34,23 @@ let pool: Pool
 /** Sessões de teste, criadas no banco como o fluxo de login as criaria. */
 const tokens = new Map<string, string>()
 
+let redisContainer: StartedRedisContainer
+let redis: Redis
+let cofre: CofreDeAcesso
+
+/** Refresh no Postgres, access no cofre — o que o login de verdade produz. */
 async function criarSessao(usuarioId: string): Promise<string> {
   const token = randomBytes(32).toString('hex')
   const hash = createHash('sha256').update(token, 'utf8').digest()
-  await banco.cliente.query(
+  const r = await banco.cliente.query<{ id: string }>(
     `INSERT INTO sessoes (usuario_id, familia_id, refresh_hash, plataforma,
                           expira_em, expira_absoluto_em)
      VALUES ($1, gen_random_uuid(), $2, 'web', now() + interval '14 days',
-             now() + interval '30 days')`,
+             now() + interval '30 days')
+     RETURNING id`,
     [usuarioId, hash],
   )
-  return token
+  return cofre.emitir({ sessaoId: r.rows[0]!.id, usuarioId })
 }
 
 beforeAll(async () => {
@@ -61,7 +71,16 @@ beforeAll(async () => {
     password: 'mavia_local_dev',
   })
 
-  app = await criarAplicacao(pool, autenticadorDeSessao(pool))
+  redisContainer = await new RedisContainer('redis:7-alpine').start()
+  redis = new Redis(redisContainer.getConnectionUrl(), { maxRetriesPerRequest: null })
+  cofre = new CofreDeAcesso(redis)
+
+  app = await criarAplicacao(
+    pool,
+    autenticadorDeSessao(pool, cofre),
+    cofre,
+    new LimiteDeTentativas(redis, 'pepper-de-teste-suficientemente-longo'),
+  )
   await app.init()
 
   tokens.set(USUARIO_A, await criarSessao(USUARIO_A))
@@ -71,6 +90,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await app?.close()
   await pool?.end()
+  redis?.disconnect()
+  await redisContainer?.stop()
   await banco?.encerrar()
 })
 

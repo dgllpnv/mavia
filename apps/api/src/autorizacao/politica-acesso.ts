@@ -47,6 +47,9 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['GET /v1/planejamentos', { papeis: TODOS }],
   ['POST /v1/planejamentos', { papeis: QUEM_ESCREVE }],
   ['PATCH /v1/planejamentos/:id', { papeis: QUEM_ESCREVE }],
+  // Excluir um planejamento não apaga dinheiro nenhum: o que se perde é a
+  // referência do mês. Por isso é de quem escreve, e não só do dono.
+  ['DELETE /v1/planejamentos/:id', { papeis: QUEM_ESCREVE }],
   // Copiar não destrói nada: só cria o que falta no destino.
   ['POST /v1/planejamentos/copiar', { papeis: QUEM_ESCREVE }],
 
@@ -110,12 +113,20 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
  */
 export const ROTAS_SEM_TENANT: ReadonlySet<string> = new Set([
   'POST /v1/sessoes',
+  // Renovar é pública **pela sessão**: quem chega aqui é justamente quem já não
+  // tem access token válido. A credencial que ela exige é o refresh, e a
+  // própria rota o valida.
+  'POST /v1/sessoes/renovar',
   'GET /v1/eu',
   'DELETE /v1/sessoes/atual',
+  'POST /v1/sessoes/revogar-outras',
 ])
 
 /** Dispensa até a sessão. Uma entrada a mais aqui é uma porta a mais. */
-export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set(['POST /v1/sessoes'])
+export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
+  'POST /v1/sessoes',
+  'POST /v1/sessoes/renovar',
+])
 
 export function chaveDaRota(rota: Rota): string {
   return `${rota.metodo} ${rota.caminho}`

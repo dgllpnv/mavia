@@ -104,6 +104,27 @@ export function FormularioDeLancamento({
     }
   }, [natureza, categorias])
 
+  /**
+   * A conta escolhida acompanha a lista quando ela chega.
+   *
+   * O estado inicial é `contas[0]`, e por muito tempo isso bastou porque as
+   * listas já estavam em cache quando o formulário abria. Com a renovação de
+   * sessão o primeiro carregamento ganhou uma ida a mais, o formulário passou a
+   * abrir antes das contas, e o `POST` saía com `contaId` vazio — a API
+   * respondia "Invalid uuid" e o modal ficava aberto sem que a pessoa
+   * entendesse o quê.
+   *
+   * Corrigir aqui, e não adiar a abertura do formulário: quem clicou em
+   * "lançar" quer digitar o valor agora, e a conta pode chegar enquanto ele
+   * digita.
+   */
+  useEffect(() => {
+    const disponiveisParaOrigem = [...contas, ...cartoes]
+    if (!disponiveisParaOrigem.some((c) => c.id === origem)) {
+      setOrigem(disponiveisParaOrigem[0]?.id ?? '')
+    }
+  }, [contas, cartoes, origem])
+
   useEffect(() => {
     // Origem e destino iguais não é transferência: é um lançamento que cria e
     // destrói o mesmo dinheiro. O banco recusa, e o formulário não deve chegar

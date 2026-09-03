@@ -440,6 +440,21 @@ function FormularioDePlanejamento({
     },
   })
 
+  /**
+   * Excluir é soft delete no servidor. Existe porque editar o valor não é
+   * saída: quem criou um teto por engano ficava com uma linha que não queria e
+   * sem caminho para removê-la — e o índice único de identidade impedia até
+   * criar outro no lugar.
+   */
+  const excluir = useMutation({
+    mutationFn: () =>
+      chamar(`/planejamentos/${existente?.id}`, { metodo: 'DELETE', tenantId }),
+    onSuccess() {
+      void fila.invalidateQueries({ queryKey: ['planejamentos'] })
+      aoFechar()
+    },
+  })
+
   async function enviar(e: FormEvent) {
     e.preventDefault()
     setErro(null)
@@ -498,8 +513,17 @@ function FormularioDePlanejamento({
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-12 border-t border-line pt-16">
-          <button className="botao" type="button" onClick={aoFechar}>
+        <div className="flex items-center gap-12 border-t border-line pt-16">
+          {existente && (
+            <button
+              type="button"
+              className="botao botao--discreto text-despesa"
+              onClick={() => void excluir.mutateAsync()}
+            >
+              excluir
+            </button>
+          )}
+          <button className="botao ml-auto" type="button" onClick={aoFechar}>
             cancelar
           </button>
           <button className="botao botao--primario" type="submit" disabled={salvar.isPending}>

@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto'
 import type { FastifyRequest } from 'fastify'
 import type { Pool } from 'pg'
 import type { Autenticado } from '../autorizacao/autorizacao.guard.js'
-import { comUsuario, resolverTenant } from '../tenancy/tenancy.js'
-import { tokenDoCookie } from './cookie.js'
+import type { CofreDeAcesso } from '../redis/cofre-de-acesso.js'
+import { resolverTenant } from '../tenancy/tenancy.js'
 
 /**
  * Autenticação de requisição — a resolução em quatro etapas do
@@ -13,6 +12,16 @@ import { tokenDoCookie } from './cookie.js'
  * cego canônico de um SaaS multi-tenant: o lugar onde se decide de qual
  * cliente é a requisição. Escondê-lo num middleware anônimo é como se ele não
  * precisasse de revisão.
+ *
+ * ## O token que ele aceita
+ *
+ * **Só o access token**, sempre em `Authorization: Bearer`, resolvido no Redis.
+ * O refresh **não** autentica requisição: ele vale semanas, e uma credencial de
+ * semanas aceita em toda rota é a mesma coisa que não ter expiração. O refresh
+ * só é aceito nas rotas de sessão, que o consomem e o rotacionam.
+ *
+ * O cookie também deixou de autenticar por aqui pelo mesmo motivo: o que viaja
+ * nele é o refresh.
  */
 
 /**
@@ -58,52 +67,26 @@ export class TenantNaoPertence extends Error {
   }
 }
 
-/** O token viaja em claro; no banco vive só o hash. */
-function hashDoToken(token: string): Buffer {
-  return createHash('sha256').update(token, 'utf8').digest()
-}
-
-/**
- * O token, do cabeçalho ou do cookie.
- *
- * `Authorization` primeiro porque é o caminho do mobile, que não tem cookie
- * jar. No web o token viaja em cookie `HttpOnly` e nunca passa pelo JavaScript
- * da página — é a diferença entre um XSS que rouba a sessão e um que não.
- */
 function tokenDaRequisicao(req: FastifyRequest): string | null {
   const cabecalho = req.headers.authorization
-  if (typeof cabecalho === 'string') {
-    const [esquema, valor] = cabecalho.split(' ')
-    if (esquema?.toLowerCase() === 'bearer' && valor) return valor
-  }
-  return tokenDoCookie(req.headers.cookie)
+  if (typeof cabecalho !== 'string') return null
+
+  const [esquema, valor] = cabecalho.split(' ')
+  if (esquema?.toLowerCase() !== 'bearer' || !valor) return null
+  return valor
 }
 
-export function autenticadorDeSessao(pool: Pool): Autenticador {
+export function autenticadorDeSessao(pool: Pool, cofre: CofreDeAcesso): Autenticador {
   return async (req, opcoes) => {
-    // Etapa 1 — quem é o usuário, a partir do token.
+    // Etapa 1 — quem é o usuário, a partir do access token. Uma ida ao Redis,
+    // sem tocar no Postgres: o caminho quente de toda requisição.
     const token = tokenDaRequisicao(req)
     if (!token) return VAZIO
 
-    const sessao = await comUsuario(pool, { usuarioId: SEM_USUARIO }, async (cliente) => {
-      const r = await cliente.query<{
-        sessao_id: string
-        usuario_id: string
-        expira_em: Date
-        expira_absoluto_em: Date
-        revogada_em: Date | null
-      }>('SELECT * FROM auth.resolver_sessao($1)', [hashDoToken(token)])
-      return r.rows[0] ?? null
-    })
+    const dono = await cofre.resolver(token)
+    if (!dono) return VAZIO
 
-    if (!sessao || sessao.revogada_em !== null) return VAZIO
-
-    const agora = Date.now()
-    if (sessao.expira_em.getTime() <= agora) return VAZIO
-    // Teto absoluto: uma sessão renovada indefinidamente é uma sessão eterna.
-    if (sessao.expira_absoluto_em.getTime() <= agora) return VAZIO
-
-    const ativa: SessaoAtiva = { sessaoId: sessao.sessao_id, usuarioId: sessao.usuario_id }
+    const ativa: SessaoAtiva = { sessaoId: dono.sessaoId, usuarioId: dono.usuarioId }
     // Rota sem espaço para em quem é o usuário. Ir adiante exigiria o
     // cabeçalho de tenant em `GET /v1/eu`, que é a rota que existe para
     // descobrir quais tenants pedir.
@@ -120,14 +103,14 @@ export function autenticadorDeSessao(pool: Pool): Autenticador {
       throw new TenantNaoInformado()
     }
 
-    const pertencimento = await resolverTenant(pool, sessao.usuario_id, pedido)
+    const pertencimento = await resolverTenant(pool, dono.usuarioId, pedido)
     // Etapa 4 — se e somente se houver vínculo.
     if (!pertencimento) throw new TenantNaoPertence()
 
     return {
       sessao: ativa,
       autenticado: {
-        usuarioId: sessao.usuario_id,
+        usuarioId: dono.usuarioId,
         tenantId: pertencimento.tenantId,
         papel: pertencimento.papel,
       },
@@ -136,11 +119,3 @@ export function autenticadorDeSessao(pool: Pool): Autenticador {
 }
 
 const VAZIO: ResultadoDaAutenticacao = { sessao: null, autenticado: null }
-
-/**
- * A resolução de sessão precisa de uma transação, mas ainda não sabemos quem é
- * o usuário — é justamente o que estamos descobrindo. A função de resolução é
- * `SECURITY DEFINER` e não depende do contexto; este UUID nulo existe só para
- * satisfazer a assinatura da unidade de trabalho sem inventar um usuário.
- */
-const SEM_USUARIO = '00000000-0000-0000-0000-000000000000'
