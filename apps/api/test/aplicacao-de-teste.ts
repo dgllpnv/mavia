@@ -32,6 +32,8 @@ export interface ApiDeTeste {
     usuario?: string
     tenant?: string
     corpo?: unknown
+    /** Cabeçalhos extras — `Idempotency-Key`, por exemplo. */
+    cabecalhos?: Record<string, string>
   }): ReturnType<NestFastifyApplication['inject']>
   encerrar(): Promise<void>
 }
@@ -92,7 +94,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
     redis,
     refresh,
     pedir(opcoes) {
-      const cabecalhos: Record<string, string> = {}
+      const cabecalhos: Record<string, string> = { ...(opcoes.cabecalhos ?? {}) }
       if (opcoes.usuario) cabecalhos['authorization'] = `Bearer ${tokens.get(opcoes.usuario)}`
       if (opcoes.tenant) cabecalhos['x-mavia-tenant'] = opcoes.tenant
       return app.inject({

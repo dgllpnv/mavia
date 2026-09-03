@@ -1,0 +1,61 @@
+# Fluxo de fumaça do app — Maestro.
+#
+# Não é a suíte: é a pergunta "o app abre, entra e lança?". Se este fluxo
+# quebra, nenhum outro teste de app importa.
+#
+# O cenário que interessa de verdade — modo avião, lança, volta, sincroniza uma
+# vez só — está no fim, e é o único aqui que exercita a fila. Ele depende de o
+# Maestro conseguir mexer no modo avião do dispositivo, o que só vale em
+# emulador Android; no iOS o passo é pulado e o caso continua coberto pelo teste
+# de unidade da fila, que é onde a decisão de fato mora.
+appId: app.mavia.financas
+---
+- launchApp:
+    clearState: true
+
+# --- entrada ---------------------------------------------------------------
+- assertVisible: 'Entre na sua conta'
+- tapOn:
+    id: 'E-mail'
+- inputText: 'demo@mavia.local'
+- tapOn:
+    id: 'Senha'
+- inputText: 'mavia-demonstracao'
+- tapOn: 'Entrar'
+
+- assertVisible: 'SALDO GERAL'
+
+# --- lançar em três toques -------------------------------------------------
+- tapOn: 'despesa'
+- tapOn: '5'
+- tapOn: '0'
+- tapOn: '0'
+- tapOn: '0'
+- assertVisible: 'R$ 50,00'
+- tapOn: 'salvar'
+
+- assertVisible: 'SALDO GERAL'
+
+# --- offline: lança sem rede, volta, e sobe uma vez só ----------------------
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - setAirplaneMode: enabled
+      - tapOn: 'despesa'
+      - tapOn: '1'
+      - tapOn: '2'
+      - tapOn: '3'
+      - tapOn: '4'
+      - tapOn: 'salvar'
+      # Sem rede, o lançamento fica visível na fila — e não some.
+      - assertVisible:
+          text: '.*esperando conexão.*'
+      - setAirplaneMode: disabled
+      # Ao voltar à frente, o app empurra a fila sozinho.
+      - pressKey: Home
+      - launchApp
+      - extendedWaitUntil:
+          notVisible:
+            text: '.*esperando conexão.*'
+          timeout: 30000

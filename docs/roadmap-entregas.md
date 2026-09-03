@@ -109,7 +109,7 @@ comodidades do Organizze que ainda não foram copiadas; nenhuma bloqueia o uso.
 
 ---
 
-## Épico 5 — Mobile *(fim do MVP)*
+## Épico 5 — Mobile *(fim do MVP)* — **código pronto, não executado**
 
 **Entrega:** os apps Android e iOS. ~~É aqui que a etapa 1D entra~~ — **o deploy
 saiu daqui** e foi para depois de todos os épicos, por decisão do dono.
@@ -118,7 +118,22 @@ Expo · offline-first com fila durável e idempotência · lançamento em três 
 
 **O que prova:** Maestro no fluxo de fumaça, e o teste que importa — modo avião, lança, volta, sincroniza **uma vez só**.
 
-**Ao fim você consegue:** lançar uma despesa no caixa do mercado, sem rede.
+### O estado real
+
+| Parte | Situação |
+|---|---|
+| Fila durável, ordem, recuo e falha permanente | ✅ 17 testes, três deles propriedades |
+| Idempotência de mutação ponta a ponta | ✅ migration 0021 e 5 testes de integração |
+| Access/refresh no Keychain, biometria como conveniência | escrito, **não executado** |
+| Telas, SQLite, Maestro | escritos, **não executados** |
+| Push | não existe — depende de credenciais das lojas (P-11) |
+| Build e envio às lojas | não feito |
+
+**Nada da interface do app rodou.** O ambiente não tem emulador nem aparelho, e
+dizer "entregue" aqui seria afirmar o que o `CLAUDE.md` proíbe. Ver P-10.
+
+**Ao fim você consegue:** lançar uma despesa no caixa do mercado, sem rede —
+**depois** de a P-10 ser fechada num emulador.
 
 ---
 

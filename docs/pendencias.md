@@ -194,3 +194,45 @@ lembrar de olhar.
 **Condição de saída:** um canal — mailer (P-3) ou push (épico 5).
 
 ---
+
+## P-10 · O app móvel não foi executado em dispositivo
+
+**Onde:** `apps/mobile/`
+**Depende de:** um emulador ou aparelho
+
+O que **está** verificado: a fila durável, com 17 casos e três propriedades. É
+onde mora toda decisão que custa dinheiro — o que sobe, em que ordem, e o que
+acontece quando falha —, e ela é pura de propósito para poder ser provada sem
+dispositivo. O typecheck do app inteiro passa com `strict`.
+
+O que **não** está: telas, SQLite, Keychain, biometria e o fluxo Maestro. O
+ambiente em que o app foi escrito não tem emulador nem aparelho, e nenhuma
+linha de interface foi executada.
+
+Isto é diferente das outras pendências: não falta código, falta **execução**.
+Escrever "épico 5 entregue" sem essa distinção seria a afirmação que o
+`CLAUDE.md` proíbe — teste que não foi rodado não passou.
+
+**Condição de saída:** rodar `maestro test maestro/fumaca.yaml` num emulador
+Android, com o cenário de modo avião, e corrigir o que aparecer.
+
+---
+
+## P-11 · Push não entrega
+
+**Onde:** não existe rota de registro de dispositivo
+**Depende de:** credenciais de FCM (Android) e APNs (iOS)
+
+O alerta já é calculado e visível dentro do app e do web. O que não existe é
+**entrega fora da sessão** — a mesma lacuna do P-9, agora com o canal
+identificado: notificação push.
+
+Falta de dois lados: o registro do token do dispositivo, que é código, e as
+credenciais das lojas, que são do dono do produto. Fazer o primeiro sem o
+segundo produziria uma tabela de tokens que nunca é usada, e uma permissão
+pedida ao usuário sem contrapartida — que é o pedido de permissão que faz a
+pessoa negar todos os seguintes.
+
+**Condição de saída:** conta de desenvolvedor nas duas lojas, com as chaves.
+
+---

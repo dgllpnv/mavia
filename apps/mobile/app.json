@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Mavia",
+    "slug": "mavia",
+    "scheme": "mavia",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.mavia.financas",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Usamos o Face ID para destravar o acesso já salvo neste aparelho.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.mavia.financas",
+      "adaptiveIcon": { "backgroundColor": "#0F3B3A" }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-local-authentication", { "faceIDPermission": "Destravar a Mavia" }]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}
