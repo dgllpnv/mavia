@@ -161,6 +161,41 @@ divergência de saldo três meses depois.
 
 ---
 
+## ~~P-7 · `pnpm lint` não existe~~ ✅ **fechada**
+
+**Fechada em:** 2026-09-03, `eslint.config.js` na raiz, herdado pelos nove
+pacotes. `pnpm lint` roda limpo.
+
+**O lint não repete o compilador.** `pnpm typecheck` já roda com `strict` e
+`noUncheckedIndexedAccess`; o que este config acrescenta são as quatro regras
+que o compilador **não tem** — `no-floating-promises`, `no-misused-promises`,
+`no-explicit-any` e `react-hooks/exhaustive-deps`.
+
+Três regras foram **desligadas com a razão escrita ao lado**, e não por
+preguiça: `unbound-method` erra nas 39 ocorrências deste código (todas são o
+`setX` do `useState`), `require-await` erra nas 9 (todas são implementação de
+interface assíncrona), e o conjunto `stylistic` produz ruído. Uma regra que erra
+sempre ensina a ignorar a saída do lint, e um lint cuja saída ninguém lê não
+protege nada.
+
+A primeira execução deu 78 problemas. Três eram defeitos de verdade:
+
+- **A dependência faltando no formulário de lançamento.** Sem `ehTransferencia`
+  no efeito, trocar para transferência filtrava as categorias e deixava a
+  escolhida intacta — o lançamento saía com a natureza errada. O defeito de
+  React mais caro que existe: ele não quebra, mostra o número de ontem.
+- **A chave da assinatura no webhook da Stripe.** `subscription` volta como id
+  **ou** como objeto expandido; `String(objeto)` daria `[object Object]`, e
+  todas as assinaturas colidiriam na mesma chave, num caminho que decide o
+  estado de cobrança de clientes pagantes.
+- **A janela de `/lancamentos`.** `?de[x]=1` chega como objeto. O desfecho era o
+  mesmo 400 por acaso; agora é decisão.
+
+O resto era código morto — dez trechos, incluindo uma função inteira em
+`recorrencias` — e quatro `onSubmit` assíncronos cuja rejeição ninguém pegava.
+
+### O texto original
+
 ## P-7 · `pnpm lint` não existe
 
 **Onde:** raiz do monorepo
