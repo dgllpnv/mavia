@@ -50,6 +50,25 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // Copiar não destrói nada: só cria o que falta no destino.
   ['POST /v1/planejamentos/copiar', { papeis: QUEM_ESCREVE }],
 
+  ['GET /v1/objetivos', { papeis: TODOS }],
+  ['POST /v1/objetivos', { papeis: QUEM_ESCREVE }],
+  ['PATCH /v1/objetivos/:id', { papeis: QUEM_ESCREVE }],
+  // Excluir um objetivo é de quem escreve, e não só do dono: ao contrário da
+  // Conta, ele não guarda dinheiro — os lançamentos ficam intactos, e o que se
+  // perde é o acompanhamento.
+  ['DELETE /v1/objetivos/:id', { papeis: QUEM_ESCREVE }],
+  // Vincular aporte não altera o lançamento, só o vínculo.
+  ['POST /v1/objetivos/:id/aportes', { papeis: QUEM_ESCREVE }],
+  ['DELETE /v1/objetivos/:id/aportes/:lancamentoId', { papeis: QUEM_ESCREVE }],
+
+  ['GET /v1/recorrencias', { papeis: TODOS }],
+  ['POST /v1/recorrencias', { papeis: QUEM_ESCREVE }],
+  ['PATCH /v1/recorrencias/:id', { papeis: QUEM_ESCREVE }],
+  ['DELETE /v1/recorrencias/:id', { papeis: QUEM_ESCREVE }],
+  // Materializar não decide nada: só realiza o que a regra já dizia, e é
+  // idempotente pela identidade da ocorrência.
+  ['POST /v1/recorrencias/materializar', { papeis: QUEM_ESCREVE }],
+
   ['GET /v1/categorias', { papeis: TODOS }],
   ['POST /v1/categorias', { papeis: QUEM_ESCREVE }],
   ['PATCH /v1/categorias/:id', { papeis: QUEM_ESCREVE }],

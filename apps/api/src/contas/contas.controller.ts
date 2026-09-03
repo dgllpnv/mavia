@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -68,7 +69,23 @@ export class ContasController {
   @HttpCode(204)
   async arquivar(@Req() req: FastifyRequest, @Param('id') id: string): Promise<void> {
     const ctx = this.contexto(req)
-    const ok = await comTenant(this.pool, ctx, (c) => repositorio.arquivar(c, ctx.tenantId, id))
+    let ok: boolean
+    try {
+      ok = await comTenant(this.pool, ctx, (c) => repositorio.arquivar(c, ctx.tenantId, id))
+    } catch (erro) {
+      // Um Objetivo ancorado bloqueia a exclusão da Conta (ADR 0009,
+      // invariante 10). A mensagem **nomeia** o objetivo: "não é possível
+      // excluir" sem dizer o quê deixa a pessoa procurando o que a segura.
+      const t = String((erro as { message?: string }).message ?? '')
+      const objetivo = /CONTA_TEM_OBJETIVO: (.+)$/m.exec(t)?.[1]
+      if (objetivo) {
+        throw new ConflictException(
+          `Esta conta está ancorada no objetivo "${objetivo.trim()}". ` +
+            'Exclua o objetivo antes — o progresso dele é o saldo desta conta.',
+        )
+      }
+      throw erro
+    }
     if (!ok) throw new NotFoundException('Conta não encontrada.')
   }
 }

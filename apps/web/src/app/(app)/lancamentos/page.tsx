@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import type { Lancamento } from '@mavia/contracts'
 import { competenciaDe, dataCivilDe, formatarDataCivil } from '@mavia/domain'
 import { useQuery } from '@tanstack/react-query'
@@ -111,6 +113,12 @@ export default function Lancamentos() {
             <button className="botao" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
               ›
             </button>
+            {/* A regra fica ao lado do extrato porque as ocorrências dela
+                **são** lançamentos. Um item de navegação próprio poria a regra
+                no mesmo nível do dinheiro. */}
+            <Link href="/lancamentos/recorrencias" className="botao botao--discreto">
+              recorrências
+            </Link>
             <button className="botao botao--primario" onClick={() => setLancando(true)}>
               lançar
             </button>

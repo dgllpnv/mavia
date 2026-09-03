@@ -149,3 +149,42 @@ hook incompleta no React — esta última é a que mais dói no `apps/web`.
 config na raiz herdado pelos pacotes, ligado no CI junto do typecheck.
 
 ---
+
+## P-8 · O horizonte da recorrência não anda sozinho
+
+**Onde:** `apps/api/src/recorrencias/recorrencias.controller.ts`
+**Depende de:** agendador (BullMQ sobre Redis, épico 5)
+
+O `CONTEXT.md` diz que "um job materializa as ocorrências dentro de um
+horizonte". O job precisa de agendador, o agendador precisa de Redis, e o Redis
+é do épico 5.
+
+Enquanto isso a materialização acontece **na escrita**: criar ou alterar uma
+regra materializa doze meses à frente. A consequência é que o horizonte não
+avança sozinho — uma regra criada hoje tem ocorrências até o mesmo mês do ano
+que vem e para ali, até que alguém a edite.
+
+O que **já está pronto** e só espera o agendador: `POST /v1/recorrencias/materializar`,
+idempotente pela identidade `(tenant, recorrencia, competência)`. O job é uma
+chamada periódica a ela, e nada mais.
+
+**Condição de saída:** a mesma do P-1.
+
+---
+
+## P-9 · O alerta não tem para onde ir
+
+**Onde:** `packages/domain/src/planejamento.ts`, `atingiu`
+**Depende de:** e-mail (P-3) ou push (épico 5)
+
+O cálculo do alerta existe e é testado — `consumoBp` e `atingiu`, com os
+percentuais configuráveis por planejamento. A tela mostra o estado e o
+percentual, e a central de alertas os reúne num lugar só.
+
+O que não existe é **entrega fora da sessão**: nada avisa quem não abriu o app.
+Um teto estourado no dia 20 é notícia no dia 20, não no dia em que a pessoa
+lembrar de olhar.
+
+**Condição de saída:** um canal — mailer (P-3) ou push (épico 5).
+
+---

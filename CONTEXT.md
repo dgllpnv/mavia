@@ -235,6 +235,8 @@ A função `baldeDe(lancamento)` vive em `packages/domain` e é **total**: ela n
 
 > **Invariantes**
 > - `dia_do_mes` em mês que não o tem é **fixado no último dia do mês**: `min(dia_do_mes, ultimo_dia_do_mes)`, sempre calculado a partir do `dia_do_mes` da regra, nunca do mês anterior. Dia 31 produz 28/fev (29 em bissexto) e volta a 31 em março.
+> - `intervalo_meses` (1 a 12) é a distância entre ocorrências: 1 é mensal, 12 é anual. **Reaproveita a ancoragem por dia do mês** em vez de introduzir uma segunda regra de data — e é por isso que não há cadência semanal, que exigiria outra ancoragem e outra decisão de produto. A fase vem do `inicio` da regra, nunca do horizonte consultado.
+> - `pausada_em` interrompe a produção **sem excluir**. Uma regra pausada não anuncia próxima ocorrência, e o que ela já materializou permanece. Suspender o aluguel por dois meses não pode custar o histórico da regra.
 > - A recorrência **nunca pula** um mês por falta do dia, e **nunca transborda** para o mês seguinte. Pular faz o mês perder o lançamento e o teto ficar verde indevidamente; transbordar dá duas ocorrências ao mês seguinte e estoura o teto dele.
 > - A identidade de uma ocorrência é `(tenant_id, recorrencia_id, competencia_da_ocorrencia)` — a **competência**, não a data exata. Alterar `dia_do_mes` na regra reposiciona ocorrências futuras sem duplicá-las; com a data na chave, a alteração faria o job materializar tudo de novo.
 > - Alterar a regra não altera ocorrências já materializadas com `posted_at` no passado.

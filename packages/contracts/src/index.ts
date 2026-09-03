@@ -431,3 +431,152 @@ export type AlterarPlanejamento = z.infer<typeof zAlterarPlanejamento>
 export type CopiarPlanejamentos = z.infer<typeof zCopiarPlanejamentos>
 export type Planejamento = z.infer<typeof zPlanejamento>
 export type PlanejamentosDoMes = z.infer<typeof zPlanejamentosDoMes>
+
+// ---------------------------------------------------------------------------
+// Objetivo — acúmulo plurimensal com prazo
+// ---------------------------------------------------------------------------
+/**
+ * Não tem `competencia`, e é isso que o separa de `Planejamento`. Ver ADR 0009.
+ *
+ * Também não tem campo de **modo**: `contaId` preenchido é ancorado, ausente é
+ * por aportes. Um enum ao lado do dado pode contradizê-lo.
+ */
+export const zCriarObjetivo = z.object({
+  nome: z.string().trim().min(1, 'o objetivo precisa de nome').max(80),
+  /**
+   * **Sempre positivo.** Objetivo é estoque-alvo, não movimento: a convenção de
+   * sinal do ADR 0005 governa fluxos, e um alvo de acúmulo não tem direção a
+   * codificar.
+   */
+  valorAlvoCentavos: zCentavos,
+  /** `AAAA-MM-DD`, opcional. Sem prazo, o objetivo nunca vence. */
+  prazo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'o prazo é `AAAA-MM-DD`')
+    .nullish(),
+  /** Preenchida = ancorado numa conta. Ausente = por aportes. */
+  contaId: zUuid.nullish(),
+  /**
+   * Só no modo ancorado. Ausente captura o saldo atual da conta; zero conta o
+   * que já estava lá como progresso. É marco histórico, e por isso é
+   * **armazenado** — nunca recalculado a partir de uma data.
+   */
+  saldoBaseCentavos: zCentavos.nullish(),
+})
+
+export const zAlterarObjetivo = z
+  .object({
+    nome: z.string().trim().min(1).max(80).optional(),
+    valorAlvoCentavos: zCentavos.optional(),
+    /** `null` remove o prazo. */
+    prazo: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullish(),
+  })
+  .refine(
+    (o) => o.nome !== undefined || o.valorAlvoCentavos !== undefined || o.prazo !== undefined,
+    { message: 'informe o que mudar' },
+  )
+
+export const zObjetivo = z.object({
+  id: zUuid,
+  nome: z.string(),
+  valorAlvoCentavos: zCentavos,
+  prazo: z.string().nullable(),
+  contaId: zUuid.nullable(),
+  saldoBaseCentavos: zCentavos.nullable(),
+  /**
+   * Apurado pelo servidor. **Não é limitado ao alvo** e pode ser negativo: 125%
+   * é uma resposta legítima, e um resgate maior que os aportes também. Travar a
+   * barra em 100% é decisão de tela.
+   */
+  progressoCentavos: zCentavos,
+  /** Pontos-base do alvo. `progresso / alvo`, truncado, com sinal. */
+  consumoBp: z.number().int(),
+  /**
+   * `concluido` tem precedência sobre `vencido`: atingir o alvo é fato
+   * histórico, e um objetivo alcançado em julho com prazo em agosto continua
+   * concluído.
+   */
+  estado: z.enum(['ativo', 'concluido', 'vencido']),
+  concluidoEm: z.string().nullable(),
+  /** Quantos lançamentos estão vinculados. Zero no modo ancorado. */
+  aportes: z.number().int(),
+})
+
+export const zVincularAporte = z.object({ lancamentoId: zUuid })
+
+export type CriarObjetivo = z.infer<typeof zCriarObjetivo>
+export type AlterarObjetivo = z.infer<typeof zAlterarObjetivo>
+export type Objetivo = z.infer<typeof zObjetivo>
+export type VincularAporte = z.infer<typeof zVincularAporte>
+
+// ---------------------------------------------------------------------------
+// Recorrencia — a regra que gera lançamentos repetidos
+// ---------------------------------------------------------------------------
+/**
+ * A regra, nunca as ocorrências. O que a API devolve inclui a **próxima**
+ * ocorrência, que é o que a tela precisa dizer, e a contagem do que já foi
+ * materializado — mas as ocorrências em si são `Lancamento`, e vivem no extrato
+ * como qualquer outro.
+ */
+export const zCriarRecorrencia = z
+  .object({
+    contaId: zUuid.nullish(),
+    cartaoId: zUuid.nullish(),
+    categoriaId: zUuid,
+    /** Com sinal, como o lançamento que ela gera. */
+    valorCentavos: zCentavos,
+    descricao: z.string().trim().min(1).max(140),
+    /** 1 a 31. Dia 31 em fevereiro é ancorado no último dia, nunca transborda. */
+    diaDoMes: z.number().int().min(1).max(31),
+    /** 1 é mensal, 12 é anual. */
+    intervaloMeses: z.number().int().min(1).max(12).default(1),
+    inicio: z.string().regex(/^\d{4}-\d{2}$/, 'o início é `AAAA-MM`'),
+    /** `AAAA-MM`, **inclusive**. Ausente é perpétua. */
+    fim: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .nullish(),
+  })
+  .refine((r) => (r.contaId == null) !== (r.cartaoId == null), {
+    message: 'informe uma conta ou um cartão, nunca os dois',
+  })
+
+export const zAlterarRecorrencia = z
+  .object({
+    valorCentavos: zCentavos.optional(),
+    descricao: z.string().trim().min(1).max(140).optional(),
+    diaDoMes: z.number().int().min(1).max(31).optional(),
+    intervaloMeses: z.number().int().min(1).max(12).optional(),
+    fim: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .nullish(),
+    /** Pausar não é excluir: para de produzir, e o que já existe fica. */
+    pausada: z.boolean().optional(),
+  })
+  .refine((r) => Object.keys(r).length > 0, { message: 'informe o que mudar' })
+
+export const zRecorrencia = z.object({
+  id: zUuid,
+  contaId: zUuid.nullable(),
+  cartaoId: zUuid.nullable(),
+  categoriaId: zUuid,
+  valorCentavos: zCentavos,
+  descricao: z.string(),
+  diaDoMes: z.number().int(),
+  intervaloMeses: z.number().int(),
+  inicio: z.string(),
+  fim: z.string().nullable(),
+  pausada: z.boolean(),
+  /** `AAAA-MM-DD` da próxima ocorrência a partir de hoje, ou nulo se encerrou. */
+  proximaOcorrencia: z.string().nullable(),
+  /** Quantas ocorrências já viraram lançamento. */
+  materializadas: z.number().int(),
+})
+
+export type CriarRecorrencia = z.infer<typeof zCriarRecorrencia>
+export type AlterarRecorrencia = z.infer<typeof zAlterarRecorrencia>
+export type Recorrencia = z.infer<typeof zRecorrencia>

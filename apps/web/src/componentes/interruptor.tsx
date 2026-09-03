@@ -24,9 +24,24 @@ export interface InterruptorProps {
   readonly rotulo: string
   aoMudar(ligado: boolean): void
   readonly desabilitado?: boolean
+  /**
+   * Nome acessível quando o rótulo visível não basta sozinho.
+   *
+   * Numa lista, "ativa" repetido em cada linha é claro para quem enxerga a
+   * linha inteira e ambíguo para quem navega pelos controles — o leitor de tela
+   * anuncia dez interruptores idênticos. O texto visível fica curto; o nome
+   * acessível diz de quem é.
+   */
+  readonly rotuloAcessivel?: string
 }
 
-export function Interruptor({ ligado, rotulo, aoMudar, desabilitado = false }: InterruptorProps) {
+export function Interruptor({
+  ligado,
+  rotulo,
+  aoMudar,
+  desabilitado = false,
+  rotuloAcessivel,
+}: InterruptorProps) {
   return (
     <label
       className={`flex items-center gap-12 ${desabilitado ? 'opacity-60' : 'cursor-pointer'}`}
@@ -35,7 +50,7 @@ export function Interruptor({ ligado, rotulo, aoMudar, desabilitado = false }: I
         type="button"
         role="switch"
         aria-checked={ligado}
-        aria-label={rotulo}
+        aria-label={rotuloAcessivel ?? rotulo}
         disabled={desabilitado}
         onClick={() => aoMudar(!ligado)}
         className="interruptor"

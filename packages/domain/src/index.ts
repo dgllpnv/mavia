@@ -108,3 +108,21 @@ export {
   type PlanejamentoParaTotal,
   type TotalPlanejado,
 } from './planejamento.js'
+
+export {
+  atingiuOAlvo,
+  consumoDoObjetivoEmBp,
+  estadoDoObjetivo,
+  prazoValido,
+  progressoAncorado,
+  progressoPorAportes,
+  type EstadoDoObjetivo,
+  type FatosDoObjetivo,
+} from './objetivo.js'
+
+export {
+  ocorrencias,
+  proximaOcorrencia,
+  type Ocorrencia,
+  type RegraDeRecorrencia,
+} from './recorrencia.js'

@@ -23,6 +23,7 @@ const DESTINOS = [
   { href: '/lancamentos', rotulo: 'lançamentos' },
   { href: '/cartoes', rotulo: 'cartões' },
   { href: '/planejamento', rotulo: 'planejamento' },
+  { href: '/objetivos', rotulo: 'objetivos' },
   { href: '/contas', rotulo: 'contas' },
   { href: '/categorias', rotulo: 'categorias' },
 ] as const

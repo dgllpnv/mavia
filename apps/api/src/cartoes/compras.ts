@@ -39,11 +39,25 @@ export interface CartaoDaCompra extends CicloDeFaturamento {
 /** Quantos meses à frente procurar uma fatura que ainda receba lançamento. */
 const HORIZONTE_DE_BUSCA = 24
 
+/**
+ * A marca de uma ocorrência de `Recorrencia`.
+ *
+ * Existe para que a assinatura no cartão entre pela **mesma** porta da compra à
+ * vista. Um segundo caminho de inserção teria de reimplementar a escolha da
+ * fatura — e é justamente a escolha da fatura que erra em silêncio.
+ */
+export interface MarcaDeRecorrencia {
+  readonly recorrenciaId: string
+  /** `AAAA-MM-01`. A identidade da ocorrência é a competência, não a data. */
+  readonly competencia: string
+}
+
 export async function registrarCompra(
   c: PoolClient,
   ctx: { tenantId: string; usuarioId: string },
   cartao: CartaoDaCompra,
   dados: CriarCompraNoCartao,
+  marca?: MarcaDeRecorrencia,
 ): Promise<CompraNoCartao> {
   const postedAt = new Date(dados.postedAt)
   const valor = dinheiro(BigInt(dados.valorCentavos), cartao.moeda)
@@ -78,8 +92,8 @@ export async function registrarCompra(
       `INSERT INTO lancamentos (tenant_id, cartao_id, categoria_id, valor_centavos, moeda,
                                 posted_at, descricao, observacao, fatura_id,
                                 installment_group_id, installment_number, installment_total,
-                                origem, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                                origem, criado_por, recorrencia_id, recorrencia_competencia)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::date)
        RETURNING id`,
       [
         ctx.tenantId,
@@ -99,8 +113,10 @@ export async function registrarCompra(
         // A origem é o terceiro eixo de filtro do extrato. Compra à vista é
         // `manual`: "1/1" não é parcelamento, e marcá-la como tal a poria no
         // filtro de parceladas, onde a pessoa procura compromisso futuro.
-        parcelamentoId ? 'parcelamento' : 'manual',
+        marca ? 'recorrencia' : parcelamentoId ? 'parcelamento' : 'manual',
         ctx.usuarioId,
+        marca?.recorrenciaId ?? null,
+        marca?.competencia ?? null,
       ],
     )
     const l = r.rows[0]

@@ -454,3 +454,73 @@ test.describe('planejamento', () => {
     await expect(page.getByText('Todas as categorias')).toHaveCount(1)
   })
 })
+
+/**
+ * Recorrência.
+ *
+ * O horizonte é encerrado no **mês corrente** de propósito: sem `fim`, uma
+ * recorrência materializa treze meses, e treze lançamentos por execução
+ * poluiriam o extrato que os outros cenários leem. Com o fim no mês corrente a
+ * regra gera uma ocorrência só, e a asserção que importa — a ancoragem do dia
+ * 31 — continua sendo exercida.
+ */
+test.describe('recorrência', () => {
+  test('dia 31 é ancorado no último dia do mês, e a regra some sem apagar o passado', async ({
+    page,
+  }) => {
+    await entrar(page)
+    await page.goto('/lancamentos/recorrencias')
+
+    const descricao = `Assinatura ${MARCA}`
+    await page.getByRole('button', { name: '+ recorrência' }).first().click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    await page.getByLabel('Descrição').fill(descricao)
+    for (const tecla of ['5', '0', '0', '0', '0']) {
+      await page.getByLabel('Valor').press(tecla)
+    }
+    await expect(page.getByLabel('Valor')).toHaveValue('R$ 500,00')
+
+    await page.getByLabel('Onde').selectOption({ index: 1 })
+    await page.getByLabel('Dia do mês').fill('31')
+
+    // O aviso da ancoragem aparece só quando o dia pode não existir.
+    await expect(page.getByText(/vira 28 de fevereiro/)).toBeVisible()
+
+    const hoje = new Date()
+    const mesCorrente = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+    await page.getByLabel('Até (opcional)').fill(mesCorrente)
+
+    await page.getByRole('button', { name: 'salvar', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // Uma ocorrência só, e o dia ancorado no último dia deste mês.
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate()
+    const linha = page.locator('.linha').filter({ hasText: descricao })
+    await expect(linha).toContainText('1 lançamento(s) gerado(s)')
+    await expect(linha).toContainText(`todo mês, dia 31`)
+
+    // A ocorrência está no extrato, e nasceu pendente.
+    await page.goto('/lancamentos')
+    await expect(page.getByText(descricao, { exact: true })).toBeVisible()
+    expect(ultimoDia).toBeGreaterThanOrEqual(28)
+
+    // Excluir a regra não apaga a ocorrência deste mês, que já é fato.
+    await page.goto('/lancamentos/recorrencias')
+    await page
+      .locator('.linha')
+      .filter({ hasText: descricao })
+      .getByRole('button', { name: 'editar' })
+      .click()
+    await page.getByRole('button', { name: 'excluir', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByText(descricao)).toHaveCount(0)
+
+    // A ocorrência **futura e pendente** vai junto: ela é previsão, e a regra
+    // que a previa não existe mais. O que a exclusão nunca toca é ocorrência já
+    // compensada ou com data no passado — isso é fato, e está travado no teste
+    // de integração, onde dá para escolher a data.
+    await page.goto('/lancamentos')
+    await expect(page.getByText(descricao, { exact: true })).toHaveCount(0)
+  })
+})
