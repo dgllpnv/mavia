@@ -1,4 +1,11 @@
-import type { Categoria, Conta, Fatura, Lancamento, Resumo } from '@mavia/contracts'
+import type {
+  Categoria,
+  Conta,
+  Fatura,
+  Lancamento,
+  PlanejamentosDoMes,
+  Resumo,
+} from '@mavia/contracts'
 
 /**
  * O cliente da API — o único lugar do web que sabe falar HTTP.
@@ -128,6 +135,17 @@ export const api = {
    * consulta por linha do extrato daria 16 requisições para 15 lançamentos.
    */
   categorias: (tenantId: string) => chamar<{ itens: Categoria[] }>('/categorias', { tenantId }),
+
+  /**
+   * Os planejamentos de um mês, com o **realizado já apurado**.
+   *
+   * A apuração é do servidor: a regra de escopo (raiz agrega filhas, global
+   * agrega tudo) e a de natureza (por `Categoria.natureza`, nunca pelo sinal do
+   * lançamento) são sutis o bastante para que web e mobile divergissem ao
+   * reimplementá-las.
+   */
+  planejamentos: (tenantId: string, competencia: string) =>
+    chamar<PlanejamentosDoMes>(`/planejamentos?competencia=${competencia}`, { tenantId }),
 
   cartoes: (tenantId: string) =>
     chamar<{ itens: { id: string; nome: string; limiteCentavos: string; closingDay: number; dueDay: number }[] }>(

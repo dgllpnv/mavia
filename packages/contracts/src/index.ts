@@ -353,3 +353,81 @@ export type Cartao = z.infer<typeof zCartao>
 export type EstadoDeFatura = z.infer<typeof zEstadoDeFatura>
 export type Fatura = z.infer<typeof zFatura>
 export type PagarFatura = z.infer<typeof zPagarFatura>
+
+// ---------------------------------------------------------------------------
+// Planejamento — teto de despesa e piso de receita
+// ---------------------------------------------------------------------------
+/**
+ * O sinal do valor **é** a natureza: negativo é teto, positivo é piso. Não há
+ * campo `natureza` na entrada, e a ausência é o ponto — com ele, o cliente
+ * poderia mandar um "piso" com valor negativo, e a contradição precisaria ser
+ * resolvida por alguém.
+ */
+export const zCriarPlanejamento = z.object({
+  /** `AAAA-MM`. Planejamento é mensal, e a competência é o mês. */
+  competencia: z.string().regex(/^\d{4}-\d{2}$/, 'a competência é `AAAA-MM`'),
+  /** Ausente cria o planejamento **global** daquela natureza. */
+  categoriaId: zUuid.optional(),
+  valorCentavos: zCentavos,
+  /** Padrão `[80, 100]`. Percentuais em que o domínio emite evento. */
+  alertasPercentuais: z.array(z.number().int().min(1).max(1000)).min(1).optional(),
+})
+
+export const zAlterarPlanejamento = z
+  .object({
+    valorCentavos: zCentavos.optional(),
+    alertasPercentuais: z.array(z.number().int().min(1).max(1000)).min(1).optional(),
+  })
+  .refine((p) => p.valorCentavos !== undefined || p.alertasPercentuais !== undefined, {
+    message: 'informe o que mudar',
+  })
+
+export const zCopiarPlanejamentos = z.object({
+  de: z.string().regex(/^\d{4}-\d{2}$/),
+  para: z.string().regex(/^\d{4}-\d{2}$/),
+})
+
+export const zPlanejamento = z.object({
+  id: zUuid,
+  competencia: z.string().regex(/^\d{4}-\d{2}$/),
+  /** Nulo é o planejamento global. */
+  categoriaId: zUuid.nullable(),
+  valorCentavos: zCentavos,
+  /**
+   * Apurado pelo servidor, e não pelo cliente: a regra de escopo e de natureza
+   * é sutil o bastante para que web e mobile divergissem ao reimplementá-la.
+   */
+  realizadoCentavos: zCentavos,
+  natureza: z.enum(['teto', 'piso']),
+  /**
+   * Consumo em pontos-base, inteiro com sinal, truncado. A tela mostra
+   * `consumoBp / 100`; derivar o alerta do texto formatado faria os dois
+   * divergirem no arredondamento.
+   */
+  consumoBp: z.number().int(),
+  /**
+   * `no_planejado` é o empate — gastar exatamente o teto. Sem o terceiro
+   * rótulo, a tela mostra verde e o alerta dispara para o mesmo objeto.
+   *
+   * `fora_do_planejado`, e não "estourado": num piso não se estoura nada,
+   * fica-se aquém. A palavra é da tela; o estado, não.
+   */
+  estado: z.enum(['dentro_do_planejado', 'no_planejado', 'fora_do_planejado']),
+  alertasPercentuais: z.array(z.number().int()),
+})
+
+export const zPlanejamentosDoMes = z.object({
+  itens: z.array(zPlanejamento),
+  /**
+   * Um total por natureza, e eles **nunca se somam** — um "planejado líquido"
+   * não significa nada. Cada um soma, em cada caminho, apenas o planejamento de
+   * nível mais alto que existir.
+   */
+  totalPlanejado: z.object({ teto: zCentavos, piso: zCentavos }),
+})
+
+export type CriarPlanejamento = z.infer<typeof zCriarPlanejamento>
+export type AlterarPlanejamento = z.infer<typeof zAlterarPlanejamento>
+export type CopiarPlanejamentos = z.infer<typeof zCopiarPlanejamentos>
+export type Planejamento = z.infer<typeof zPlanejamento>
+export type PlanejamentosDoMes = z.infer<typeof zPlanejamentosDoMes>

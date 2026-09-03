@@ -5,6 +5,7 @@ import { LancamentosController } from './lancamentos/lancamentos.controller.js'
 import { CartoesController } from './cartoes/cartoes.controller.js'
 import { SessoesController } from './autenticacao/sessoes.controller.js'
 import { CategoriasController } from './categorias/categorias.controller.js'
+import { PlanejamentosController } from './planejamentos/planejamentos.controller.js'
 
 @Module({})
 export class AppModule {
@@ -15,6 +16,7 @@ export class AppModule {
         SessoesController,
         ContasController,
         CategoriasController,
+        PlanejamentosController,
         LancamentosController,
         CartoesController,
       ],

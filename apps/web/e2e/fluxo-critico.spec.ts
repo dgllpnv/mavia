@@ -196,7 +196,7 @@ test.describe('lançar uma despesa', () => {
     await page.getByRole('button', { name: 'salvar', exact: true }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
 
-    await expect(page.getByText(descricao)).toBeVisible()
+    await expect(page.getByText(descricao, { exact: true })).toBeVisible()
 
     // A asserção que vale: a diferença é exatamente o valor digitado. Conferir
     // o total absoluto amarraria o teste ao que os anteriores deixaram.
@@ -333,23 +333,34 @@ test.describe('estornar', () => {
     // Decisão DP-4: o dado é do espaço, e a correção precisa ser rastreável.
     // Quem olha o mês seguinte tem de ver que houve devolução, e não um mês que
     // mudou sozinho.
+    //
+    // **O lançamento é criado aqui, e não tomado da semente.** Estornar consome
+    // um recurso finito — o que resta do original —, e um teste que come a
+    // semente passa uma vez e falha na quinta execução. Foi o que aconteceu.
     await entrar(page)
     await page.goto('/lancamentos')
 
-    // O detalhe do rodapé é colapsado, como no Organizze: as duas linhas que
-    // interessam sempre ficam à vista, e o modelo realizado × previsto completo
-    // abre sob demanda.
+    const descricao = `Compra a devolver ${MARCA}`
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
+    await page.getByLabel('Descrição').fill(descricao)
+    for (const tecla of ['1', '0', '0', '0', '0', '0']) {
+      await page.getByLabel('Valor').press(tecla)
+    }
+    await expect(page.getByLabel('Valor')).toHaveValue('R$ 1.000,00')
+    await page.getByRole('button', { name: 'salvar', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByText(descricao, { exact: true })).toBeVisible()
+
     const rodape = rodapeDoMes(page)
     await rodape.getByRole('button', { name: 'ver detalhe' }).click()
     const despesaAntes = await despesaRealizada(rodape)
 
-    await page.getByText('Aluguel', { exact: true }).click()
+    await page.getByText(descricao, { exact: true }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'estornar', exact: true }).click()
 
-    // R$ 250,00 de um aluguel de R$ 1.800,00: estorno parcial é permitido.
+    // R$ 250,00 de R$ 1.000,00: estorno parcial é permitido.
     const valor = page.getByLabel('Valor')
-    await valor.press('Backspace', { timeout: 5000 })
     for (let i = 0; i < 8; i++) await valor.press('Backspace')
     for (const tecla of ['2', '5', '0', '0', '0']) await valor.press(tecla)
     await expect(valor).toHaveValue('R$ 250,00')
@@ -358,7 +369,7 @@ test.describe('estornar', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
 
     // O original continua lá, com o valor de sempre.
-    await expect(page.getByText('Aluguel', { exact: true })).toBeVisible()
+    await expect(page.getByText(descricao, { exact: true })).toBeVisible()
 
     await expect(async () => {
       const rodapeAtual = rodapeDoMes(page)
@@ -377,7 +388,69 @@ test.describe('estornar', () => {
     await page.getByText('Para a reserva').click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
-    await expect(page.getByRole('button', { name: 'estornar' })).toHaveCount(0)
+    // `exact`: sem isso o casamento é por substring, e qualquer linha cuja
+    // descrição contenha a palavra conta como botão.
+    await expect(page.getByRole('button', { name: 'estornar', exact: true })).toHaveCount(0)
     await expect(page.getByText(/duas pernas/)).toBeVisible()
+  })
+})
+
+/**
+ * Planejamento.
+ *
+ * **Cada execução trabalha num mês só seu.** O banco de desenvolvimento não é
+ * recriado entre rodadas, e um teste de planejamento escreve numa competência —
+ * se ela fosse fixa, a segunda rodada encontraria o mês já ocupado e o estado
+ * vazio nunca mais apareceria. É a mesma armadilha do estorno, que consumia o
+ * aluguel da semente até não sobrar valor estornável.
+ *
+ * O mês é sorteado à frente, e a asserção do estado vazio vem primeiro: se duas
+ * execuções sortearem o mesmo mês, o teste falha alto em vez de passar por
+ * acidente.
+ */
+const MESES_A_FRENTE = 24 + Math.floor(Math.random() * 100)
+
+test.describe('planejamento', () => {
+  test('mês vazio → teto global → consumo, e a cópia não duplica', async ({ page }) => {
+    await entrar(page)
+    await page.goto('/planejamento')
+
+    const seguinte = page.getByRole('button', { name: 'Mês seguinte' })
+    for (let i = 0; i < MESES_A_FRENTE; i++) await seguinte.click()
+
+    await expect(page.getByText(/Nenhum planejamento em/)).toBeVisible()
+
+    await page.getByRole('button', { name: 'definir teto de gastos' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    // O escopo padrão é global — o teto de "todas as categorias".
+    for (const tecla of ['1', '0', '0', '0', '0', '0']) {
+      await page.getByLabel('Valor').press(tecla)
+    }
+    await expect(page.getByLabel('Valor')).toHaveValue('R$ 1.000,00')
+    await page.getByRole('button', { name: 'salvar', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // Mês futuro não tem lançamento: consumo zero, e o rótulo é o do teto, não
+    // o do piso — a palavra depende da natureza.
+    await expect(page.getByText('Todas as categorias')).toBeVisible()
+    await expect(page.getByText('dentro do teto')).toBeVisible()
+    await expect(page.getByText('0%')).toBeVisible()
+
+    // --- a cópia, no mês seguinte -----------------------------------------
+    // O global é justamente o que a versão ingênua da cópia não encontra no
+    // destino: `NULL = NULL` é `NULL`, o INSERT é tentado, o índice parcial o
+    // rejeita e a transação aborta.
+    await seguinte.click()
+    await expect(page.getByText(/Nenhum planejamento em/)).toBeVisible()
+
+    const copiar = page.getByRole('button', { name: 'copiar do mês anterior' }).first()
+    await copiar.click()
+    await expect(page.getByText(/planejamento\(s\) copiado\(s\)/)).toBeVisible()
+    await expect(page.getByText('Todas as categorias')).toBeVisible()
+
+    await page.getByRole('button', { name: 'copiar do mês anterior' }).first().click()
+    await expect(page.getByText(/Nada a copiar/)).toBeVisible()
+    await expect(page.getByText('Todas as categorias')).toHaveCount(1)
   })
 })

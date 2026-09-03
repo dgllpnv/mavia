@@ -44,6 +44,12 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   // espaço, e `membro` não decide isso pelos outros.
   ['DELETE /v1/contas/:id', { papeis: SO_DONO }],
 
+  ['GET /v1/planejamentos', { papeis: TODOS }],
+  ['POST /v1/planejamentos', { papeis: QUEM_ESCREVE }],
+  ['PATCH /v1/planejamentos/:id', { papeis: QUEM_ESCREVE }],
+  // Copiar não destrói nada: só cria o que falta no destino.
+  ['POST /v1/planejamentos/copiar', { papeis: QUEM_ESCREVE }],
+
   ['GET /v1/categorias', { papeis: TODOS }],
   ['POST /v1/categorias', { papeis: QUEM_ESCREVE }],
   ['PATCH /v1/categorias/:id', { papeis: QUEM_ESCREVE }],

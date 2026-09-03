@@ -95,3 +95,16 @@ export {
 } from './parcelamento.js'
 
 export { BALDES, baldeDe, type Balde, type LancamentoClassificavel } from './balde.js'
+
+export {
+  atingiu,
+  consumoEmBp,
+  dentroDoPlanejado,
+  estadoDoPlanejamento,
+  naturezaDoValor,
+  totalPlanejado,
+  type EstadoDoPlanejamento,
+  type NaturezaDoPlanejamento,
+  type PlanejamentoParaTotal,
+  type TotalPlanejado,
+} from './planejamento.js'
