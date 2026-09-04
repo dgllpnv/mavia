@@ -384,6 +384,55 @@ test.describe('estornar', () => {
     }).toPass({ timeout: 10_000 })
   })
 
+  test('**compra de cartão agora pode ser estornada, e a tela diz onde o crédito cai**', async ({
+    page,
+  }) => {
+    // ADR 0023, aceito pelo dono do produto: o crédito entra na fatura vigente,
+    // como faz a administradora do cartão. Antes disso a tela recusava com uma
+    // frase de desculpa, e este teste falharia ao procurar o botão — a condição
+    // que o esconde vive numa função pura, travada por
+    // `detalhe-do-lancamento.test.ts`.
+    //
+    // A frase importa tanto quanto o botão: quem estorna uma compra de março e
+    // vê o crédito na fatura de maio precisa entender isso sem abrir um ADR.
+    await entrar(page)
+    await page.goto('/lancamentos')
+
+    const descricao = `Compra no cartao a devolver ${MARCA}`
+    await page.getByRole('button', { name: 'lançar', exact: true }).click()
+    await page.getByLabel('Conta ou cartão').selectOption({ label: 'Cartão principal' })
+    await page.getByLabel('Descrição').fill(descricao)
+    for (const tecla of ['4', '0', '0', '0', '0']) {
+      await page.getByLabel('Valor').press(tecla)
+    }
+    await expect(page.getByLabel('Valor')).toHaveValue('R$ 400,00')
+    await page.getByRole('button', { name: 'salvar', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // O saldo em caixa **não** se move: quem move o dinheiro de uma compra de
+    // cartão é o pagamento da fatura. Vale antes e depois do estorno, e é a
+    // regra 8b — por isso a asserção é do saldo, e não da despesa do mês.
+    const saldoAntes = await saldoDoRodape(page)
+
+    await page.getByText(descricao, { exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    // A frase que a v3 do ADR pediu, e a razão de ela existir só no cartão.
+    await expect(page.getByText(/fatura aberta na data do reembolso/)).toBeVisible()
+
+    await page.getByRole('button', { name: 'estornar', exact: true }).click()
+    await page.getByRole('button', { name: 'estornar', exact: true }).last().click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // O original continua no extrato: estornar não apaga, acrescenta.
+    await expect(page.getByText(descricao, { exact: true })).toBeVisible()
+
+    // E o caixa continua parado, com a compra e o crédito dentro da fatura.
+    await expect(async () => {
+      expect(await saldoDoRodape(page)).toBe(saldoAntes)
+    }).toPass({ timeout: 10_000 })
+  })
+
   test('transferência não oferece estorno, e diz por quê', async ({ page }) => {
     // Desfazer uma perna criaria dinheiro: a transferência tem duas, e elas
     // somam zero por construção.
