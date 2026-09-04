@@ -212,6 +212,18 @@ export const FORA_DA_EXPORTACAO: ReadonlyMap<string, string> = new Map([
   ['mutacoes_idempotentes', 'cópia duplicada de dados que já saem pelas tabelas de origem'],
   ['auditoria', 'registro do sistema sobre o titular, não dado do titular; sai por outro fluxo'],
   ['outbox_pendencias', 'fila interna de entrega, sem conteúdo próprio'],
+  [
+    'eliminacoes_journal',
+    // Ela guarda **que** uma eliminação foi pedida, e nada do que foi eliminado
+    // — guardar o conteúdo seria não eliminar. Exportá-la ao titular
+    // devolveria a ele o próprio pedido de apagamento, o que não acrescenta
+    // nada, e sobreviveria à eliminação que ela registra: a exportação viraria
+    // o rastro que a política existe para não deixar.
+    //
+    // O titular já sabe que pediu, e a confirmação é o e-mail da janela de
+    // arrependimento de 7 dias.
+    'registro de que a eliminação foi pedida, sem nenhum conteúdo do que foi eliminado',
+  ],
 ])
 
 @Controller('v1/exportacao')

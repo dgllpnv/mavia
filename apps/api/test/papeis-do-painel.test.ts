@@ -213,10 +213,22 @@ describe('o que os papéis podem ler, coluna a coluna', () => {
     // trocava `ip_hash`/`user_agent_hash` por outro campo. O teste escrito
     // contra a lista errada **passava** com `auditoria.ip_hash` concedido ao
     // painel — verde sobre exatamente o campo que a matriz veta.
+    // **A asserção é sobre `SELECT`, e a correção veio do próprio teste.**
+    //
+    // Ela dizia "em `GRANT` nenhum" e passou a falhar com 200 linhas quando a
+    // `auditoria` nasceu: os papéis do painel têm `INSERT` nela, e `ip_hash` e
+    // `user_agent_hash` são colunas dela — vinte e cinco partições vezes quatro
+    // papéis vezes duas colunas.
+    //
+    // E escrever é certo: é assim que o hash é registrado no ato do acesso. O
+    // que a R-5 e a A-26 proíbem é **sair** — "existem para investigação de
+    // incidente, não para exibição". Uma asserção que impedisse a escrita
+    // impediria o próprio log de existir.
     const r = await banco.cliente.query<{ table_name: string; column_name: string; grantee: string }>(
       `SELECT table_name, column_name, grantee
          FROM information_schema.column_privileges
-        WHERE grantee = ANY($1) AND column_name = ANY($2)`,
+        WHERE grantee = ANY($1) AND column_name = ANY($2)
+          AND privilege_type = 'SELECT'`,
       [PAPEIS, CAMPOS_VETADOS.map((c) => c.coluna)],
     )
     expect(r.rows).toEqual([])

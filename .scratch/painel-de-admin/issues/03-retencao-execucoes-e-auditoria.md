@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 # 03 · `retencao_execucoes`, `auditoria` particionada e a imutabilidade
@@ -79,3 +79,25 @@ Nenhuma DP. O prazo de retenção é dívida datável (§"O que este épico deli
 - Não escreve nenhuma linha de auditoria: quem grava são `admin.abrir_espaco*` (ticket 05) e as funções de contrato (07, 08, 09).
 - Não cria o esquema `admin` (ticket 01) nem função nenhuma nele (ticket 05).
 - Não tira o log da máquina. É o único controle que vale contra quem tem o servidor, e está fora do épico — dito aqui e no fim do spec, nos dois lugares.
+
+
+## Comments
+
+**2026-09-04 · entregue. 23 asserções, e três coisas que o Postgres ensinou.**
+
+`0030_auditoria.sql` cria `retencao_execucoes`, `eliminacoes_journal`, os três enums, a `auditoria` particionada, o papel `mavia_eliminacao`, o gatilho de imutabilidade com a isenção de três condições, a função de partição e a RLS da §3.3. `auditoria-imutavel.test.ts`, 23 asserções.
+
+**1 · `SET search_path = pg_catalog, public` e `CREATE TABLE` se mordem.** A convenção de segurança do repositório põe `pg_catalog` primeiro; um `CREATE TABLE` sem qualificação vai para o **primeiro** esquema da lista, e o erro é `permission denied for schema pg_catalog` — que não menciona search_path nem partição. Inverter a ordem resolveria o sintoma e desfaria a salvaguarda. Todo objeto criado dentro da função passou a ser qualificado com `public.`, que resolve os dois.
+
+**2 · `CREATE EVENT TRIGGER` exige superusuário**, e `mavia_migrate` não é (`rolsuper = false`, de propósito). Medido: *"Must be superuser to create an event trigger."* Ele saiu da migration e virou **provisionamento**, como o `LOGIN` dos papéis — o SQL está no rodapé do arquivo, comentado, para quem for provisionar, e entrou nas condições de deploy do ticket 13. A frase honesta ganhou um segundo motivo: quem tem superusuário para criá-lo também tem para removê-lo.
+
+**3 · `DELETE … WHERE` exige `SELECT` nas colunas do `WHERE`.** `mavia_eliminacao` tinha `DELETE` e não tinha `SELECT`, e o Postgres respondia `permission denied for table auditoria` — mensagem que não diz `SELECT` e manda procurar no lugar errado. Não afrouxa nada: o papel é `NOLOGIN`, alcançável só por `SET ROLE` a partir de `mavia_jobs`, e o gatilho continua exigindo as três condições. **Ler o que se vai apagar é parte de apagar.**
+
+**Duas asserções que já existiam pegaram o que eu não tinha previsto — e as duas estavam certas.**
+
+- O teste de completude da exportação reprovou `eliminacoes_journal`: tabela com `tenant_id` e sem classificação. Entrou em `FORA_DA_EXPORTACAO` com a razão escrita — ela guarda **que** a eliminação foi pedida e nada do que foi eliminado, e exportá-la devolveria ao titular o próprio pedido de apagamento, sobrevivendo à eliminação que registra.
+- O teste dos campos vetados reprovou com **200 linhas** quando a `auditoria` nasceu — vinte e cinco partições × quatro papéis × duas colunas. A asserção dizia *"em `GRANT` nenhum"* e estava forte no eixo errado: os papéis do painel **escrevem** `ip_hash`, e é assim que o hash é registrado no ato do acesso. O que a R-5 e a A-26 proíbem é **sair**. Uma asserção que impedisse a escrita impediria o próprio log de existir. Agora ela é sobre `SELECT`.
+
+**O job em código não entrou.** A função `garantir_particao_de_auditoria` existe, é idempotente e cria 24 meses de pista; o que falta é o agendamento mensal e o alarme abaixo de 3 meses, que precisam da fila do `agendador.ts`. Registrado, e a pista de 24 meses dá folga larga para isso.
+
+Verde: typecheck 9/9, lint 9/9, API **526** em 35 arquivos.
