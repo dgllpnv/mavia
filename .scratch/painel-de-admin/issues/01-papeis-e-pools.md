@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 
 # 01 · Os quatro papéis, as três pools e os quatro contextos
 
@@ -86,3 +86,20 @@ Nenhuma. **C-9** é condição de deploy e não de ticket: o `NOLOGIN` + `statem
 - Nenhuma função no esquema `admin` — o esquema nasce vazio (ticket 05).
 - Nenhum `GRANT` sobre `auditoria` (ticket 03), `concessoes_de_admin` (04) ou `pagamentos_manuais` (07): esses nascem na migration que cria cada tabela, porque migration é forward-only.
 - Não liga o `APP_GUARD` (ticket 02).
+
+
+## Comments
+
+**2026-09-04 · a migration e as asserções de esquema, entregues**
+
+`0029_papeis_do_painel.sql` mais `apps/api/test/papeis-do-painel.test.ts` (16 asserções, verdes) e `apps/api/src/autorizacao/campos-vetados.ts`. Falta a metade de código: as três pools em `main.ts`, os *branded types* e os quatro contextos em `tenancy.ts`, e os `@ts-expect-error` de compilação.
+
+**Três coisas que o ticket previa errado, e o que foi feito no lugar.** Nenhuma muda o desenho; as três foram descobertas rodando o teste.
+
+1. **O critério 10 está errado.** Ele diz que `periodo_fim` e `periodo_inicio` não aparecem em `GRANT` nenhum, *"nem por coluna, nem por tabela"*. Mas a tela de perfil precisa **mostrar** quando o plano acaba, e "ver o perfil de um cliente" é a segunda linha da §8. A proibição que o spec sustenta é de **escrita** — F-12 é sobre o webhook sobrescrever, F-10 é sobre reescrever a base do reembolso. A asserção implementada exclui `SELECT` e mantém o veto sobre `INSERT`/`UPDATE`.
+
+2. **`has_table_privilege` não enxerga concessão por coluna.** Ela devolve `false` onde `has_any_column_privilege` devolve `true`, para a mesma tabela e o mesmo papel — verificado no banco. Como **toda** a nossa concessão é por coluna, um teste escrito com a primeira função afirmaria o oposto do que quer. E `DELETE` não tem granularidade de coluna: a checagem dele continua sendo de tabela, ou o Postgres recusa com *"unrecognized privilege type"*.
+
+3. **`mavia_migrate` vira membro automático dos quatro.** No Postgres 16 em diante, um papel com `CREATEROLE` recebe filiação com `ADMIN OPTION` sobre todo papel que cria — não há como criar sem essa aresta. É aceitável (ele já tem `BYPASSRLS`, é dono do esquema e não serve requisição), mas foi promovida de aresta invisível a **asserção nomeada**: se um quinto papel aparecer como membro, o teste cai.
+
+**Uma decisão de alcance que o ticket deixava em aberto.** "As tabelas do razão e do cadastro" virou lista fechada de vinte, com três grupos deliberadamente fora e a razão de cada um escrita na migration: credencial e sessão; segredo de provider e dado cru de terceiro; infraestrutura.
