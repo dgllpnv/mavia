@@ -1,6 +1,8 @@
 # O que depende de você
 
-Cinco pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, um valor comercial e uma decisão de produto.
+Seis pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, um valor comercial e decisões de produto.
+
+As cinco primeiras **bloqueiam** alguma coisa. A sexta reúne três escolhas que **não** bloqueiam — todas têm um padrão que eu sigo se você não disser nada —, mas uma delas decide quando o painel de administração pode ver cliente real.
 
 Cada item abaixo diz **o que ele destrava**, **o que exatamente preciso de você**, **onde conseguir** e **o que eu faço depois**. Estão em ordem de dependência — o item 1 é pré-requisito de metade dos outros.
 
@@ -195,6 +197,41 @@ O ID do cliente aparece na URL do navegador durante o login — é público. O s
 
 ---
 
+## 6 · Três escolhas do painel de admin
+
+Vieram da revisão de LGPD do épico do painel. **Nenhuma bloqueia o trabalho** — todas têm um padrão vigente que eu sigo se você não disser nada. Estão aqui porque duas delas mudam o que o produto promete, e uma decide quando o painel pode ver cliente real.
+
+### DP-32 · Até quando o painel fica sem MFA?
+
+O produto tem as colunas de MFA no banco desde a fundação e **nenhuma rota que as use**. A LIA declara isso como fato, não como pendência escondida, e a frase que importa é: nenhum controle compensatório reduz a *consequência* de uma senha de operador vazada. Todos reduzem probabilidade ou ajudam a reconstituir depois.
+
+Escolha um marco, não uma data vaga:
+
+| | |
+|---|---|
+| **(a)** | antes do primeiro cliente pagante — **é o padrão vigente** |
+| (b) | antes do décimo espaço em produção |
+| (c) | antes do épico 12, quando entra conexão bancária |
+| (d) | o painel entra sem MFA e o assunto volta em seis meses |
+
+**Consequência do padrão (a), e ela é concreta:** enquanto você não escolher, o painel de administração **não vai a produção com clientes reais**. Ele é construído, testado e roda local. Não é bloqueio que eu inventei — é o que o balanceamento de legítimo interesse assume ao concluir que o acesso do operador prevalece sobre a expectativa do titular.
+
+### DP-33 · Por quanto tempo um motivo vale?
+
+Antes de abrir o espaço de um cliente, o operador informa o motivo (`chamado`, `incidente`, `defeito`, `ordem_judicial`) e a referência. A pergunta é se isso vale para uma requisição, para uma sessão de trabalho ou para o dia.
+
+**Padrão vigente: 30 minutos.** Uma requisição por vez é o mais estrito e torna o painel inutilizável — cada clique pediria o número do chamado de novo. O dia inteiro faz a hipótese declarada virar carimbo de manhã. Cada abertura continua gerando **sua própria linha** de auditoria, com rota e contagem; o que a janela reaproveita é a hipótese, nunca o registro.
+
+### DP-34 · Com um operador só, o aviso vai para onde?
+
+O desenho compra detecção notificando *os outros* administradores a cada abertura de espaço. Hoje existe um: você. A salvaguarda é vazia até existir um segundo — e ela é justamente a que compensa você ter decidido que o log não é exposto ao cliente.
+
+**Padrão vigente: sim, destino externo** — o aviso vai para um e-mail seu fora do domínio da aplicação. A razão é simples: uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema.
+
+Se você responder **não**, o balanceamento perde a única salvaguarda de detecção e a LIA precisa ser refeita. Isso está escrito lá, não é ameaça retórica.
+
+---
+
 ## Ordem que eu sugiro
 
 ```
@@ -204,6 +241,8 @@ O ID do cliente aparece na URL do navegador durante o login — é público. O s
 3. ADR 0023          (independente de tudo; é uma frase sua)
 
 4. Stripe            (comece a abertura da conta agora, em paralelo — é o que mais demora)
+
+6. DP-32/33/34       (não bloqueiam; a DP-32 decide quando o painel vê cliente real)
 ```
 
 Se você fizer só duas coisas desta lista, faça o **domínio** e o **provedor de e-mail**. Sem elas a Mavia está instalada, mas ninguém de fora consegue entrar nela.

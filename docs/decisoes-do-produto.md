@@ -119,6 +119,18 @@ O custo é real e recai sobre o produto, não sobre o cliente: a tela de cadastr
 
 ---
 
+## Em aberto — esperando o dono
+
+Estas ainda não foram decididas. **Nenhuma bloqueia o trabalho**: cada uma tem um padrão vigente que o time segue enquanto não houver resposta. Estão detalhadas em `docs/o-que-depende-de-voce.md` §6, e a justificativa completa vive em `docs/compliance/retencao-e-eliminacao.md` §11.
+
+| # | Pergunta | Padrão vigente | Origem |
+|---|---|---|---|
+| **DP-32** | Até quando o painel de admin fica sem MFA? | **Antes do primeiro cliente pagante.** Enquanto não houver escolha, o painel **não vai a produção com cliente real** | `retencao-e-eliminacao.md` §8.1.1 |
+| **DP-33** | Por quanto tempo um `motivo` + `referencia` autoriza aberturas de espaço? | **30 minutos.** Cada abertura continua gerando sua própria linha de auditoria; o que a janela reaproveita é a hipótese | `retencao-e-eliminacao.md` §11 |
+| **DP-34** | Com um único operador, a notificação entre pares vai para onde? | **Destino externo ao painel.** Uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema. Se a resposta for "não", a LIA da §8.1.1 precisa ser refeita | `retencao-e-eliminacao.md` §8.1.1 |
+
+---
+
 ## Como usar este índice
 
 Uma decisão registrada aqui **não se re-litiga em conversa**. Se ela precisar mudar, o caminho é o mesmo de uma ADR: escrever a decisão nova, com o contexto que mudou e o custo da reversão, e marcar a antiga como substituída.
