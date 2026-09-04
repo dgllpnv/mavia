@@ -1,7 +1,7 @@
 # ADR 0024 — Acesso administrativo entre espaços: a exceção à R-3, e o que a contém
 
-**Estado:** proposto
-**Data:** 2026-09-04
+**Estado:** **aceita**
+**Data:** 2026-09-04 · **Aceita pelo dono do produto em 2026-09-04.**
 **Substitui:** nada. **Emenda** o `sistema.md` §3.9 (lista fechada de exceções de leitura sem tenant) e nomeia a exceção que a `matriz-de-acesso.md` R-3 exige.
 **Exigida por:** achado S-10 do gate de segurança sobre o spec do painel de administração.
 

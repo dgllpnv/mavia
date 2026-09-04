@@ -152,11 +152,16 @@ interface Situacao {
   readonly ehDeCartao: boolean
 }
 
-function podeEstornar(s: Situacao): boolean {
+/**
+ * Compra de cartão **pode** ser estornada desde o ADR 0023, e a ausência de
+ * `ehDeCartao` nesta condição é a decisão, não um esquecimento. O teste
+ * irmão trava isso — ver `detalhe-do-lancamento.test.ts`.
+ */
+export function podeEstornar(s: Situacao): boolean {
   return !s.ehTransferencia && !s.ehEstorno
 }
 
-function razaoParaNao(s: Situacao): keyof typeof PORQUE_NAO {
+export function razaoParaNao(s: Situacao): keyof typeof PORQUE_NAO {
   if (s.ehTransferencia) return 'transferencia'
   if (s.ehEstorno) return 'estorno'
   return 'nenhuma'
