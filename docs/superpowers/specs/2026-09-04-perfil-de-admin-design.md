@@ -1,8 +1,9 @@
 # Design — Perfil de administrador
 
 - **Data:** 2026-09-04
-- **Status:** **v3 — reescrito após a segunda reprovação do gate de risco.** A v1 e a v2 foram reprovadas. Aguarda reabertura do gate.
-- **Pré-requisito aceito:** **ADR 0024 — Acesso administrativo entre espaços** (`docs/adr/0024-acesso-administrativo-entre-espacos.md`). Ela é a fonte da verdade de D1 a D6; este documento a executa e não a re-litiga. **Nenhum ticket sai daqui antes de a ADR 0024 estar aceita.**
+- **Status:** **v3.1 — revisão da v3 sobre o parecer do gate reaberto (APROVADO COM CONDIÇÕES).** A v1 e a v2 foram reprovadas; a v3 passou. Esta revisão fecha as cinco condições que bloqueiam o primeiro ticket (S3-1, S3-2, S3-3, S3-6, S3-7) e as correções baratas (S3-8, S3-9, S3-10, S3-12). **Não há arquitetura nova aqui** — o que muda são omissões e citações.
+- **Pré-requisito aceito:** **ADR 0024 — Acesso administrativo entre espaços** (`docs/adr/0024-acesso-administrativo-entre-espacos.md`), **aceita pelo dono do produto**. Ela é a fonte da verdade de D1 a D6; este documento a executa e não a re-litiga.
+- **Nota de citação da ADR:** a D4 cita `0001_fundacao.sql:105-113` para o contraexemplo do `nullif`. O bloco correto é **`0001_fundacao.sql:107-114`** — verificado. A ADR não é editada aqui; **este documento usa o intervalo certo em toda menção**.
 - **Escopo:** o painel interno de operação da Mavia — quem são os clientes, qual o plano, o que foi pago, e o registro imutável do que o operador fez.
 - **Fora de escopo:** MFA, cobrança automática pela Stripe (P-14), atendimento ao cliente dentro do produto.
 
@@ -71,9 +72,9 @@ O padrão dos dois erros é o mesmo: **a propriedade foi afirmada antes de a top
 | Restrição | Onde — verificado | Consequência |
 |---|---|---|
 | Tenant vem só da sessão; exceção **exige ADR** | `matriz-de-acesso.md:40-49` (R-3) | Exceção nomeada na **ADR 0024, D1** |
-| Nenhum `id` de tenant em path de rota | `sistema.md:985` (veto 10) | Emendado pela **ADR 0024, D1**, só sob `/v1/admin/` |
-| Nenhuma leitura sem contexto de tenant além das duas exceções de §3.9 | `sistema.md:983` (veto 8) | A listagem é a terceira — **ADR 0024**, emenda ao §3.9 |
-| Nenhum papel de requisição tem `BYPASSRLS` | `sistema.md:983`; `bootstrap-papeis.sql:27` (só `mavia_migrate` o tem) | Cross-tenant não se resolve com privilégio. Nenhum dos três papéis novos o tem |
+| Nenhum `id` de tenant em path de rota | `sistema.md:991` (veto 10) | **Já emendado no `sistema.md`.** O veto nomeia `/v1/admin/` como a exceção única, sob três condições simultâneas — ADR 0024, D1 |
+| Nenhuma leitura sem contexto de tenant além das exceções de §3.9 | `sistema.md:644-650` (§3.9) e `:989` (veto 8) | **Já emendado no `sistema.md`.** Os dois lugares dizem **três** exceções, e a terceira é `admin.listar_clientes` (`:648`), com o critério de aceite em `:650`. *O parecer do gate afirma que `:644` "ainda diz as duas exceções" e que o veto 8 está em `:983`; verifiquei os dois — a emenda está aplicada, e o veto 8 é a linha `:989`* |
+| Nenhum papel de requisição tem `BYPASSRLS` | `sistema.md:989`; `bootstrap-papeis.sql:27` (só `mavia_migrate` o tem) | Cross-tenant não se resolve com privilégio. Nenhum dos três papéis novos o tem |
 | **Um `Pool` só, como `mavia_app`, com DML completo em toda tabela de negócio** | `main.ts:29-33`; `tenancy.ts:74`; `0006_nucleo.sql:278` | **É o achado que reprovou a v2.** Resolvido por dois pools — ADR 0024, D3 |
 | **Não existe guard global.** A autorização é aplicada por decorador, controlador a controlador | `app.module.ts:71-85` registra só `APP_INTERCEPTOR`; dos **22 controladores** registrados (`app.module.ts:47-70`), **17** carregam `@UseGuards(AutorizacaoGuard)` | Rota nova sem decorador é rota aberta. §5 |
 | `mavia_auth` já lê `usuarios`, `tenants`, `tenant_usuarios`, `sessoes` e `assinaturas` cross-tenant | `0004_cadastro.sql:52`, `:57`, `:60`, `:63`; `0025_assinatura.sql:163` | O dono da `SECURITY DEFINER` da listagem **não pode** ser `mavia_auth` — ADR 0024, D4 |
@@ -104,29 +105,102 @@ Qualquer injeção numa rota do painel, qualquer helper com concatenação, ou u
 
 Uma conexão a mais no Postgres. Irrelevante no volume atual, e explícito no dimensionamento.
 
-#### 1.2 · Três papéis, os `GRANT` nominais e as não-relações (ADR 0024 · D3, D5)
+#### 1.2 · Três papéis: `GRANT` e `POLICY` são camadas distintas, e as duas são necessárias (ADR 0024 · D3, D5)
 
-| Papel | Atributos | Privilégio | Existe para |
-|---|---|---|---|
-| `mavia_admin` | `LOGIN NOINHERIT NOBYPASSRLS` | `SELECT` **por coluna** (§1.3) nas tabelas do razão e do cadastro; `INSERT` em `auditoria`; `EXECUTE` em `admin.abrir_espaco` e `admin.listar_clientes` | Ler o espaço do cliente |
-| `mavia_admin_escrita` | `LOGIN NOINHERIT NOBYPASSRLS` | `UPDATE (plano, intervalo, estado, periodo_fim, graca_ate)` em `assinaturas`; `INSERT` em `pagamentos_manuais`; `INSERT` em `auditoria`; `EXECUTE` no procedimento de cadastro de cliente | As quatro escritas da §8 |
-| `mavia_admin_definer` | `NOLOGIN NOBYPASSRLS` | Dono das funções do esquema `admin`. Nenhum `GRANT` de tabela além das policies estritamente necessárias à projeção fixa da listagem | A listagem (§2) |
+**O que a v3 errava aqui (achado S3-3):** a tabela descrevia os papéis pelo que eles **não** podem fazer, e misturava `GRANT` com `POLICY` numa coluna só. São camadas independentes e ortogonais — `GRANT` decide se a instrução é sequer permitida, `POLICY` decide quais linhas ela enxerga —, e **negar uma delas é negar o acesso inteiro**. Como estava escrito, o SQL que o próprio documento exige não rodava: `admin.listar_clientes` falhava na primeira execução, e nenhum dos três papéis tinha `USAGE` de esquema.
+
+##### O modo de falha que faz a migration mentir
+
+Antes da tabela, porque ele contamina tudo o que vem depois. `bootstrap-papeis.sql:36-44` documenta, por extenso: **um `GRANT` executado por quem não é dono nem tem `grant option` não falha.** Ele devolve `GRANT` com um `WARNING: no privileges were granted`, a transação segue, a migration reporta sucesso — e o privilégio não existe. O bloco existe justamente porque isso já mordeu neste repositório.
+
+Duas consequências normativas:
+
+1. **Todo `GRANT` desta seção roda como `mavia_migrate`**, que é dono do esquema `public` (`bootstrap-papeis.sql:45`) e o único papel que roda migration.
+2. **Nenhum privilégio desta seção é dado como concedido porque a migration passou.** O teste de esquema da seção Testes lê `information_schema.role_table_grants`, `information_schema.column_privileges` e `has_schema_privilege`, e é ele — não o `WARNING` — quem transforma a omissão em falha visível.
+
+##### `USAGE` de esquema, que a v3 esqueceu em todos os três
+
+`bootstrap-papeis.sql:51` faz `REVOKE ALL ON SCHEMA public FROM PUBLIC` **de propósito** — o comentário de `:47-50` diz que a máscara foi removida para que a falta de concessão apareça no teste em vez de aparecer no dia de endurecer a produção. E `0001_fundacao.sql:140` concede `USAGE ON SCHEMA public` **nominalmente**, a `mavia_app, mavia_jobs` e a mais ninguém.
+
+Logo: **os três papéis novos precisam de `USAGE` em `public` e em `admin`, explicitamente.** Sem isso, todo `SELECT` deles devolve `permission denied for schema public` — e, pelo modo de falha acima, um `GRANT` de tabela escrito sem o `USAGE` de esquema *ainda assim* deixa a migration verde.
+
+```sql
+GRANT USAGE ON SCHEMA public TO mavia_admin, mavia_admin_escrita, mavia_admin_definer;
+GRANT USAGE ON SCHEMA admin  TO mavia_admin, mavia_admin_escrita, mavia_admin_definer;
+```
+
+##### Os três papéis, papel a papel
+
+`GRANT` e `POLICY` em colunas separadas. Uma célula vazia em qualquer das duas colunas é acesso negado, não acesso irrestrito.
+
+| Papel | Atributos | `GRANT` (a instrução é permitida) | `POLICY` (quais linhas ela vê) | Existe para |
+|---|---|---|---|---|
+| `mavia_admin` | `LOGIN NOINHERIT NOBYPASSRLS` | `USAGE` em `public` e `admin`; `SELECT` **nominal por coluna** (§1.3) nas tabelas do razão e do cadastro; `INSERT ON auditoria`; `EXECUTE` em `admin.abrir_espaco` e `admin.listar_clientes` | Nas tabelas do razão: a `tenant_isolation` de `0006_nucleo.sql:271-277` **não tem cláusula `TO`**, logo vale para todo papel — e é por isso que ela funciona para o painel: quem define `app.tenant_id` é `admin.abrir_espaco` (§1.6). Em `auditoria`: `FOR INSERT WITH CHECK (true)` (§3.3). **Sem policy de `SELECT` em `auditoria`** — a leitura do registro é por projeção própria (§3.3) | Ler o espaço do cliente |
+| `mavia_admin_escrita` | `LOGIN NOINHERIT NOBYPASSRLS` | `USAGE` em `public` e `admin`; `UPDATE (plano, intervalo, estado, periodo_fim, graca_ate) ON assinaturas`; `INSERT ON pagamentos_manuais`; `INSERT ON auditoria`; `EXECUTE` em **`admin.abrir_espaco_para_escrita`** (§1.6) e no procedimento de cadastro de cliente. **Nenhum `EXECUTE` em `admin.abrir_espaco`** — a função de leitura não é a de escrita | `assinaturas`: `assinatura_do_tenant` (`0025_assinatura.sql:136-138`), **sem `TO`**, por `app.tenant_id`. `pagamentos_manuais`: `tenant_isolation`, também sem `TO` (Modelo de dados). As duas dependem de o GUC existir — e é `abrir_espaco_para_escrita` quem o define. Em `auditoria`: `FOR INSERT WITH CHECK (true)` | As quatro escritas da §8 |
+| `mavia_admin_definer` | `NOLOGIN NOBYPASSRLS` | `USAGE` em `public` e `admin`; `SELECT` nominal por coluna em `tenants`, `usuarios`, `tenant_usuarios` e `assinaturas` — a projeção fixa da listagem, e nada além; `SELECT ON concessoes_de_admin` (obrigação 4 da §2); `INSERT ON auditoria` (obrigação 5 da §2). **Nenhum `EXECUTE`, nenhum `UPDATE`, nenhum `DELETE`, nenhum `GRANT` sobre tabela do razão** | Policies próprias, `TO mavia_admin_definer`, nas quatro tabelas da projeção. Em `auditoria`: `FOR INSERT WITH CHECK (true)`. A forma dessas policies é o risco registrado em **Erros e bordas · S3-4**, e não é fechada aqui | Ser o dono das funções de `admin` (§2) |
+
+**Por que `mavia_admin_definer` precisa de tudo isso.** `admin.listar_clientes` é `SECURITY DEFINER` dele: ela roda **como ele**, não como quem chamou. Sem `SELECT` nas quatro tabelas da projeção, a listagem não existe; sem `SELECT ON concessoes_de_admin`, a obrigação 4 da §2 — *"a checagem de concessão é dentro da função"* — levanta `permission denied` (a §4 concede `SELECT` ali só a `mavia_app`); sem `INSERT ON auditoria`, a obrigação 5 — *"a auditoria da busca é gravada na mesma instrução"* — também. **Na v3, a função falhava na primeira execução, pelas três razões ao mesmo tempo.**
+
+**O `INSERT ON auditoria` é dos três, e não de dois.** A v3 dava esse `INSERT` a `mavia_admin` e a `mavia_admin_escrita` e esquecia o definer. Os três gravam, porque os três têm um caminho que precisa registrar: abertura de leitura, abertura de escrita e busca.
 
 **As não-relações importam tanto quanto os privilégios**, e cada uma fecha um caminho. Elas são normativas e cada uma vira asserção:
 
 - `mavia_app` **não** é membro de nenhum dos três — senão o pool do cliente alcança o painel por `SET ROLE`;
 - **nenhum dos três é membro de `mavia_app`** — senão `RESET ROLE` devolve o DML completo, que é exatamente o defeito da v2;
 - `mavia_admin` **não** é membro de `mavia_admin_escrita` — a conexão que lê não é a conexão que escreve, e a separação é por **autenticação**, não por instrução;
-- nenhum dos três tem `BYPASSRLS`, mantendo `sistema.md:983` sem exceção;
+- nenhum dos três tem `BYPASSRLS`, mantendo o veto 8 de `sistema.md:989` sem exceção;
 - nenhum dos três recebe `mavia_eliminacao` (§3.2).
 
 Com isso, `RESET ROLE` na conexão do painel aterrissa em `mavia_admin`, que não tem escrita em tabela nenhuma. A propriedade *"o admin não edita o razão do cliente"* passa a ser consequência de **quem a conexão é**, e não de qual instrução a rota lembrou de executar.
 
 **Aviso que o ticket carrega:** um papel novo **não herda** policies escritas `TO mavia_app` — inclusive a `RESTRICTIVE usuario_escreve_so_a_propria_linha` (`0002_identidade.sql:173-176`). Ele nasce sem nenhum grant de escrita, e não com escrita "controlada por policy".
 
-#### 1.3 · `GRANT` por coluna, com os sete campos da R-5 fora (ADR 0024 · D5)
+#### 1.3 · `GRANT` por coluna, com os **nove** campos vetados fora (ADR 0024 · D5)
 
-`GRANT SELECT` no nível de tabela entregaria à conexão do painel `usuarios.senha_hash`, `usuarios.mfa_segredo_cifrado`, `sessoes.refresh_hash`, `conexoes.credenciais_cifradas`, `conexoes.dek_cifrada`, `lancamentos_brutos.payload` e `dados_fiscais.documento`. A **R-5** (`matriz-de-acesso.md:62-68`) diz que esses sete nunca saem, para papel nenhum.
+**O que a v3 errava (achado S3-6):** ela dizia "os sete campos da R-5" e listava um conjunto que **não é o da R-5** — trocou `ip_hash`/`user_agent_hash` por `dados_fiscais.documento`. Verifiquei `matriz-de-acesso.md:66` e o revisor está certo.
+
+A R-5 enumera assim (`matriz-de-acesso.md:64-68`), contando `ip_hash / user_agent_hash` como um item de sete:
+
+`senha_hash` · `refresh_hash` · `mfa_segredo_cifrado` · `credenciais_cifradas` · `dek_cifrada` · `ip_hash` / `user_agent_hash` · `lancamentos_brutos.payload`
+
+E `matriz-de-acesso.md:432` acrescenta `dados_fiscais.documento` à R-5, *"junto de"* os oito anteriores, nomeando-os um a um. **Contados como colunas, são nove:**
+
+```
+CAMPOS_VETADOS = {
+  usuarios.senha_hash          sessoes.refresh_hash        usuarios.mfa_segredo_cifrado
+  conexoes.credenciais_cifradas  conexoes.dek_cifrada      lancamentos_brutos.payload
+  dados_fiscais.documento      *.ip_hash                   *.user_agent_hash
+}
+```
+
+**A consequência do erro era concreta, e não editorial.** A §3 põe `ip_hash` e `user_agent_hash` como colunas de `auditoria`, e a §8 cria `GET /v1/admin/registro`, servida por `mavia_admin`. O teste previsto — *"nenhum dos sete campos da R-5 está em nenhum `GRANT`"* —, escrito contra a lista errada, **passa** com `auditoria.ip_hash` concedido ao painel. O teste teria dado verde sobre exatamente o campo que a matriz veta.
+
+##### A decisão sobre `ip_hash` e `user_agent_hash`, escrita como decisão
+
+`matriz-de-acesso.md:168` é categórica: eles *"nunca saem em resposta de `atividade`, para nenhum papel. Existem para investigação de incidente, não para exibição — A-26."*
+
+**A escolha deste documento: os dois ficam FORA do `GRANT` do painel, e a R-5 não é emendada.**
+
+O argumento do outro lado é bom e está registrado: o operador que abre um espaço com `motivo = incidente` é plausivelmente o leitor previsto da A-26 — *investigação de incidente* é literalmente a finalidade que a matriz declara para esses campos. Ele perde, por três razões:
+
+1. **A R-5 fala de resposta de API, e `GET /v1/admin/registro` é resposta de API.** Emendá-la para o painel abriria a primeira exceção de uma regra que hoje não tem nenhuma, e a exceção nasceria na superfície com menos autenticação do produto (sem MFA — §6).
+2. **A finalidade "investigação de incidente" é satisfeita sem o painel.** Quem investiga incidente tem `psql` no runner de deploy, com a credencial de `mavia_migrate` sob custódia (§3.1.2, item 1) e `pg_hba.conf` restringindo ao host. É um caminho mais caro, e ele **deve** ser mais caro: investigação de incidente é evento raro e deliberado, não uma coluna numa tela.
+3. **Deixar os dois fora não custa nada à operação normal.** As perguntas do primeiro mês — quem leu, quando, sob qual hipótese, qual rota, quantos registros — são respondidas pelas outras colunas de `auditoria`.
+
+**Portanto:** `GET /v1/admin/registro` serve `ocorrido_em`, `tenant_id`, `usuario_id`, `ator_tipo`, `entidade`, `entidade_id`, `acao`, `classe`, `rota`, `registros`, `motivo`, `referencia`, `de`, `para` — e **não** `ip_hash` nem `user_agent_hash`. Se um dia a decisão inverter, ela entra como emenda escrita à R-5 na `matriz-de-acesso.md`, não como um `GRANT` a mais numa migration.
+
+##### A lista vira constante única
+
+`CAMPOS_VETADOS` é **uma** constante, num só lugar, e tem **dois** consumidores obrigatórios:
+
+- o **teste de esquema** que afirma que nenhum dos nove aparece em `GRANT` de nenhum dos três papéis (§Testes);
+- a **varredura sobre o OpenAPI gerado** que a R-5 já exige (`AB-07`, `matriz-de-acesso.md:68`).
+
+Duas listas divergentes é exatamente o defeito que este achado descobriu. Uma constante com dois leitores é o que impede a próxima divergência: mudar a R-5 e esquecer o teste passa a quebrar o teste.
+
+##### Por que `GRANT` por coluna, e não por tabela
+
+`GRANT SELECT` no nível de tabela entregaria à conexão do painel `usuarios.senha_hash`, `usuarios.mfa_segredo_cifrado`, `sessoes.refresh_hash`, `conexoes.credenciais_cifradas`, `conexoes.dek_cifrada`, `lancamentos_brutos.payload` e `dados_fiscais.documento` de uma vez.
 
 O envelope encryption do ADR 0018 torna as credenciais cifradas inúteis sem a KEK. `senha_hash` não: é material para quebra offline de toda a base de clientes, a um `SELECT` de distância numa conexão que não tem segundo fator. **A DA-1 autorizou leitura completa dos dados financeiros; não autorizou o hash de senha de todo mundo.**
 
@@ -141,19 +215,64 @@ Os `GRANT` são **nominais por coluna**, e a lista fechada mora na migration. A 
 Por isso, e sem exceção:
 
 1. `autenticador.ts` **continua devolvendo `autenticado: null`** para rotas `/v1/admin/*` — é o caminho que a linha 93 já toma para rota sem espaço;
-2. o contexto que `abrirEspacoComoAdmin` produz é de um **tipo distinto** (`ContextoDeAdmin`), aceito **só** por `comTenantDeAdmin`;
-3. `comTenantDeAdmin` usa o **pool do painel** (§1.1) e nunca `'mavia_app'`;
+2. o contexto que `abrirEspacoComoAdmin` produz é de um **tipo distinto** (`ContextoDeAdmin`), aceito **só** por `comTenantDeAdmin`; e o que `abrirEspacoComoAdminParaEscrita` produz é um quarto tipo (`ContextoDeAdminEscrita`), aceito **só** por `comTenantDeAdminEscrita` — as duas funções de §1.6 têm cada uma o seu par, e os pares não se cruzam;
+3. `comTenantDeAdmin` e `comTenantDeAdminEscrita` usam o **pool do painel** (§1.1) e nunca `'mavia_app'`;
 4. **nenhuma rota `/v1/admin/*` chama `comTenant`, `comUsuario` ou `resolverTenant`.**
+
+##### O `SET LOCAL ROLE` redundante é normativo — não o remova (achado S3-10)
+
+Hoje o cruzamento pool × papel **falha fechado por acidente feliz**, e o acidente precisa virar decisão escrita antes que alguém o desfaça com uma boa intenção.
+
+`emTransacao` (`tenancy.ts:37-59`) emite **sempre** `SET LOCAL ROLE ${papel}` (`tenancy.ts:48`), antes de qualquer configuração. Como `mavia_app` não é membro de nenhum dos três papéis do painel e nenhum dos três é membro de `mavia_app` (§1.2, as não-relações), o `SET LOCAL ROLE` **estoura** quando a conexão vem do pool errado: o pool do painel tentando `SET LOCAL ROLE mavia_app` falha, e o pool do cliente tentando `SET LOCAL ROLE mavia_admin` também. O cruzamento morre na primeira instrução da transação, e não na décima consulta.
+
+Mas `comTenantDeAdmin` roda no pool do painel, que **já está autenticado** como `mavia_admin`. Um implementador razoável olha `SET LOCAL ROLE mavia_admin` numa conexão que já é `mavia_admin`, conclui que é ruído, e o remove. A partir daí o pool trocado **passa a funcionar em silêncio**, e a única defesa contra usar a conexão errada some sem deixar erro.
+
+> **Normativo:** `comTenantDeAdmin` emite `SET LOCAL ROLE mavia_admin` — e `comAdmin`, `SET LOCAL ROLE mavia_admin`; e o caminho de escrita, `SET LOCAL ROLE mavia_admin_escrita` — **mesmo sendo redundante com a autenticação do pool**, precisamente para que o pool errado falhe na primeira instrução. A redundância **é** o controle. Remover a instrução é defeito, não simplificação, e o comentário na linha diz isso.
+
+Duas asserções de integração guardam a frase (§Testes): passar o pool do cliente a `comTenantDeAdmin` leva `permission denied to set role`, e passar o pool do painel a `comTenant` leva o mesmo — nos dois casos **antes** de qualquer `set_config` e antes de qualquer leitura.
+
+##### O helper que faltava: `comAdmin` (achado S3-9)
+
+A §1.4 proíbe `/v1/admin/*` de chamar `comTenant`, `comUsuario` e `resolverTenant` — e esses três são **os únicos caminhos de transação que existem hoje** (`tenancy.ts`). A v3 proibia os três e não nomeava o substituto, o que deixava sem resposta a pergunta mais imediata do implementador: *quem lê `concessoes_de_admin` para saber se este operador ainda é admin, e sob qual policy?*
+
+**`comAdmin(poolDoPainel, { usuarioId }, trabalho)`** — sem alvo, sem espaço.
+
+| | |
+|---|---|
+| **Pool** | o do painel (§1.1) |
+| **Papel** | `SET LOCAL ROLE mavia_admin`, redundante e obrigatório (acima) |
+| **GUCs** | define **só** `app.usuario_id` = o do operador, por `set_config($1,$2,true)`. **`app.tenant_id` é definido como `''` explicitamente**, pela mesma razão da §7: uma conexão de pool reaproveitada carrega o valor da requisição anterior |
+| **Serve para** | resolver a concessão de admin da requisição (§6.4), a listagem (§2), e tudo o que é do painel e não é de um cliente |
+| **Não serve para** | qualquer leitura dentro do espaço de um cliente — esse caminho é `comTenantDeAdmin`, e ele só nasce de `admin.abrir_espaco` |
+| **Tipo** | recebe `ContextoDeOperador`, um terceiro *branded type*, produzido só pelo ramo de admin do guard (§5). Não é `ContextoDoTenant` nem `ContextoDeAdmin` |
+
+**Quem lê `concessoes_de_admin`, e sob qual policy — as duas leituras são diferentes, e é isso que a v3 não separava:**
+
+1. **O guard, a cada requisição** (§6.4), lê por `comAdmin` como `mavia_admin`, sob a policy `concessao_propria ON concessoes_de_admin FOR SELECT TO mavia_admin USING (usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid)`. **Estreita de propósito: o operador enxerga a própria concessão e nenhuma outra.** A rota do painel não precisa listar quem mais é admin, e uma policy ampla aqui daria ao painel a lista de todos os operadores da Mavia numa conexão sem MFA.
+2. **A função `admin.listar_clientes`**, por dentro, como `mavia_admin_definer` (obrigação 4 da §2), sob policy própria `TO mavia_admin_definer`. É outra policy, para outro papel, e ela existe porque `SECURITY DEFINER` roda como o dono e não como o chamador.
+
+`mavia_app` mantém o `SELECT` que a §4 já lhe dá, e mantém a policy que já tem. Nenhuma das duas policies acima é `TO mavia_app`, e nenhuma delas toca `tenants`, `usuarios` ou `tenant_usuarios` — a proibição da §2 continua intacta.
 
 **Como as rotas de admin são classificadas sem cair em `ROTAS_SEM_TENANT`.** A ADR 0024 D6 proíbe colar `/admin/*` em `ROTAS_SEM_TENANT`, e com razão: aquela lista é o que dispensa a rota da matriz (`politica-acesso.ts:264`). Mas é ela também que define `exigeTenant` (`aplicacao.ts:86`), e é isso que faz o autenticador parar em `autenticado: null` antes de exigir `X-Mavia-Tenant` (`autenticador.ts:93`). As duas coisas estão amarradas hoje e passam a ser três listas nomeadas:
 
 | Lista | Efeito | Rotas |
 |---|---|---|
-| `ROTAS_PUBLICAS` (`politica-acesso.ts:203-226`) | dispensa sessão | as nove de credencial e o webhook |
+| `ROTAS_PUBLICAS` (`politica-acesso.ts:203-226`) | dispensa sessão | **nove entradas no total** — oito de credencial e sessão (`POST /v1/sessoes`, `/v1/sessoes/renovar`, `/v1/cadastro`, `/v1/cadastro/confirmar`, `/v1/senha/recuperar`, `/v1/senha/redefinir`, `/v1/auth/google`, `/v1/auth/google/retorno`) mais `POST /v1/cobranca/webhook`. *A v3 dizia "as nove de credencial e o webhook", o que somaria dez; verificado, são nove* |
 | `ROTAS_SEM_TENANT` (`politica-acesso.ts:176-200`) | exige sessão, dispensa espaço e papel | as 13 rotas de `GET /v1/eu`, sessões, cadastro, senha, Google, convite e webhook |
-| **`ROTAS_DE_ADMIN`** — nova | exige sessão, dispensa espaço, **exige concessão de admin ativa** | `/v1/admin/*`, e só elas |
+| **`ROTAS_DE_ADMIN`** — nova | exige sessão, dispensa espaço, **exige concessão de admin ativa** | as rotas da §8, **uma a uma** |
 
-`verificarCoberturaDaMatriz` passa a considerar as três, e ganha uma asserção a mais: **toda rota registrada cujo caminho começa com `/v1/admin/` está em `ROTAS_DE_ADMIN`, e nenhuma rota fora desse prefixo está.** Uma rota de admin declarada como rota de cliente derruba o boot.
+##### `ROTAS_DE_ADMIN` é conjunto de chaves exatas, não prefixo (achado S3-8)
+
+A v3 descrevia a lista nova como *"`/v1/admin/*`, e só elas"*, enquanto as duas irmãs são `ReadonlySet<string>` de chaves exatas no formato `` `${metodo} ${caminho}` `` (`politica-acesso.ts:176`, `:203`, com `chaveDaRota` em `:228-230`). Uma lista com semântica de prefixo entre duas de chave exata é a assimetria que o próximo leitor resolve errado — e resolve na direção permissiva, porque prefixo é mais fácil de escrever.
+
+> **Normativo:** `ROTAS_DE_ADMIN: ReadonlySet<string>`, com as **chaves exatas** de cada rota da §8, enumeradas à mão. Uma rota nova sob `/v1/admin/` exige uma linha nova aqui, e é isso que se quer.
+
+**O prefixo vive num lugar só: a asserção de boot.** Ele não é critério de pertencimento; é o mecanismo que confere a lista contra o roteador real, nas duas direções:
+
+- toda rota registrada cujo caminho começa com `/v1/admin/` **está** em `ROTAS_DE_ADMIN` — pega a rota de admin que alguém esqueceu de declarar;
+- nenhuma chave de `ROTAS_DE_ADMIN` aponta para caminho **fora** desse prefixo — pega a rota de cliente que alguém colou na lista para fazê-la passar.
+
+`verificarCoberturaDaMatriz` (`politica-acesso.ts:258-266`, chamado em `aplicacao.ts:119` com as rotas que o `onRoute` de `aplicacao.ts:107-114` de fato registrou) passa a considerar as três listas e a rodar essa asserção. Uma rota de admin declarada como rota de cliente derruba o boot.
 
 **Consequência aceita, e é a maior parte do orçamento do épico:** cada tela do cliente que o operador precisa ver tem **rota própria sob `/v1/admin/`**, com projeção própria, contagem própria e linha de auditoria própria. Não há reuso dos controladores do cliente. A alternativa — um `Autenticado` sintético — grava uma linha na abertura e **nenhuma** nas N leituras seguintes, o que torna falsa a propriedade central do painel.
 
@@ -161,7 +280,16 @@ O orçamento, escrito para não ser descoberto no meio: são **três telas de cl
 
 #### 1.5 · A trava de tipo é de **compilação**, e o teste dela também
 
-`ContextoDoTenant` (`tenancy.ts:16-19`) passa a ser um *branded type* que **só** `resolverTenant` produz; `ContextoDeAdmin` é outro, que **só** `abrirEspacoComoAdmin` produz. `comTenant` deixa de aceitar `{ tenantId: string }` montado à mão.
+`ContextoDoTenant` (`tenancy.ts:16-19`) passa a ser um *branded type* que **só** `resolverTenant` produz. São quatro tipos, e cada um tem exatamente um produtor e um consumidor:
+
+| Tipo | Produzido só por | Aceito só por | Papel |
+|---|---|---|---|
+| `ContextoDoTenant` | `resolverTenant` | `comTenant` | `mavia_app` |
+| `ContextoDeOperador` | o ramo de admin do guard (§5) | `comAdmin` | `mavia_admin` |
+| `ContextoDeAdmin` | `abrirEspacoComoAdmin` | `comTenantDeAdmin` | `mavia_admin` |
+| `ContextoDeAdminEscrita` | `abrirEspacoComoAdminParaEscrita` | `comTenantDeAdminEscrita` | `mavia_admin_escrita` |
+
+`comTenant` deixa de aceitar `{ tenantId: string }` montado à mão.
 
 **O limite, escrito:** um *branded type* é apagado na compilação, e `as unknown as ContextoDoTenant` compila e passa nas quatro regras de `eslint.config.js`. Isto **não é** um controle de runtime, e não é o que impede o vazamento — quem impede é a topologia de §1.1 a §1.4. O que a trava compra é que o caminho errado precise de uma linha que ninguém escreve por acidente.
 
@@ -169,18 +297,57 @@ Por isso o teste dela é **de compilação** (`@ts-expect-error` num arquivo den
 
 *A construir.* Verificado que hoje não há trava alguma: `tenancy.ts:64-84`.
 
-#### 1.6 · Uma instrução liga o log ao alvo
+#### 1.6 · Uma instrução liga o log ao alvo — e são **duas** funções, não uma
 
 `SET LOCAL` não aceita parâmetro, então a v1 implicava interpolar um parâmetro de rota em SQL — e `node-pg` aceita múltiplas instruções numa consulta simples. A linha de auditoria podia dizer cliente A enquanto o `app.tenant_id` virava cliente B.
 
 ```sql
-admin.abrir_espaco(p_alvo uuid, p_motivo motivo_de_acesso,
-                   p_referencia text, p_acao text, p_rota text)
+admin.abrir_espaco            (p_alvo uuid, p_motivo motivo_de_acesso,
+                               p_referencia text, p_acao text, p_rota text)
+
+admin.abrir_espaco_para_escrita (p_alvo uuid, p_motivo motivo_de_acesso,
+                               p_referencia text, p_acao text, p_rota text)
 ```
 
-Ela faz o `INSERT INTO auditoria` **e** o `set_config('app.tenant_id', p_alvo, true)` com o **mesmo parâmetro vinculado, na mesma instrução**. Divergência entre o que foi auditado e o que foi efetivado deixa de ser expressável.
+Cada uma faz o `INSERT INTO auditoria` **e** o `set_config('app.tenant_id', p_alvo, true)` com o **mesmo parâmetro vinculado, na mesma instrução**. Divergência entre o que foi auditado e o que foi efetivado deixa de ser expressável.
 
-Fora dessa função, `params` alimentando `set_config('app.tenant_id', …)` é defeito (ADR 0024, D1, condição 2).
+##### Por que a segunda função existe (achado S3-2)
+
+A v3 construiu a propriedade central — *não se toca o espaço de um cliente sem registrar* — **só para leitura**, e classificava na §8 quatro ações como **escrita financeira** sem que nenhuma passasse por `abrir_espaco`. O `EXECUTE` em `admin.abrir_espaco` estava apenas na linha de `mavia_admin`, e as quatro escritas rodam em `mavia_admin_escrita`.
+
+O problema não era estético. As duas tabelas de escrita têm RLS por `app.tenant_id` **sem cláusula `TO`**, e portanto valem para o papel novo:
+
+- `assinaturas` — `assinatura_do_tenant`, `0025_assinatura.sql:136-138`;
+- `pagamentos_manuais` — `tenant_isolation`, escrita neste documento (Modelo de dados), no padrão de `0006_nucleo.sql:271-277`.
+
+Sem o GUC, `nullif(current_setting('app.tenant_id', true), '')` é `NULL`, o `UPDATE` afeta **zero linhas** e o `INSERT` viola o `WITH CHECK`. O implementador tinha três saídas, e as três eram ruins:
+
+| Saída | Por que não |
+|---|---|
+| `set_config` direto na rota | É **o defeito que a ADR 0024 D1, condição 2 nomeia por escrito**, e o veto 10 de `sistema.md:991` repete: *"`params` alimentando `set_config('app.tenant_id', …)` é defeito"* |
+| Conceder `EXECUTE` em `abrir_espaco` a `mavia_admin_escrita`, de improviso na migration | Funciona e apaga a separação: a função de leitura passaria a habilitar escrita, e a classe no log seria a de leitura |
+| **Escrever a segunda função** | É a resposta certa, e faltava no documento |
+
+**A divergência que a v3 reintroduzia pelo outro lado.** Sem uma função que faça `INSERT INTO auditoria` e `set_config` com o **mesmo parâmetro vinculado**, nada amarra o que foi auditado ao que foi efetivado na escrita. É literalmente a divergência "auditou A, efetivou B" que esta seção declarou não-expressável — fechada na leitura e aberta na escrita.
+
+**`admin.abrir_espaco_para_escrita`:**
+
+- `EXECUTE` **só** a `mavia_admin_escrita`. `mavia_admin` não a alcança, e `mavia_admin_escrita` não alcança `admin.abrir_espaco` (§1.2);
+- grava a linha com a **classe de escrita financeira**, não a de leitura em massa, e com `p_acao`/`p_rota` identificando qual das quatro escritas da §8 vem a seguir;
+- é `SECURITY DEFINER` de `mavia_admin_definer`, com `SET search_path = pg_catalog, public`, como toda função de `admin` (§2, obrigação 2);
+- verifica a concessão ativa por dentro, como `admin.listar_clientes` (§2, obrigação 4). Chamá-la sem concessão devolve **erro**, não zero linhas.
+
+##### A ordem é normativa: `set_config` primeiro, `INSERT` depois (achado S3-7)
+
+A v3 fixava *"mesma instrução, mesmo parâmetro vinculado"* e **não fixava a ordem** — e é a ordem que decide se o `INSERT INTO auditoria` é aceito. Sob a policy de `auditoria` (§3.3), se o `INSERT` for avaliado **antes** do `set_config`, a linha não tem `app.tenant_id` no contexto e uma policy de escrita por tenant a recusaria.
+
+> **Normativo, nas duas funções:** `set_config('app.tenant_id', p_alvo, true)` **precede** o `INSERT INTO auditoria`, dentro do mesmo corpo e com o mesmo parâmetro vinculado. A instrução é uma só do ponto de vista do chamador — ele chama a função e recebe o resultado ou o erro —, e a ordem interna é esta, sem alternativa.
+
+A ordem é o inverso da §3.2 (*"grava primeiro, apaga depois"*), e as duas estão certas: lá o registro precisa preceder o efeito irreversível; aqui o contexto precisa preceder o registro, porque é o contexto que torna o registro possível. **A §3.3 fecha essa dependência pelo outro lado** — a policy de `INSERT` em `auditoria` é `WITH CHECK (true)` —, e as duas travas coexistem de propósito: a ordem não depende da policy, e a policy não depende da ordem.
+
+##### A proibição, por extenso, sobre as duas
+
+Fora de **`admin.abrir_espaco`** e de **`admin.abrir_espaco_para_escrita`**, `params` — ou qualquer valor vindo do caminho, do corpo, da query ou de um cabeçalho — alimentando `set_config('app.tenant_id', …)` é **defeito** (ADR 0024, D1, condição 2; `sistema.md:991`, veto 10). Vale para o pool do painel e para o pool do cliente, para código de rota, de serviço e de repositório, e não tem exceção sob revisão. As duas funções são o conjunto fechado de lugares onde um alvo de rota vira contexto de banco.
 
 #### 1.7 · `app.usuario_id` é sempre o do operador
 
@@ -204,7 +371,7 @@ A v2 proibia *"policy que conheça administradores"*. Isso continua valendo e co
 >
 > **Por quê:** `resolverTenant` (`tenancy.ts:126-139`) consulta `tenant_usuarios` **sem predicado de `usuario_id`**, confiando inteiramente na policy. Uma policy que reconheça admin faria o operador mandar `X-Mavia-Tenant: <cliente>` no **app normal**, receber `papel`, e navegar o espaço pela interface do cliente — sem uma linha de auditoria.
 
-**O caminho que a v2 não viu.** A convenção do repositório é que toda `SECURITY DEFINER` pertence a `mavia_auth` — oito `ALTER FUNCTION … OWNER TO mavia_auth` em bloco (`0004_cadastro.sql:317-324`), mais `0025_assinatura.sql:156`. E `mavia_auth` já lê cross-tenant, com `USING (true)`, exatamente a projeção que a listagem precisa:
+**O caminho que a v2 não viu.** A convenção do repositório é que toda `SECURITY DEFINER` pertence a `mavia_auth` — **nove** `ALTER FUNCTION … OWNER TO mavia_auth` em bloco (`0004_cadastro.sql:317-325`; a v3 dizia oito em `:317-324`, e contei as nove), mais `0025_assinatura.sql:156`. E `mavia_auth` já lê cross-tenant, com `USING (true)`, exatamente a projeção que a listagem precisa:
 
 ```
 usuarios         cadastro_le_usuarios          0004_cadastro.sql:52
@@ -216,11 +383,13 @@ assinaturas      assinatura_lida_pelo_webhook  0025_assinatura.sql:163
 
 Uma função escrita por alguém seguindo a convenção nasce dona de `mavia_auth`, lê a base inteira, não viola uma vírgula de nenhuma proibição escrita, e não grava uma linha. **Aqui, a convenção é o exploit.**
 
-`mavia_migrate` também está fora: ele tem `BYPASSRLS` (`bootstrap-papeis.sql:27`), e a função viraria leitura irrestrita de tudo, contra `sistema.md:983`.
+`mavia_migrate` também está fora: ele tem `BYPASSRLS` (`bootstrap-papeis.sql:27`), e a função viraria leitura irrestrita de tudo, contra o veto 8 de `sistema.md:989`.
 
 **A v2 corrigida — cinco obrigações, todas verificáveis:**
 
 1. **Dono próprio.** `admin.listar_clientes(p_busca text, p_pagina int)` pertence a `mavia_admin_definer`, `NOLOGIN NOBYPASSRLS`, cujas **únicas** policies são as estritamente necessárias à projeção fixa: espaço, titular, plano, estado, vence em, uso. Nenhum dado financeiro do razão.
+
+   **E ele precisa dos `GRANT` que a §1.2 agora lista.** Sendo `SECURITY DEFINER` dele, a função roda **como ele**: sem `USAGE` nos esquemas, sem `SELECT` nominal em `tenants`, `usuarios`, `tenant_usuarios` e `assinaturas`, sem `SELECT ON concessoes_de_admin` (obrigação 4) e sem `INSERT ON auditoria` (obrigação 5), ela falha na primeira execução. Policy sem `GRANT` não lê nada — este é o achado S3-3, e o fechamento dele está na §1.2.
 2. **`SET search_path = pg_catalog, public`** na função — como as `SECURITY DEFINER` existentes já têm, pelo motivo escrito em `0004_cadastro.sql:92-94`: quem controla o `search_path` da sessão redireciona uma chamada de dentro da função para um objeto que ele mesmo criou.
 3. **Busca por parâmetro vinculado**, nunca `format` ou `||` sobre o termo.
 4. **A checagem de concessão é dentro da função.** Ela verifica que `nullif(current_setting('app.usuario_id', true), '')::uuid` tem concessão ativa em `concessoes_de_admin`. `EXECUTE` concedido só a `mavia_admin` **não** é controle suficiente enquanto papel for alcançável; a checagem interna é. **Critério de aceite: chamá-la sem concessão ativa devolve erro, não linhas.**
@@ -247,7 +416,7 @@ auditoria (particionada por mês em ocorrido_em)
 | `rota` + `registros` | "Abriu o espaço" não responde ao art. 48, que pede a natureza dos dados afetados. A matriz §6 já exige contagem de registros do ator programático |
 | `ator_tipo` | Separa titular, membro e operador. É o que permite a projeção de `/atividades`, o que torna a **DA-2 reversível por configuração**, e o que o predicado normativo de `retencao-e-eliminacao.md:576` usa |
 
-**`tenant_id` é nulo** para eventos que não pertencem a espaço nenhum — conceder e revogar admin. A policy padrão os torna invisíveis a todos, o que é o desejado; fica declarado para que não seja acidente.
+**`tenant_id` é nulo** para eventos que não pertencem a espaço nenhum — conceder e revogar admin. A v3 dizia aqui que *"a policy padrão os torna invisíveis a todos"* e **nunca escrevia a policy**: afirmava o comportamento de um objeto que o documento não especificava. A RLS de `auditoria` está agora na **§3.3**, e a linha de `tenant_id` nulo só é gravável por causa dela.
 
 **De/para em claro para enum, id e dinheiro.** A v1 mandava hashear tudo, citando o §8.2 ao contrário: ele diz *"em claro apenas quando o valor é o objeto da mudança"*, e dar baixa em pagamento é exatamente esse caso. Hash e redação ficam para texto livre e PII. **Já feito:** o §8.2 recebeu os campos de `assinaturas` na linha "estruturais — em claro" (`retencao-e-eliminacao.md:563`).
 
@@ -297,6 +466,18 @@ Então **R-08 é insatisfazível a partir da primeira linha de auditoria escrita
 
 **Sexta trava da §4.3:** papel `mavia_eliminacao`, `NOLOGIN`, com `DELETE ON auditoria` **exclusivamente** por procedimento `SECURITY DEFINER` que aceita apenas `tenant_id` presente em `eliminacoes_journal` com eliminação concluída, e que grava em `retencao_execucoes`. Sem `BYPASSRLS`, sem `SELECT` em tabela de negócio, e o texto da regra 18 intacto para `mavia_app`.
 
+**Os `GRANT` de `mavia_eliminacao`, corrigidos (achado S3-3, consequência c).** A v3 lhe concedia `DELETE ON auditoria` e escrita em `retencao_execucoes`, e mais nada — e com isso **o caminho de eliminação da R-08 nunca rodava**. O gatilho `auditoria_imutavel()` abaixo é `plpgsql` **sem `SECURITY DEFINER`**, logo roda como o invocador, e o `EXISTS` dele faz `SELECT 1 FROM retencao_execucoes`. Sem `SELECT` nessa tabela, o `EXISTS` levanta `permission denied` — e o `DELETE` que a isenção existe para permitir morre no próprio gatilho que o autoriza.
+
+Duas saídas, e **a escolha é a primeira:**
+
+```sql
+GRANT SELECT ON retencao_execucoes TO mavia_eliminacao;
+```
+
+A alternativa era marcar `auditoria_imutavel()` como `SECURITY DEFINER` de `mavia_migrate`, com `SET search_path`. **Rejeitada, e o motivo é o mesmo da §2:** `mavia_migrate` tem `BYPASSRLS` (`bootstrap-papeis.sql:27`), e um gatilho `SECURITY DEFINER` dele passaria a avaliar o `EXISTS` sem RLS nenhuma, em toda linha de `auditoria` que qualquer papel tocar — inclusive as de `mavia_app`. Trocar um `GRANT SELECT` de uma tabela sem dado pessoal (`retencao-e-eliminacao.md:263`: *"não contém dado pessoal — só classe, contagem, horário e versão da política"*) por um caminho `BYPASSRLS` no gatilho mais quente do log é péssimo negócio. O `GRANT` nominal é a resposta menor e é a certa.
+
+O `GRANT` não afrouxa nada: `retencao_execucoes` é append-only para todos os papéis, `SELECT` nela não revela dado de cliente, e `mavia_eliminacao` continua sem `SELECT` em tabela de negócio.
+
 **A reconciliação — porque o gatilho de §3.1 e este `DELETE` se excluem mutuamente.** A v2 pôs os dois no mesmo documento sem notar. A isenção existe, e é escrita aqui na forma mais estreita que o Postgres permite. Três condições **simultâneas**, dentro do próprio gatilho:
 
 ```sql
@@ -329,6 +510,46 @@ A ordem importa e é normativa: **grava primeiro, apaga depois.** Invertida, a i
 
 **O job de retenção continua fora de escopo, agora com data.** A dimensão de prazo é dívida datável — a primeira obrigação vence 5 anos após o primeiro acesso de admin. A de eliminação não é adiável, porque o gatilho é o titular e o prazo é de 15 dias (art. 19 II). Por isso o **desenho dos grants sai deste épico**.
 
+#### 3.3 · A RLS de `auditoria`, escrita (achado S3-7)
+
+A v3 **nunca especificou** a RLS desta tabela e mesmo assim afirmava o comportamento dela. `auditoria` não existe em migration nenhuma — confirmado: o nome aparece em `0013`, `0022` e `0026`, e não há `CREATE TABLE auditoria`. Não havia policy a herdar; havia um vazio, e o vazio se preenche sozinho com o padrão do repositório.
+
+**E o padrão do repositório recusa três linhas que este épico existe para gravar.** O padrão é `0006_nucleo.sql:271-277`: `USING` e `WITH CHECK` iguais, por `tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid`. Aplicado a `auditoria`, ele barra:
+
+| Linha | Por que o `WITH CHECK` falha |
+|---|---|
+| Conceder e revogar admin (§4) | `tenant_id` é **nulo** por desenho, e `NULL = <uuid>` não é verdadeiro |
+| A busca de `admin.listar_clientes` (§2, obrigação 5) | A listagem roda **sem `app.tenant_id`** — é a terceira exceção de `sistema.md:644-650`, e não ter contexto de tenant é a definição dela |
+| A abertura de `admin.abrir_espaco` | Passa **se** o `set_config` preceder o `INSERT`, e falha se não preceder. A §1.6 agora fixa a ordem, mas a policy não pode depender disso |
+| O `INSERT … SELECT` do procedimento de saída da `DEFAULT` (§3.1.1) | Reinsere linhas de **muitos tenants numa instrução só**. Nenhum valor de `app.tenant_id` satisfaz todas |
+
+**As três formas, e a contenção fica onde ela pertence.**
+
+```sql
+ALTER TABLE auditoria ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auditoria FORCE  ROW LEVEL SECURITY;
+
+-- 1 · Escrita: aceita a linha, para os papéis que têm INSERT.
+CREATE POLICY auditoria_grava ON auditoria
+  FOR INSERT TO mavia_app, mavia_admin, mavia_admin_escrita, mavia_admin_definer
+  WITH CHECK (true);
+
+-- 2 · Leitura do cliente: por tenant, e só o que é do espaço dele.
+CREATE POLICY auditoria_do_tenant ON auditoria
+  FOR SELECT TO mavia_app
+  USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
+```
+
+**`WITH CHECK (true)` na escrita não é relaxamento, e a frase precisa ser dita inteira:** a contenção do que entra em `auditoria` **não é a policy de escrita** — é o `GRANT` nominal (§1.2: só quatro papéis têm `INSERT`, e nenhum tem `UPDATE` ou `DELETE`) somado ao gatilho de §3.1, que barra todo `UPDATE`, `DELETE` e `TRUNCATE` inclusive do dono. Uma policy de escrita por tenant aqui não protegeria nada que esses dois já não protejam, e quebraria as quatro linhas acima. **Ela seria uma trava que só acerta o caminho legítimo.**
+
+E `tenant_id` nulo continua fazendo o que a §3 queria: pela policy 2, `USING (NULL = …)` não é verdadeiro, e as linhas de conceder e revogar admin são **invisíveis a `mavia_app`** — para todo tenant, inclusive o do próprio operador. Agora isso é consequência de uma policy escrita, e não de uma suposição.
+
+**A leitura do registro pelo painel é por projeção própria, e não por policy de `SELECT`.** Não existe policy `FOR SELECT TO mavia_admin` em `auditoria`, e o `GRANT` de `mavia_admin` na tabela é `INSERT` **apenas** (§1.2). `GET /v1/admin/registro` é servida por uma função de `admin`, `SECURITY DEFINER` de `mavia_admin_definer`, com policy própria `TO mavia_admin_definer` e **projeção fixa que não inclui `ip_hash` nem `user_agent_hash`** (§1.3). Três razões:
+
+1. É o que mantém a decisão da §1.3 no banco, e não só no código da rota. Uma coluna vetada não sai porque **não há `GRANT`** dela para o papel que atende a requisição.
+2. Ler o registro **é evento** (§6.3) e notifica os outros operadores — o que exige que a leitura passe por uma função que grava, e não por um `SELECT` livre.
+3. A forma dessa policy é o mesmo risco que a **Erros e bordas · S3-4** registra: policy de definer numa listagem não tem `app.tenant_id` para se estreitar. Está nomeado lá, e não escondido aqui.
+
 ### 4 · Quem é admin
 
 `administradores` com PK em `usuario_id` não representa conceder → revogar → conceder sem um `UPDATE` que apaga a história — o mesmo defeito que a v1 usou para recusar a flag booleana.
@@ -359,7 +580,15 @@ CREATE TRIGGER dois_admins_ativos_na_revogacao
 
 O gatilho é **só de `UPDATE`**, e isso é deliberado: o `INSERT` da primeira concessão é o bootstrap, e não há isenção para escrever. Uma vez que a segunda concessão existe, a contagem não desce mais. Não há GUC de escape, não há `current_user` privilegiado, não há caminho.
 
-**O que ele não cobre, dito:** ele impede *cair* para um, não impede *operar* com um enquanto a segunda concessão nunca foi criada. Esse degrau é fechado por DP-32 (`decisoes-do-produto.md:128`), que já proíbe o painel de ir a produção com cliente real antes do MFA.
+**O que ele não cobre, dito — e a v3 mentia sobre o fechamento (achado S3-1).** O gatilho impede *cair* para um; não impede *operar* com um enquanto a segunda concessão nunca foi criada. A v3 escrevia que *"esse degrau é fechado por DP-32"*, tratando-a como decisão tomada.
+
+**DP-32 não é decisão tomada.** Verifiquei `docs/decisoes-do-produto.md`: a linha 130 é o título da seção **"Em aberto — esperando o dono"**, a 132 diz *"Estas ainda não foram decididas"*, e a coluna da tabela é **"Padrão vigente"**, não "Escolha". DP-32 é a linha **136** — a v3 citava `:128`, que é um `---`.
+
+> **A verdade, escrita:** o degrau **não está fechado**. Ele está **coberto por um padrão vigente que o dono pode mudar** — DP-32 (`decisoes-do-produto.md:136`), *"até quando o painel de admin fica sem MFA?"*, cujo padrão vigente é *"antes do primeiro cliente pagante; enquanto não houver escolha, o painel não vai a produção com cliente real"*.
+
+Enquanto esse padrão valer, o painel não alcança cliente real com um operador só, e o degrau não é exercitável. Se o dono responder outra coisa — qualquer marco posterior ao primeiro cliente pagante —, **o degrau reabre no mesmo ato**, e a §8.1.1 volta à mesa junto com ele. O que este documento pode fazer é não chamar de fechado o que está apoiado numa pendência: a invariante de dois administradores cobre a queda, e a cobertura do degrau restante é emprestada.
+
+**O dono do produto ainda não respondeu DP-32, DP-33 nem DP-34.** Nenhuma das três é tratada aqui como decidida.
 
 **O painel concede admin?** Não. Só o script. Se um dia a tela existir, ela é o `PATCH /membros/:usuarioId` deste épico e merece as quatro travas de R-4 (`matriz-de-acesso.md:53-60`).
 
@@ -396,6 +625,26 @@ E o guard **não é global**. Verificado: `app.module.ts:71-85` registra `APP_IN
 
 O teto de `RL-ADMIN-ABERTURA` é decisão do dono do produto no ticket; o que este documento fixa é que **a classe existe e é por operador, não por rota**.
 
+**DP-33 e `RL-ADMIN-ABERTURA` são o mesmo controle puxado em direções opostas — e a v3 não mencionava DP-33 em lugar nenhum.**
+
+DP-33 (`decisoes-do-produto.md:137`, também **em aberto**, padrão vigente **30 minutos**) pergunta *"por quanto tempo um `motivo` + `referencia` autoriza aberturas de espaço"*, e o padrão registra que *"cada abertura continua gerando sua própria linha de auditoria; o que a janela reaproveita é a hipótese"*.
+
+As duas medidas tratam da mesma sequência de aberturas e discordam sobre o que ela significa:
+
+| | O que ela otimiza | O que ela assume da sequência |
+|---|---|---|
+| **Janela de 30 min (DP-33)** | Atrito do operador legítimo: um chamado que percorre três telas não pede motivo três vezes | Que uma rajada de aberturas sob a mesma hipótese é **normal** |
+| **`RL-ADMIN-ABERTURA`** | Detecção: transformar varredura da base em alarme | Que uma rajada de aberturas é **o sinal** que se quer ver |
+
+Reconciliação, e ela é normativa aqui porque não depende da resposta do dono:
+
+1. **A janela reaproveita a hipótese; ela nunca reaproveita a linha de auditoria.** Toda abertura chama `admin.abrir_espaco` e grava sua própria linha, com seu `tenant_alvo`, sua rota e sua contagem. É o que o próprio padrão de DP-33 diz, e é o que a §1.6 constrói.
+2. **A janela é por `motivo` + `referencia` + operador, e nunca por operador sozinho.** Uma referência autoriza aberturas dentro dela; ela não autoriza *outra* referência. Sem isso, "30 minutos" viraria trinta minutos de acesso livre à base inteira.
+3. **`RL-ADMIN-ABERTURA` conta aberturas, não hipóteses**, e por isso a janela **não** o afrouxa: reaproveitar a hipótese poupa o formulário, não o contador. Se poupasse, o teto deixaria de existir no exato cenário para o qual foi criado — o operador comprometido com uma referência válida, que é o do parágrafo da tabela acima.
+4. **O teto por operador é o limite superior; a janela é conforto abaixo dele.** Quando os dois discordam, quem vence é o teto.
+
+Com essas quatro linhas, uma resposta do dono a DP-33 — 30 minutos, 5 minutos ou nenhuma janela — muda o atrito do operador e **não** muda o controle. É o que permite tirar DP-33 do caminho crítico do ticket sem fingir que ela está decidida.
+
 ### 6 · O que compensa a ausência de MFA
 
 A v1 listava três compensações e o gate mostrou que nenhuma era isolamento. A ordem abaixo mudou na v3: o item que era o primeiro de cinco passou a ser condição.
@@ -417,13 +666,26 @@ Duas ressalvas viram ticket próprio, porque a senha sozinha não fecha o assunt
 1. **A senha vai em `command:`** (`infra/producao/docker-compose.yml:87-88`) e em `environment:` (`:93`, `REDISCLI_AUTH`), e as duas aparecem em `docker inspect` e na lista de processos do container. Preferível arquivo de configuração montado, ou ACL com o segredo fora da linha de comando.
 2. **O usuário `default` do Redis mantém `CONFIG SET`, `FLUSHALL` e `KEYS`.** Uma ACL fecha o resto — mas ela precisa cobrir **todos** os prefixos em uso, e são cinco, não três: `sess:` e `acessos:` (`cofre-de-acesso.ts:47-48`), `oauth:` (`estado-do-oauth.ts:44`), `tentativas:` (`limite-de-tentativas.ts:65`) e o `bull:` do BullMQ (fila `recorrencias`, `agendador.ts:32,42`). Uma ACL que esqueça `tentativas:` desliga o limite de tentativas de login, que é a defesa das rotas públicas (`politica-acesso.ts:214-216`). O ticket carrega a lista dos cinco, e um teste que sobe a aplicação contra o Redis com a ACL aplicada e exercita os cinco caminhos.
 
-E o que continua a construir, independente disso: instância ou banco separado para sessões, e **revalidação da sessão no Postgres a cada requisição sob `/admin`** — a linha de `sessoes` que o Redis afirma existir precisa existir, não estar revogada, e pertencer àquele usuário.
+E o que continua a construir, independente disso: instância ou banco separado para sessões, e **revalidação da sessão no Postgres a cada requisição sob `/admin`**.
+
+**O que essa revalidação compra, e contra quem ela não vale (achado S3-12).** A v3 a descrevia como *"a linha de `sessoes` que o Redis afirma existir precisa existir, não estar revogada, e pertencer àquele usuário"* — uma frase que soa como defesa contra quem controla o Redis, e não é.
+
+| | |
+|---|---|
+| **Compra** | **Revogação com efeito em no máximo uma requisição.** Hoje o access token vive 15 minutos no cofre (`cofre-de-acesso.ts:35`, `VIDA_DO_ACESSO_EM_SEGUNDOS = 15 * 60`) e nada consulta o Postgres no caminho quente: revogar uma sessão de admin deixa até 15 minutos de acesso vivo. É o achado **A-15** da matriz, e sob `/admin` esses 15 minutos são a base inteira. Com a revalidação, o próximo request morre. É também o que sustenta a §6.4 — privilégio resolvido por requisição, nunca carimbado |
+| **Não compra** | **Nada contra quem lê ou escreve o Redis.** O cofre grava `{sessaoId, usuarioId}` **em claro**, como JSON (`cofre-de-acesso.ts:37-40` define o tipo; `:59-72` faz o `SET` do `JSON.stringify(dono)` sob a chave `sess:<sha256 do token>`). A revalidação pega esses dois valores e pergunta ao Postgres se **eles** conferem — logo, ela confirma exatamente os dois valores que o atacante acabou de copiar de lá. Quem lê o Redis já tem uma sessão válida de admin, e a revalidação diz que sim, ela é válida |
+
+Ou seja: a revalidação fecha a janela de **revogação**, e não a de **comprometimento do cofre**. Contra o cofre, o que vale é o `requirepass` (acima), a ACL dos cinco prefixos, e o isolamento de rede — todos em **Condições de deploy**. As duas coisas são necessárias e nenhuma substitui a outra; escrevê-las juntas foi o que deu à v3 a aparência de uma defesa que ela não tem.
 
 #### 6.3 · Detecção — e o destino da notificação é fora do produto
 
 Ler o log **é evento**, e toda abertura de espaço e leitura do registro **notifica os outros operadores**, mais um resumo diário. Nada no desenho da v1 detectava: os itens eram preventivos ou forenses, e um log que ninguém lê descobre o incidente quando o cliente reclama. DA-2 proíbe avisar o cliente; não proíbe avisar o segundo operador.
 
-**O destino é externo ao painel** — decisão **DP-34**, já tomada (`decisoes-do-produto.md:130`): *"uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema."* Concretamente: e-mail para endereço fora do domínio da aplicação, entregue por caminho que o painel comprometido não silencia. Uma notificação escrita numa tabela do próprio banco, ou num canal que o operador administra, não conta como detecção.
+**O destino é externo ao painel** — **DP-34, padrão vigente e decisão pendente** (`decisoes-do-produto.md:138`, na seção *"Em aberto — esperando o dono"*): *"uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema."* Concretamente: e-mail para endereço fora do domínio da aplicação, entregue por caminho que o painel comprometido não silencia. Uma notificação escrita numa tabela do próprio banco, ou num canal que o operador administra, não conta como detecção.
+
+**A v3 escrevia "decisão DP-34, já tomada" e citava `:130`** — que é o **título** da seção de pendentes. É o achado S3-1, verificado linha a linha. O texto acima é o padrão vigente, e o épico o implementa como tal.
+
+> **O que muda se o dono responder outra coisa.** DP-34 carrega, no próprio texto de `decisoes-do-produto.md:138`, a consequência: *"se a resposta for 'não', a LIA da §8.1.1 precisa ser refeita"*. E a §8.1.1 é a LIA que sustenta a **DA-1 inteira** — leitura completa dos dados financeiros dos clientes. Uma resposta negativa a DP-34 não ajusta a §6.3: ela reabre o balanceamento que autoriza o épico. Por isso a pendência é **registrada como risco do épico**, e não escondida como detalhe de implementação de uma seção.
 
 Com a §4.1, o conjunto "os outros operadores" deixa de poder ser vazio.
 
@@ -433,9 +695,9 @@ Resolvido contra `concessoes_de_admin`, **nunca carimbado no token**. *Verificad
 
 #### 6.5 · Reautenticação nas escritas
 
-Com o ticket carregando o **`tenant_alvo`** — sem isso, um ticket emitido para "dar baixa" autoriza a mesma escrita em outro cliente dentro da janela. O mecanismo de step-up está especificado em `matriz-de-acesso.md:459`; `exigeReautenticacao()` existe em `politica-acesso.ts:239-241` e **ninguém o consulta**. O lugar é o guard, e este épico o implementa junto com o `APP_GUARD` da §5.
+Com o ticket carregando o **`tenant_alvo`** — sem isso, um ticket emitido para "dar baixa" autoriza a mesma escrita em outro cliente dentro da janela. O mecanismo de step-up está especificado em `matriz-de-acesso.md:459`; `exigeReautenticacao()` existe em `politica-acesso.ts:239-241` e tem **um único consumidor no repositório**, o teste `membros.test.ts:274-276`, que apenas confere que a matriz marca `PATCH /v1/membros/:usuarioId`. Ou seja: **nenhum consumidor de runtime** — o predicado existe, é testado, e nada no caminho da requisição o lê. *A v3 dizia "ninguém o consulta", o que o teste desmente pela letra; a propriedade verdadeira, e a que importa, é a ausência de consumidor de runtime.* O lugar é o guard, e este épico o implementa junto com o `APP_GUARD` da §5.
 
-> **O que a reautenticação compra, exatamente:** ela protege contra **sessão** roubada, não contra **senha** roubada — que é o risco que a ausência de MFA declara. Vale a pena e não fecha o buraco. **MFA continua sendo a única mudança que altera a natureza do risco**, e DP-32 já fixou o marco: antes do primeiro cliente pagante (`decisoes-do-produto.md:128`).
+> **O que a reautenticação compra, exatamente:** ela protege contra **sessão** roubada, não contra **senha** roubada — que é o risco que a ausência de MFA declara. Vale a pena e não fecha o buraco. **MFA continua sendo a única mudança que altera a natureza do risco**, e o marco é **padrão vigente, não decisão**: DP-32 (`decisoes-do-produto.md:136`) propõe *antes do primeiro cliente pagante*, e segue **em aberto** (§4.1).
 
 ### 7 · Endurecimento do §3.9 que este épico exige
 
@@ -443,7 +705,10 @@ O gate não conseguiu construir exploit confiável, mas a carga muda: hoje `app.
 
 - `comUsuario` (`tenancy.ts:93-111`) passa a definir `app.tenant_id` como `''` explicitamente — hoje ele nunca o limpa;
 - `resolverTenant` (`tenancy.ts:133`) ganha o predicado `AND usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid` (§2);
-- `emTransacao` (`tenancy.ts:37-59`) libera com `cliente.release(erro)` no caminho de erro, **destruindo** em vez de reaproveitar a conexão que falhou em desfazer. Hoje o `finally` da linha 57 a devolve ao pool em qualquer caso.
+- `emTransacao` (`tenancy.ts:37-59`) libera com `cliente.release(erro)` no caminho de erro, **destruindo** em vez de reaproveitar a conexão que falhou em desfazer. Hoje o `finally` da linha 57 a devolve ao pool em qualquer caso;
+- `comAdmin` (§1.4) nasce já com essa disciplina: define `app.tenant_id` como `''` explicitamente, e não conta com a conexão estar limpa.
+
+**O que este épico *não* precisa mais fazer aqui:** a emenda ao §3.9 do `sistema.md` **já está aplicada** — `sistema.md:644` diz três exceções, `:648` nomeia `admin.listar_clientes` pela ADR 0024, `:650` traz o critério de aceite, e os vetos 8 e 10 (`:989` e `:991`) acompanham. Verificado; ver **Condições de deploy · C-10**. O que resta na §3.9 é o código dos três marcadores acima, não o texto.
 
 ### 8 · O que o admin faz
 
@@ -452,11 +717,13 @@ O gate não conseguiu construir exploit confiável, mas a carga muda: hoje `app.
 | Buscar clientes | `GET /v1/admin/clientes` | painel · `mavia_admin` | leitura em massa — uma linha por busca, com termo hasheado e contagem |
 | Ver o perfil de um cliente | `GET /v1/admin/clientes/:tenantId` | painel · `mavia_admin` | leitura em massa |
 | Abrir o espaço em leitura | `POST /v1/admin/clientes/:tenantId/abrir` + rotas próprias por tela | painel · `mavia_admin` | leitura em massa, com rota e contagem |
-| Trocar plano ou intervalo | `PATCH /v1/admin/clientes/:tenantId/assinatura` | painel · `mavia_admin_escrita` | escrita financeira |
-| Adicionar tempo (`periodo_fim`) | idem | painel · `mavia_admin_escrita` | escrita financeira |
-| Dar baixa em pagamento | `POST /v1/admin/clientes/:tenantId/pagamentos` | painel · `mavia_admin_escrita` | escrita financeira |
-| Cadastrar cliente novo | `POST /v1/admin/clientes` | painel · `mavia_admin_escrita` | escrita financeira |
-| **Ler o registro** | `GET /v1/admin/registro` | painel · `mavia_admin` | **segurança** — e notifica os outros operadores |
+| Trocar plano ou intervalo | `PATCH /v1/admin/clientes/:tenantId/assinatura` | painel · `mavia_admin_escrita`, **via `admin.abrir_espaco_para_escrita`** | escrita financeira |
+| Adicionar tempo (`periodo_fim`) | idem | idem | escrita financeira |
+| Dar baixa em pagamento | `POST /v1/admin/clientes/:tenantId/pagamentos` | idem | escrita financeira |
+| Cadastrar cliente novo | `POST /v1/admin/clientes` | idem | escrita financeira |
+| **Ler o registro** | `GET /v1/admin/registro` | painel · `mavia_admin`, por função de `admin` com projeção fixa (§3.3) | **segurança** — e notifica os outros operadores |
+
+**As quatro escritas passam por `admin.abrir_espaco_para_escrita`, e isso é o achado S3-2 fechado.** Na v3, nenhuma delas passava por abertura nenhuma: a propriedade *"não se toca o espaço de um cliente sem registrar"* estava construída só para leitura, e as quatro escritas classificadas aqui como financeiras não tinham sequer como definir `app.tenant_id` sem cometer o defeito que a ADR 0024 D1, condição 2 nomeia. A função está em §1.6; o `EXECUTE` dela, em §1.2.
 
 **A frase correta, que a v2 errava.** A v2 fechava esta tabela com *"o admin lê e não edita dado financeiro do cliente"*, quatro linhas depois de classificar quatro ações como **escrita financeira**. `assinaturas` e `pagamentos_manuais` **são** dado financeiro: são o contrato do cliente e o dinheiro que ele pagou.
 
@@ -533,6 +800,47 @@ CREATE POLICY tenant_isolation ON pagamentos_manuais
 | Revogação que deixaria menos de dois admins ativos | Recusada pelo banco, `ERRCODE P0001` (§4.1) |
 | `RESET ROLE` numa rota do painel | Aterrissa em `mavia_admin`, que não escreve em tabela nenhuma (§1.2) |
 
+### A armadilha que a correção de `mavia_auth` recria um esquema adiante (achado S3-4)
+
+Recomendação sem veto no parecer, e a observação mais incômoda dele. Registrada aqui inteira, porque é o tipo de coisa que se descobre na terceira função e não na primeira.
+
+**O argumento.** A §2 tirou o dono da `SECURITY DEFINER` de `mavia_auth` porque `mavia_auth` já lê cinco tabelas cross-tenant com `USING (true)`, e uma função escrita pela convenção nasceria lendo a base inteira. A correção foi criar `mavia_admin_definer` e torná-lo o dono. Mas as policies **novas** desse papel terão forma ampla pela mesma razão estrutural que as de `mavia_auth` têm: **numa listagem não existe `app.tenant_id` por definição** — é a terceira exceção de `sistema.md:644-650`. Uma policy `TO mavia_admin_definer` sobre `tenants` não tem por onde se estreitar a não ser por um predicado que alguém precisa lembrar de escrever.
+
+**E o teste previsto institucionaliza a convenção.** A asserção *"o dono de toda função em `admin` é `mavia_admin_definer`"* (§Testes) é um controle correto contra o erro da v2 e, ao mesmo tempo, uma instrução: a próxima pessoa que escrever uma função em `admin` vai fazê-la pertencer a `mavia_admin_definer` para o teste passar — e ela nascerá **com acesso às policies amplas da primeira**. A segunda função de admin nasce lendo a base inteira, sem violar uma linha deste documento. É exatamente o formato do achado que reprovou a v2, um esquema à frente.
+
+**As duas saídas propostas pelo revisor:**
+
+| | Como | Custo |
+|---|---|---|
+| **A** — predicado de concessão dentro das policies do definer | Cada policy `TO mavia_admin_definer` carrega `EXISTS (SELECT 1 FROM concessoes_de_admin WHERE usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid AND revogada_em IS NULL)` | A checagem passa a valer para **toda** função do esquema, inclusive as que ninguém releu. Mas o predicado só qualifica *quem chama*, não *quais linhas* — ele não estreita a projeção, e a leitura da base inteira continua possível para um operador com concessão |
+| **B** — esquema `admin` travado numa lista fechada de duas funções, com emenda à ADR para a terceira | Asserção de boot ou de esquema: `pg_proc` sob `admin` contém exatamente `listar_clientes` e `abrir_espaco*`. Uma função nova derruba o teste até a ADR 0024 ser emendada | Fricção deliberada. Não impede a terceira função; obriga que ela seja decidida em vez de escrita |
+
+**Recomendo B, com A junto — e a ordem importa.**
+
+B é o controle real: ele ataca a *convenção* (o mecanismo do achado), não o sintoma. A já era obrigação 4 da §2 para `listar_clientes`; generalizá-la para todas as policies do definer é barato e fecha o caso do operador sem concessão. O que A **não** faz é impedir a terceira função de nascer ampla, e é por isso que ela não basta sozinha — é a mesma distância entre "a policy está certa" e "a policy está no lugar certo" que reprovou a v2.
+
+**Não é bloqueante e não é escopo desta revisão.** Fica registrado com nome, saída recomendada e o critério que dispara a decisão: **a primeira proposta de terceira função no esquema `admin`.** Nesse momento, ou a lista fechada é emendada por ADR, ou o padrão de policy do definer é revisto — e não se resolve em code review.
+
+---
+
+## Condições de deploy
+
+**C-1 a C-5 do parecer bloqueiam o primeiro ticket e estão fechadas neste documento.** As cinco abaixo (C-6 a C-10) bloqueiam o **deploy**, não o ticket. Estão aqui, com o achado de origem, para não se perderem entre a implementação e a subida — é a lista que o `sre-devops-vps` executa e contra a qual o gate confere antes de o painel alcançar cliente real.
+
+| # | Condição | Origem | Onde já está tratado | Estado |
+|---|---|---|---|---|
+| **C-6** | **Allowlist de IP ou mTLS no Traefik à frente de `/admin`**, mais hostname distinto e escopo de cookie distinto | §6.1 | §6.1 é explícita: *"sem allowlist ou mTLS em produção, o painel não sobe"*. `retencao-e-eliminacao.md:523` já a lista como *a construir* | **Falta** — é o pressuposto das outras compensações do MFA, não uma delas |
+| **C-7** | **`requirepass` implantado em produção**, mais a **ACL dos cinco prefixos**, com teste que sobe a aplicação contra o Redis com a ACL aplicada e exercita os cinco caminhos | §6.2 | Corrigido no repositório (`infra/producao/docker-compose.yml:83-88`, `:111`), **deploy pendente**. Os cinco prefixos: `sess:` e `acessos:` (`cofre-de-acesso.ts:47-48`), `oauth:`, `tentativas:`, `bull:` | **Falta** — até o deploy rodar, quem alcança a rede `dados` é o admin |
+| **C-8** | **`RL-ADMIN-ABERTURA` implementada**, com teto por hora e por dia por operador, e **reconciliada com DP-33** | §5 | A reconciliação em quatro pontos está escrita na §5 e não depende da resposta do dono. O **teto numérico** é decisão do dono no ticket | **Falta** — a classe está especificada; o valor e o código, não |
+| **C-9** | **Os três papéis nascem `NOLOGIN`**, com a credencial entregue como **provisionamento** — nunca na migration —, e **`statement_timeout` nos três** | §1.1, §1.2 | `matriz-de-acesso.md:500` é normativa (*"`statement_timeout` definido no papel de banco, não por chamada"*) e `0001_fundacao.sql:149-150` é o precedente: `ALTER ROLE mavia_app SET statement_timeout = '5s'` e `mavia_jobs`, `'60s'`. `bootstrap-papeis.sql` é o precedente do provisionamento fora da migration | **Falta.** Proposta: **5 s** para `mavia_admin` e `mavia_admin_escrita` (são rotas HTTP, como `mavia_app`); `mavia_admin_definer` herda o do chamador e recebe o seu próprio por simetria. A listagem que varre a base é o caso que o teto existe para pegar |
+| **C-10** | **A emenda ao `sistema.md` §3.9 aplicada no `sistema.md`** | ADR 0024 | **Verifiquei os três lugares e a emenda já está aplicada:** `sistema.md:644` diz *"as exceções … são três, e a lista é fechada"*, `:648` nomeia `admin.listar_clientes` citando a ADR 0024, `:650` traz o critério de aceite, e o veto 8 em **`:989`** diz *"três exceções nomeadas em §3.9. A terceira entrou pelo ADR 0024"*. O veto 10, em `:991`, já nomeia `/v1/admin/` com as três condições | **Feito** — o parecer descreve um estado anterior do arquivo. Fica na lista para ser conferido no deploy, não para ser executado |
+
+**Notas de forma sobre C-9, porque são o tipo de coisa que se erra na migration:**
+
+- `NOLOGIN` primeiro, credencial depois, e nunca no mesmo arquivo. Migration é forward-only e vive no repositório; senha em migration é senha versionada.
+- `mavia_admin_definer` é `NOLOGIN` **para sempre** — ele nunca autentica, só é dono de função (§1.2).
+- Os `GRANT` de esquema e de coluna da §1.2 rodam como `mavia_migrate`, ou não têm efeito e não falham (§1.2, o modo de falha).
+
 ---
 
 ## Testes
@@ -542,15 +850,34 @@ Cada correção da v3 tem a asserção que a prova, no nível onde a propriedade
 | Nível | O que prova | Fecha |
 |---|---|---|
 | **Compilação** (`tsc --noEmit`) | `comTenant` **não aceita** `{ usuarioId, tenantId }` montado à mão — `@ts-expect-error` que falha o typecheck se o erro deixar de ocorrer | §1.5 · a trava de tipo, no nível certo |
-| **Compilação** | `comTenantDeAdmin` **não aceita** um `ContextoDoTenant`, e `comTenant` não aceita um `ContextoDeAdmin` — as duas direções | §1.4, §1.5 |
+| **Compilação** | Os quatro contextos da §1.5 não se substituem: cada `@ts-expect-error` cobre um par trocado, e os pares de leitura e de escrita de admin (`ContextoDeAdmin` × `ContextoDeAdminEscrita`) inclusive — é o que impede o caminho de leitura de habilitar uma escrita | §1.4, §1.5, §1.6 |
 | **Esquema** (Postgres real) | `mavia_admin` tem `SELECT` **exatamente** nas colunas da lista fechada. Uma coluna nova em tabela alcançada pelo painel **falha o teste** até ser classificada | §1.3 · a propriedade que o `GRANT` por coluna compra |
-| **Esquema** | Nenhum dos sete campos da R-5 está em nenhum `GRANT` de nenhum dos três papéis | §1.3 |
+| **Esquema** | Nenhum dos **nove** campos de `CAMPOS_VETADOS` está em nenhum `GRANT` de nenhum dos três papéis — e a lista lida pelo teste é **a mesma constante** que a varredura do OpenAPI (AB-07) lê. Duas listas divergentes é o defeito que o achado S3-6 descobriu | §1.3 |
+| **Esquema** | `auditoria.ip_hash` e `auditoria.user_agent_hash` **não** estão no `GRANT` de `mavia_admin`, e não aparecem na projeção de `GET /v1/admin/registro` | §1.3 · a decisão escrita como decisão |
+| **Esquema** | `has_schema_privilege` devolve verdadeiro para `USAGE` em `public` **e** em `admin`, para os três papéis. *Este teste existe porque um `GRANT` sem dono não falha* (`bootstrap-papeis.sql:36-44`) | §1.2 · o `USAGE` que a v3 esqueceu |
+| **Esquema** | `mavia_admin_definer` tem `SELECT` nominal nas quatro tabelas da projeção, `SELECT ON concessoes_de_admin` e `INSERT ON auditoria`; e **não** tem `UPDATE`, `DELETE` nem `EXECUTE` sobre tabela do razão | §1.2, §2 obrigações 4 e 5 |
+| **Esquema** | Os quatro papéis que gravam em `auditoria` têm `INSERT`; **nenhum** tem `UPDATE`, `DELETE` ou `TRUNCATE` | §1.2, §3.1, §3.3 |
+| **Esquema** | `mavia_eliminacao` tem `SELECT ON retencao_execucoes` — sem ele o gatilho de §3.2 levanta `permission denied` e a R-08 nunca roda | §3.2 · S3-3 (c) |
 | **Esquema** | `pg_auth_members`: `mavia_app` não é membro dos três; nenhum dos três é membro de `mavia_app`; `mavia_admin` não é membro de `mavia_admin_escrita`; nenhum dos quatro é membro de `mavia_eliminacao`; nenhum tem `rolbypassrls` | §1.2 · as não-relações |
+| **Esquema** | `mavia_admin_definer` tem `rolcanlogin = false` | §1.2, C-9 |
+| **Esquema** | Os três papéis têm `statement_timeout` em `pg_roles.rolconfig` | Condições de deploy · C-9 |
 | **Esquema** | O dono de toda função em `admin` é `mavia_admin_definer`, e **nenhuma** é de `mavia_auth` ou `mavia_migrate` | §2 · ADR 0024 D4 |
+| **Esquema** | O esquema `admin` contém **exatamente** `listar_clientes`, `abrir_espaco` e `abrir_espaco_para_escrita`. Uma quarta função derruba o teste até a ADR 0024 ser emendada | Erros e bordas · S3-4, saída B |
 | **Esquema** | Toda função em `admin` tem `SET search_path` em `proconfig` | §2, obrigação 2 |
+| **Esquema** | `auditoria` tem RLS `ENABLE` + `FORCE`, uma policy `FOR INSERT` com `WITH CHECK (true)` para os quatro papéis que gravam, uma `FOR SELECT TO mavia_app` por `tenant_id`, e **nenhuma** policy `FOR SELECT TO mavia_admin` | §3.3 |
+| **Esquema** | `EXECUTE ON admin.abrir_espaco` é só de `mavia_admin`; `EXECUTE ON admin.abrir_espaco_para_escrita` é só de `mavia_admin_escrita`. Nenhum dos dois alcança a função do outro | §1.6 · S3-2 |
 | **Integração** (Postgres real) | Na conexão do painel, `BEGIN; SET LOCAL ROLE …; RESET ROLE; UPDATE lancamentos …` leva `permission denied` — **o teste que a v2 não teria passado** | §1.1 |
 | **Integração** | `mavia_admin` leva `permission denied` em `UPDATE`, `INSERT` e `DELETE` de `lancamentos`, `contas`, `faturas`, `transferencias` e `saldo_snapshots` | §8 |
+| **Integração** | `admin.listar_clientes` roda **na primeira execução**, contra o esquema recém-migrado, com o pool do painel — sem `permission denied` de esquema, de tabela, de `concessoes_de_admin` ou de `auditoria`. *É o teste que a v3 não teria passado* | §1.2, §2 · S3-3 (a) e (b) |
 | **Integração** | `admin.listar_clientes` chamada por um `app.usuario_id` **sem concessão ativa** devolve **erro**, não zero linhas | §2, obrigação 4 · critério de aceite da ADR 0024 |
+| **Integração** | Passar o pool **do cliente** a `comTenantDeAdmin` leva `permission denied to set role`, e passar o pool **do painel** a `comTenant` leva o mesmo — nos dois casos **antes** de qualquer `set_config` e de qualquer leitura. *O `SET LOCAL ROLE` redundante é o que produz essa falha; removê-lo faz este teste passar a verde por outro caminho, e por isso ele vem em par com o seguinte* | §1.4 · S3-10 |
+| **Integração** | `comTenantDeAdmin`, `comAdmin` e o caminho de escrita emitem `SET LOCAL ROLE` como **primeira** instrução da transação, verificado por espionagem das consultas emitidas. Remover a instrução redundante quebra este teste | §1.4 · S3-10, a frase normativa |
+| **Integração** | `comAdmin` define `app.usuario_id` do operador e define `app.tenant_id` como `''`; sob ele, um operador **não** enxerga a concessão de outro operador em `concessoes_de_admin` | §1.4 · S3-9 |
+| **Integração** | Cada uma das quatro escritas da §8 passa por `admin.abrir_espaco_para_escrita` e **afeta linhas**. Chamada sem a abertura, o `UPDATE` de `assinaturas` afeta **zero linhas** e o `INSERT` em `pagamentos_manuais` viola o `WITH CHECK` — as duas metades do achado, provadas | §1.6 · S3-2 |
+| **Integração** | A linha gravada por `abrir_espaco_para_escrita` tem a **classe de escrita financeira** e o mesmo `tenant_id` que virou `app.tenant_id`. Divergência entre auditado e efetivado não é produzível pela rota | §1.6 · S3-2 |
+| **Integração** | `mavia_admin_escrita` leva `permission denied` ao chamar `admin.abrir_espaco`, e `mavia_admin` ao chamar `admin.abrir_espaco_para_escrita` | §1.6, §1.2 |
+| **Integração** | As três linhas de `auditoria` que o padrão de policy recusaria são **aceitas**: conceder admin (`tenant_id` nulo), a busca de `listar_clientes` (sem `app.tenant_id`), e o `INSERT … SELECT` do procedimento de saída da `DEFAULT`, com linhas de vários tenants numa instrução | §3.3 · S3-7 |
+| **Integração** | `mavia_app` **não enxerga** as linhas de conceder e revogar admin, para nenhum valor de `app.tenant_id` | §3.3 |
 | **Integração** | `admin.listar_clientes` grava a linha da busca na mesma transação, com termo hasheado e contagem | §2, obrigação 5 |
 | **Integração** | Termo de busca com aspas e `%` não altera o conjunto de resultados nem produz erro de sintaxe — parâmetro vinculado | §2, obrigação 3 |
 | **Integração** | Toda leitura por `abrirEspacoComoAdmin` deixa **exatamente uma** linha, com `motivo`, `referencia`, `rota` e contagem, e o `tenant_id` da linha é o mesmo que virou `app.tenant_id` | §1.6 |
@@ -569,7 +896,9 @@ Cada correção da v3 tem a asserção que a prova, no nível onde a propriedade
 | **Integração** | Admin revogado perde acesso na requisição seguinte | §6.4 |
 | **Integração** | Sabotagem: auditoria que falha desfaz a escrita, e a resposta não sai | §1.8 |
 | **Boot** (contra a aplicação real) | **Toda** rota registrada tem veredito declarado — pública, só-sessão, admin, ou papel — e o guard global entrega esse veredito. Um controlador novo sem entrada derruba o boot | §5 · o achado S-4 |
-| **Boot** | Toda rota com prefixo `/v1/admin/` está em `ROTAS_DE_ADMIN`, e nenhuma rota fora do prefixo está | §1.4 |
+| **Boot** | Toda rota registrada com prefixo `/v1/admin/` está em `ROTAS_DE_ADMIN` (**chave exata**, não prefixo), e nenhuma chave de `ROTAS_DE_ADMIN` aponta para caminho fora do prefixo — as duas direções. O prefixo aparece **só aqui** | §1.4 · S3-8 |
+| **Integração** | `exigeReautenticacao()` passa a ter consumidor de runtime: uma rota marcada na matriz e chamada sem step-up recebe 401 com o marcador próprio. Hoje o único consumidor é `membros.test.ts:274-276` | §6.5 · S3-12 |
+| **Integração** | Revogar a sessão de um operador tira o acesso na **requisição seguinte**, sem esperar os 15 minutos de vida do access token (`cofre-de-acesso.ts:35`) — o que a revalidação no Postgres compra, medido | §6.2 · A-15 |
 | **Boot** | `ROTAS_PUBLICAS` tem consumidor: o teste falha se a constante voltar a ser lista morta | §5, item 3 |
 | **Integração** | As 13 rotas de `ROTAS_SEM_TENANT` continuam respondendo o que respondiam **depois** de `APP_GUARD` ligado — rota a rota, com o código de status esperado | §5 · o risco registrado |
 | **Integração** | `pagamentos_manuais` tem RLS `ENABLE` + `FORCE` e policy de tenant; um segundo tenant não enxerga a linha do primeiro | Modelo de dados |
@@ -583,7 +912,7 @@ Cada correção da v3 tem a asserção que a prova, no nível onde a propriedade
 
 ## O que este épico deliberadamente não faz
 
-- **MFA.** A única mudança que altera a natureza do risco. DP-32 fixou o marco: antes do primeiro cliente pagante (`decisoes-do-produto.md:128`).
+- **MFA.** A única mudança que altera a natureza do risco. O marco é **padrão vigente, não decisão tomada**: DP-32 (`decisoes-do-produto.md:136`, seção *"Em aberto — esperando o dono"*) propõe *antes do primeiro cliente pagante*, e o dono ainda não respondeu. Enquanto o padrão valer, o painel não vai a produção com cliente real — e é dele que a §4.1 empresta o fechamento do degrau de "operar com um administrador só".
 - **O job de retenção da auditoria.** Prazo é dívida datável; o **desenho dos grants não é**, e sai daqui (§3.2).
 - **Log fora da máquina.** É o único controle que vale contra quem tem o servidor. Não está neste escopo, e a §3.1.2 diz exatamente o que isso deixa aberto.
 - **Nível intermediário de acesso.** Toda hipótese custa o mesmo acesso, que é o mais amplo possível. A necessidade é defensável **por hipótese**, não **por linha** — limite registrado na ADR 0024 (Consequências) e em `retencao-e-eliminacao.md:547`.
