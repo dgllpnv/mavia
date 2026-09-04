@@ -192,15 +192,23 @@ describe('as seis não-relações — valem tanto quanto os privilégios', () =>
     // O que **não** é aceitável é a aresta existir sem ninguém saber. Esta
     // asserção fixa a lista: se um quinto papel aparecer como membro, alguém
     // concedeu algo, e o teste cai.
-    const r = await banco.cliente.query<{ pai: string; filho: string }>(
-      `SELECT pai.rolname AS pai, filho.rolname AS filho
+    // **Conjunto, e não contagem.** A versão anterior comparava contra quatro
+    // literais e quebrou quando a migration 0032 precisou de um `GRANT …
+    // WITH SET TRUE` explícito para transferir a posse das funções: no
+    // Postgres 16, filiações com concedentes diferentes são **linhas
+    // diferentes** em `pg_auth_members`, e passaram a ser seis.
+    //
+    // A propriedade que interessa nunca foi quantas linhas existem — é **quem**
+    // aparece nelas. Contar media o mecanismo; o conjunto mede a regra.
+    const r = await banco.cliente.query<{ filho: string }>(
+      `SELECT DISTINCT filho.rolname AS filho
          FROM pg_auth_members m
          JOIN pg_roles filho ON filho.oid = m.member
          JOIN pg_roles pai   ON pai.oid   = m.roleid
-        WHERE pai.rolname = ANY($1) ORDER BY pai.rolname`,
+        WHERE pai.rolname = ANY($1) ORDER BY 1`,
       [PAPEIS],
     )
-    expect(r.rows.map((l) => l.filho)).toEqual(['mavia_migrate', 'mavia_migrate', 'mavia_migrate', 'mavia_migrate'])
+    expect(r.rows.map((l) => l.filho)).toEqual(['mavia_migrate'])
   })
 })
 

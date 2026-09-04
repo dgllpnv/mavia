@@ -119,32 +119,28 @@ CREATE POLICY concessao_propria ON concessoes_de_admin
   USING (usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid);
 
 -- As duas famílias de função de `admin` conferem a concessão **por dentro**,
--- como a obrigação 4 da §2 exige. O predicado é o da saída A do achado S3-4:
--- a leitura ampla existe **para quem tem concessão ativa**, e não para quem
--- alcança o papel.
+-- como a obrigação 4 da §2 exige — e para conferir, precisam poder ler.
 --
--- Sem isso, o teste que o spec institucionaliza — "o dono de toda função em
--- `admin` é `mavia_admin_definer`" — faria a segunda função de admin nascer
--- lendo a base inteira, herdando policies amplas do dono.
+-- ⚠️ **`USING (true)`, e não o predicado de concessão — porque ele é impossível
+-- aqui.** Uma policy que guarda uma tabela **não pode consultar essa mesma
+-- tabela**: o Postgres responde `infinite recursion detected in policy for
+-- relation "concessoes_de_admin"`, e responde na primeira chamada.
+--
+-- O predicado da saída A do achado S3-4 vive nas policies das **outras**
+-- tabelas — `tenants`, `usuarios`, `tenant_usuarios`, `assinaturas` (migration
+-- 0032) —, que é onde ele de fato contém: é lá que a leitura ampla existe, e é
+-- lá que ela passa a valer só para quem tem concessão ativa.
+--
+-- Aqui, o alcance é contido pelo que estes dois papéis **são**: `NOLOGIN`, sem
+-- parentesco com papel de conexão nenhum, existindo apenas como donos de
+-- função. Eles leem `concessoes_de_admin` para responder "esta pessoa é
+-- operador?" — que é a pergunta que a checagem por dentro precisa fazer, e a
+-- única coisa que as funções expõem é o que elas retornam.
 CREATE POLICY concessao_para_o_definer ON concessoes_de_admin
-  FOR SELECT TO mavia_admin_definer
-  USING (
-    EXISTS (
-      SELECT 1 FROM concessoes_de_admin c
-       WHERE c.usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid
-         AND c.revogada_em IS NULL
-    )
-  );
+  FOR SELECT TO mavia_admin_definer USING (true);
 
 CREATE POLICY concessao_para_o_contrato ON concessoes_de_admin
-  FOR SELECT TO mavia_admin_contrato
-  USING (
-    EXISTS (
-      SELECT 1 FROM concessoes_de_admin c
-       WHERE c.usuario_id = nullif(current_setting('app.usuario_id', true), '')::uuid
-         AND c.revogada_em IS NULL
-    )
-  );
+  FOR SELECT TO mavia_admin_contrato USING (true);
 
 GRANT SELECT (id, usuario_id, email_no_ato, concedida_em, revogada_em)
   ON concessoes_de_admin TO mavia_admin;

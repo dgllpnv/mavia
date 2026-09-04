@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01, 03, 04
 
 # 05 · As funções `SECURITY DEFINER` do esquema `admin` — família de leitura
@@ -71,3 +71,27 @@ Depois deste ticket existem os três únicos lugares do sistema onde um identifi
 - Não cria as quatro funções de contrato (07, 08, 09) nem `admin.ler_registro` (10) — só o mecanismo da lista fechada que cada uma vai estender.
 - Não implementa `RL-ADMIN-ABERTURA` (ticket 10; **C-8** fixa o valor com o dono).
 - Não muda o texto do `sistema.md` §3.9: a emenda **já está aplicada** — `:644` diz três exceções, `:648` nomeia `admin.listar_clientes` citando a ADR 0024, `:650` traz o critério de aceite, e os vetos 8 e 10 estão em `:989` e `:991`. Verificado. **C-10** fica na lista para ser conferido no deploy, não executado.
+
+## Comments
+
+**2026-09-04 · entregue. 14 asserções.**
+
+`0032_funcoes_de_admin.sql`: `admin.tem_concessao_ativa`, as quatro policies do definer sobre a projeção, `admin.listar_clientes`, `admin.abrir_espaco` e `admin.abrir_espaco_para_escrita`. A lista fechada virou a constante `FUNCOES_DE_ADMIN` no teste, estendida de uma linha por ticket.
+
+**Três coisas que só apareceram executando, e as três são do Postgres.**
+
+**1 · `CREATE ROLE` no PG16 concede administração, não `SET ROLE`.** `ALTER FUNCTION … OWNER TO` respondeu *"must be able to SET ROLE"* mesmo com `mavia_migrate` sendo membro. A filiação automática que um papel `CREATEROLE` recebe vem com `ADMIN OPTION` e **sem** `SET` — administrar e assumir passaram a ser privilégios distintos. Concedido explicitamente, com `INHERIT FALSE`: ele precisa **poder assumir** para transferir posse, e não deve **herdar** em silêncio os privilégios do papel que lê a base inteira.
+
+**2 · Para possuir um objeto num esquema, o papel precisa de `CREATE` nele.** O Postgres confere o privilégio do **novo dono**, não o de quem transfere, e a mensagem é `permission denied for schema admin` — apontando para o esquema quando o problema é o destinatário.
+
+**3 · Uma policy que guarda uma tabela não pode consultar essa mesma tabela.** A policy do definer sobre `concessoes_de_admin` carregava o predicado de concessão, que lê `concessoes_de_admin`: `infinite recursion detected in policy`, na primeira chamada. O predicado da saída A do S3-4 ficou nas policies das **outras** tabelas, que é onde ele de fato contém — é lá que a leitura ampla existe. Aqui, `USING (true)`, contido pelo que os dois papéis são: `NOLOGIN`, sem parentesco com papel de conexão nenhum.
+
+**E um defeito de segurança meu, que a ACL denunciou.** Eu tinha posto `REVOKE ALL … FROM PUBLIC` **depois** do `ALTER … OWNER`. Um `REVOKE` de quem não é mais dono **não falha** — emite `WARNING` e não faz nada. É a mesma armadilha que `bootstrap-papeis.sql:36-44` documenta para o `GRANT`, do outro lado da moeda, e aqui era pior: a migration reportava sucesso e as funções nasciam com `EXECUTE` para `PUBLIC`. Medido em `proacl`: `{=X/mavia_admin_definer,…}` — o `=X` é `PUBLIC`. **Qualquer sessão autenticada poderia abrir o espaço de qualquer cliente.**
+
+Pego pelo critério 4, o do `EXECUTE` cruzado. Corrigido com `SET ROLE mavia_admin_definer` antes do `REVOKE`.
+
+**Uma asserção do ticket 01 media o mecanismo em vez da regra.** Ela comparava a filiação contra quatro literais e quebrou quando o `GRANT … WITH SET TRUE` acrescentou linhas: no PG16, filiações com concedentes diferentes são linhas diferentes. A propriedade nunca foi *quantas* linhas existem — é **quem** aparece nelas. Virou conjunto.
+
+**Fora deste ticket:** o predicado de `usuario_id` em `resolverTenant` e o `app.tenant_id` explícito em `comUsuario` (itens 5 e 6 do "o que entra") não entraram — são mudanças no caminho do **cliente**, e entram junto com a rota que as exercita, no ticket 06.
+
+Verde: typecheck 9/9, lint 9/9, API **552** em 37 arquivos.
