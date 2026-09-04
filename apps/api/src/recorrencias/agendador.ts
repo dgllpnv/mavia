@@ -1,7 +1,7 @@
 import { Queue, Worker, type Job } from 'bullmq'
 import type Redis from 'ioredis'
 import type { Pool } from 'pg'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import { materializarRecorrencia } from './materializar.js'
 
 /**
@@ -71,7 +71,7 @@ export async function agendarMaterializacao(pool: Pool, redis: Redis): Promise<A
       for (const regra of regras.rows) {
         // Cada regra é materializada **no contexto do seu próprio espaço**: a
         // função só disse quais existem; o trabalho continua sob RLS.
-        const ctx = { tenantId: regra.tenant_id, usuarioId: regra.criado_por }
+        const ctx = contextoDoTenant(regra.criado_por, regra.tenant_id)
         criadas += await comTenant(pool, ctx, (c) =>
           materializarRecorrencia(c, ctx, regra.recorrencia_id),
         )

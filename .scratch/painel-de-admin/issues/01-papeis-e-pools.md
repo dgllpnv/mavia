@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 
 # 01 · Os quatro papéis, as três pools e os quatro contextos
 
@@ -103,3 +103,22 @@ Nenhuma. **C-9** é condição de deploy e não de ticket: o `NOLOGIN` + `statem
 3. **`mavia_migrate` vira membro automático dos quatro.** No Postgres 16 em diante, um papel com `CREATEROLE` recebe filiação com `ADMIN OPTION` sobre todo papel que cria — não há como criar sem essa aresta. É aceitável (ele já tem `BYPASSRLS`, é dono do esquema e não serve requisição), mas foi promovida de aresta invisível a **asserção nomeada**: se um quinto papel aparecer como membro, o teste cai.
 
 **Uma decisão de alcance que o ticket deixava em aberto.** "As tabelas do razão e do cadastro" virou lista fechada de vinte, com três grupos deliberadamente fora e a razão de cada um escrita na migration: credencial e sessão; segredo de provider e dado cru de terceiro; infraestrutura.
+
+
+**2026-09-04 · metade de código, entregue. Ticket fechado.**
+
+Contextos marcados com as cinco fábricas, as três unidades de trabalho do painel, e `contextos-nao-se-substituem.ts` com onze asserções de compilação — verificado que mordem: removendo a marca de `ContextoDeAdmin`, o `tsc` derruba o build com `TS2578, Unused '@ts-expect-error' directive`.
+
+**A marca custou 20 arquivos, e o que ela achou pagou a conta.** `membros.controller.ts` e `cobranca.controller.ts` passavam o `req.autenticado` **inteiro** para `comTenant` — com o `papel` junto. Compilava porque a forma bastava. É a mesma frouxidão estrutural que deixaria um contexto de administração entrar no caminho do cliente, e a marca a expôs sem que ninguém a procurasse. O `papel` agora fica de fora da unidade de trabalho, onde nunca teve o que fazer.
+
+E `revogacao.ts` tinha um `Contexto` próprio, com a mesma forma de `ContextoDoTenant` e portanto intercambiável com ele. Virou um alias: duas definições que se aceitam mutuamente não são dois tipos, são um com dois nomes — e o segundo nome só servia para esconder que a marca não valia ali.
+
+**Uma correção de robustez que entrou junto.** `emTransacao` devolvia a conexão ao pool no `finally`, **inclusive quando o próprio `ROLLBACK` falhava** — e uma conexão que não desfez a transação carrega o `SET LOCAL ROLE` e os GUCs da requisição que morreu. Agora `release(erro)` a destrói. Custa uma conexão nova; a alternativa custa contexto de um cliente vazando para o próximo.
+
+**As pools não entraram, e é decisão, não esquecimento.** Criá-las em `main.ts` agora abriria conexões ociosas que nada consome, e os papéis nascem `NOLOGIN` — a pool nem conectaria sem o provisionamento. Elas entram no **ticket 06**, com a primeira rota que as usa. Os critérios 12, 15 e 16 estão cumpridos com pools construídas no próprio teste, que é onde a propriedade precisa ser medida.
+
+**Correção no harness:** `poolComo(papel)` provisiona sob demanda em vez de depender de quem provisionou antes — cada arquivo de teste tem o próprio container, e o teste deixa de quebrar quando outro arquivo muda a senha que usa.
+
+**A asserção de C-9 mudou de alvo.** Ela media `rolcanlogin = false` depois de o harness provisionar — isto é, media o passo seguinte e legítimo. Agora afirma sobre o **texto da migration**: nenhum `LOGIN` fora de `NOLOGIN`, nenhum `PASSWORD`. O que precisa ser impossível é a senha entrar no repositório, porque migration é forward-only.
+
+Verde: typecheck 9/9, lint 9/9, API **494**.

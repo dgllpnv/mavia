@@ -21,7 +21,7 @@ import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { lerRegras, naturezaConfere, propor } from '../classificacao/classificacao.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import { detectar, provider } from '../conexoes/provider.js'
 
 /**
@@ -87,7 +87,7 @@ export class ImportacaoController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()
@@ -529,7 +529,7 @@ export class ConciliacoesController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()

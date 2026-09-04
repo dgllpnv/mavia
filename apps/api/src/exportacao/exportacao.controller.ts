@@ -3,7 +3,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Exportação — relatório **e** direito de portabilidade.
@@ -233,7 +233,7 @@ export class ExportacaoController {
   async exportar(@Req() req: FastifyRequest): Promise<Record<string, unknown>> {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    const ctx = { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    const ctx = contextoDoTenant(a.usuarioId, a.tenantId)
 
     return comTenant(this.pool, ctx, async (c) => {
       const dados: Record<string, unknown> = {

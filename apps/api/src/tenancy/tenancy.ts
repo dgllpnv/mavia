@@ -13,14 +13,106 @@ import type { Pool, PoolClient } from 'pg'
  * um vazamento silencioso. É a alavancagem máxima do sistema.
  */
 
-export interface ContextoDoTenant {
-  readonly usuarioId: string
-  readonly tenantId: string
-}
+/**
+ * ## Os contextos são marcados, e por quê
+ *
+ * Os cinco contextos têm a **mesma forma estrutural** — um ou dois `string`. Sem
+ * marca, o TypeScript os considera intercambiáveis, e passar o contexto de
+ * administração para `comTenant` compilaria: a rota do painel rodaria como
+ * `mavia_app`, com DML completo sobre o razão do cliente cujo `app.tenant_id`
+ * ela acabou de assumir. É o defeito que a v2 do spec não conseguia impedir.
+ *
+ * A marca é apagada na compilação e **não custa nada em tempo de execução**.
+ * Ela também não é uma trava de segurança: `as unknown as ContextoDoTenant`
+ * compila, e o `CLAUDE.md` §6 permite `as` com justificativa. Quem impede o
+ * vazamento é a topologia — pool próprio, papel próprio, sem parentesco. A
+ * marca impede o **engano**; o privilégio impede o **ato**.
+ *
+ * Por isso cada contexto tem **uma** fábrica e nenhuma outra: um `as` espalhado
+ * por treze controladores seria treze lugares onde a marca vira decoração.
+ */
+declare const especie: unique symbol
+
+type Marcado<E extends string> = { readonly [especie]: E }
+
+export type ContextoDoTenant = Readonly<{
+  usuarioId: string
+  tenantId: string
+}> &
+  Marcado<'tenant'>
 
 /** Contexto de quem está autenticado mas ainda não escolheu tenant (etapa 2). */
-export interface ContextoDeUsuario {
-  readonly usuarioId: string
+export type ContextoDeUsuario = Readonly<{ usuarioId: string }> & Marcado<'usuario'>
+
+/**
+ * O operador do painel, **sem espaço nenhum aberto**.
+ *
+ * É o contexto da listagem de clientes e da resolução de concessão — as duas
+ * coisas que acontecem antes de existir um espaço. Ele nunca alcança `comTenant`.
+ */
+export type ContextoDeOperador = Readonly<{ usuarioId: string }> & Marcado<'operador'>
+
+/**
+ * Um espaço de cliente aberto **em leitura** por um operador.
+ *
+ * Só `admin.abrir_espaco` produz isto, e a produção é o mesmo ato que grava a
+ * linha de auditoria (spec §1.6). Um contexto destes na mão significa que o
+ * registro já existe.
+ */
+export type ContextoDeAdmin = Readonly<{
+  usuarioId: string
+  tenantId: string
+}> &
+  Marcado<'admin'>
+
+/**
+ * Um espaço de cliente aberto **para escrita de contrato**.
+ *
+ * Marca distinta da de leitura de propósito: são pools diferentes, papéis
+ * diferentes e classes de auditoria diferentes. Se os dois compartilhassem a
+ * marca, o caminho de leitura habilitaria uma escrita em compilação — e o
+ * `permission denied` só apareceria em tempo de execução, na madrugada.
+ */
+export type ContextoDeAdminEscrita = Readonly<{
+  usuarioId: string
+  tenantId: string
+}> &
+  Marcado<'admin-escrita'>
+
+/**
+ * As fábricas. Cada `as` abaixo é o **único** do seu tipo em todo o repositório,
+ * e é o que o `CLAUDE.md` §6 pede quando exige justificativa para um `as`: a
+ * marca não existe em tempo de execução, então alguém precisa afirmá-la, e é
+ * melhor que seja aqui, uma vez, sob comentário, do que em treze controladores.
+ */
+export function contextoDoTenant(usuarioId: string, tenantId: string): ContextoDoTenant {
+  return { usuarioId, tenantId } as ContextoDoTenant
+}
+
+export function contextoDeUsuario(usuarioId: string): ContextoDeUsuario {
+  return { usuarioId } as ContextoDeUsuario
+}
+
+export function contextoDeOperador(usuarioId: string): ContextoDeOperador {
+  return { usuarioId } as ContextoDeOperador
+}
+
+/**
+ * **Chamada apenas por `admin.abrir_espaco`** (ticket 05), depois de a função
+ * ter gravado a auditoria e definido o GUC na mesma instrução. Chamá-la de
+ * outro lugar produz um contexto sem registro correspondente — que é
+ * exatamente a divergência "auditou A, efetivou B" que o spec §1.6 fecha.
+ */
+export function contextoDeAdmin(usuarioId: string, tenantId: string): ContextoDeAdmin {
+  return { usuarioId, tenantId } as ContextoDeAdmin
+}
+
+/** Irmã da anterior, para `admin.abrir_espaco_para_escrita`. */
+export function contextoDeAdminEscrita(
+  usuarioId: string,
+  tenantId: string,
+): ContextoDeAdminEscrita {
+  return { usuarioId, tenantId } as ContextoDeAdminEscrita
 }
 
 export class ContextoAusente extends Error {
@@ -49,12 +141,23 @@ async function emTransacao<T>(
     await configurar(cliente)
     const resultado = await trabalho(cliente)
     await cliente.query('COMMIT')
+    cliente.release()
     return resultado
   } catch (erro) {
-    await cliente.query('ROLLBACK')
+    // `release(erro)` **destrói** a conexão em vez de devolvê-la ao pool.
+    //
+    // O `finally` anterior a devolvia em qualquer caso, inclusive quando o
+    // próprio `ROLLBACK` falhava — e uma conexão que não desfez a transação
+    // carrega `SET LOCAL ROLE` e os GUCs da requisição que morreu. A próxima
+    // requisição a pegaria com o contexto de outra pessoa. Custa uma conexão
+    // nova; a alternativa custa um vazamento entre clientes.
+    try {
+      await cliente.query('ROLLBACK')
+      cliente.release()
+    } catch (falhaAoDesfazer) {
+      cliente.release(falhaAoDesfazer as Error)
+    }
     throw erro
-  } finally {
-    cliente.release()
   }
 }
 
@@ -128,7 +231,7 @@ export async function resolverTenant(
   usuarioId: string,
   tenantPedido: string,
 ): Promise<Pertencimento | null> {
-  return comUsuario(pool, { usuarioId }, async (cliente) => {
+  return comUsuario(pool, contextoDeUsuario(usuarioId), async (cliente) => {
     const r = await cliente.query<{ tenant_id: string; papel: Pertencimento['papel'] }>(
       'SELECT tenant_id, papel FROM tenant_usuarios WHERE tenant_id = $1',
       [tenantPedido],
@@ -136,4 +239,100 @@ export async function resolverTenant(
     const linha = r.rows[0]
     return linha ? { tenantId: linha.tenant_id, papel: linha.papel } : null
   })
+}
+
+
+// ---------------------------------------------------------------------------
+// O painel de administração — ADR 0024 D2 e D3, spec §1.1 e §1.4
+// ---------------------------------------------------------------------------
+//
+// As três funções abaixo usam **pools próprios**, autenticados diretamente
+// como os papéis do painel. Não é `SET ROLE` a partir do pool do cliente, e a
+// razão está medida contra Postgres 17:
+//
+//     BEGIN; SET LOCAL ROLE leitor; UPDATE t SET v=99;              -- denied
+//     BEGIN; SET LOCAL ROLE leitor; RESET ROLE; UPDATE t SET v=99;  -- UPDATE 1
+//
+// Uma instrução desfaz a trava. Com papel próprio e sem parentesco com
+// `mavia_app`, `RESET ROLE` aterrissa em quem não escreve.
+//
+// **O `SET LOCAL ROLE` continua sendo emitido, e é redundante de propósito.**
+// A conexão já está autenticada como o papel certo. Ele existe para que o pool
+// **errado** falhe: `comTenant` recebendo o pool do painel morre em
+// `SET LOCAL ROLE mavia_app` com `permission denied to set role`, e o inverso
+// também. Remover a instrução "redundante" faz o pool trocado passar a
+// funcionar em silêncio, com o papel errado. É verificação de coerência, não
+// sobra — spec §1.4, achado S3-10.
+
+/**
+ * O operador, sem espaço aberto. Listagem de clientes e resolução de concessão.
+ *
+ * Define `app.usuario_id` e **zera `app.tenant_id` explicitamente**: numa
+ * conexão de pool reaproveitada, o valor da requisição anterior sobrevive ao
+ * `SET LOCAL` da transação que terminou apenas se alguém o tiver definido com
+ * `SET`. Zerar é barato e remove a classe inteira de dúvida.
+ */
+export async function comAdmin<T>(
+  poolDoPainel: Pool,
+  contexto: ContextoDeOperador,
+  trabalho: (cliente: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!contexto.usuarioId) throw new ContextoAusente('app.usuario_id')
+
+  return emTransacao(
+    poolDoPainel,
+    'mavia_admin',
+    async (cliente) => {
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.usuario_id', contexto.usuarioId])
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.tenant_id', ''])
+    },
+    trabalho,
+  )
+}
+
+/**
+ * Um espaço de cliente aberto em leitura. **Nunca produz um `Autenticado`** —
+ * ADR 0024 D2 — e por isso os controladores do cliente não conseguem servi-lo.
+ */
+export async function comTenantDeAdmin<T>(
+  poolDoPainel: Pool,
+  contexto: ContextoDeAdmin,
+  trabalho: (cliente: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!contexto.usuarioId) throw new ContextoAusente('app.usuario_id')
+  if (!contexto.tenantId) throw new ContextoAusente('app.tenant_id')
+
+  return emTransacao(
+    poolDoPainel,
+    'mavia_admin',
+    async (cliente) => {
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.usuario_id', contexto.usuarioId])
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.tenant_id', contexto.tenantId])
+    },
+    trabalho,
+  )
+}
+
+/**
+ * Um espaço aberto para escrita de contrato. Pool **e** papel distintos do de
+ * leitura: `mavia_admin` não é membro de `mavia_admin_escrita`, então esta
+ * função recebendo o pool de leitura morre no `SET LOCAL ROLE`.
+ */
+export async function comTenantDeAdminEscrita<T>(
+  poolDeEscrita: Pool,
+  contexto: ContextoDeAdminEscrita,
+  trabalho: (cliente: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!contexto.usuarioId) throw new ContextoAusente('app.usuario_id')
+  if (!contexto.tenantId) throw new ContextoAusente('app.tenant_id')
+
+  return emTransacao(
+    poolDeEscrita,
+    'mavia_admin_escrita',
+    async (cliente) => {
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.usuario_id', contexto.usuarioId])
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.tenant_id', contexto.tenantId])
+    },
+    trabalho,
+  )
 }

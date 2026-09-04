@@ -21,7 +21,7 @@ import { COFRE, LIMITE } from '../redis/tokens.js'
 import { VIDA_DO_ACESSO_EM_SEGUNDOS, type CofreDeAcesso } from '../redis/cofre-de-acesso.js'
 import { LimiteExcedido, type LimiteDeTentativas } from '../redis/limite-de-tentativas.js'
 import { ESTADO_OAUTH, type EstadoDoOauth } from '../redis/estado-do-oauth.js'
-import { comUsuario } from '../tenancy/tenancy.js'
+import { comUsuario, contextoDeUsuario } from '../tenancy/tenancy.js'
 import {
   cookieDeSessao,
   cookieDoOauth,
@@ -238,7 +238,7 @@ export class GoogleController {
    * é uma função pura sobre elas.
    */
   private async decidir(id: IdentidadeDoGoogle): Promise<DecisaoDeEntrada> {
-    const fatos = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const fatos = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{
         usuario_id: string | null
         email: string | null
@@ -274,7 +274,7 @@ export class GoogleController {
   }
 
   private async entrar(id: IdentidadeDoGoogle): Promise<string> {
-    return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       await c.query('SELECT auth.registrar_login_federado($1, $2, $3)', [
         id.issuer,
         id.subject,
@@ -291,7 +291,7 @@ export class GoogleController {
   }
 
   private async cadastrar(id: IdentidadeDoGoogle): Promise<string> {
-    return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{ usuario_id: string }>(
         'SELECT * FROM auth.cadastrar_federado($1, $2, $3, $4, $5)',
         [id.issuer, id.subject, id.email, id.nome, 'Meu espaço'],
@@ -360,7 +360,7 @@ export class GoogleController {
     const refresh = randomBytes(32).toString('hex')
     const vida = VIDAS[plataforma]
 
-    const sessaoId = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const sessaoId = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO sessoes (usuario_id, familia_id, refresh_hash, plataforma,
                               expira_em, expira_absoluto_em)
@@ -380,7 +380,7 @@ export class GoogleController {
 
     const acesso = await this.cofre.emitir({ sessaoId, usuarioId })
 
-    const dados = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const dados = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const u = await c.query('SELECT id, nome, email FROM usuarios WHERE id = $1', [usuarioId])
       const t = await c.query(
         `SELECT t.id, t.nome, tu.papel

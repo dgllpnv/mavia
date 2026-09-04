@@ -23,7 +23,7 @@ import { COFRE, LIMITE } from '../redis/tokens.js'
 import type { CofreDeAcesso } from '../redis/cofre-de-acesso.js'
 import { VIDA_DO_ACESSO_EM_SEGUNDOS } from '../redis/cofre-de-acesso.js'
 import { LimiteExcedido, type LimiteDeTentativas } from '../redis/limite-de-tentativas.js'
-import { comUsuario } from '../tenancy/tenancy.js'
+import { comUsuario, contextoDeUsuario } from '../tenancy/tenancy.js'
 import { cookieDeSaida, cookieDeSessao, tokenDoCookie } from './cookie.js'
 import { SessaoGuard } from './sessao.guard.js'
 
@@ -186,7 +186,7 @@ export class SessoesController {
     const plataforma = this.plataformaDaRequisicao(req, corpo)
     const vida = VIDAS[plataforma]
 
-    const r = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const r = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const saida = await c.query<{
         desfecho: 'rotacionada' | 'reuso'
         sessao_id: string
@@ -264,14 +264,14 @@ export class SessoesController {
     // deixaria semanas de refresh vivas no cookie que o navegador ainda tem.
     const apresentado = tokenDoCookie(req.headers.cookie)
     if (apresentado) {
-      await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, (c) =>
+      await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), (c) =>
         c.query('SELECT * FROM auth.revogar_sessao($1, $2)', [
           hashDoToken(apresentado),
           'saida_do_usuario',
         ]),
       )
     } else {
-      await comUsuario(this.pool, { usuarioId }, (c) =>
+      await comUsuario(this.pool, contextoDeUsuario(usuarioId), (c) =>
         c.query(
           `UPDATE sessoes SET revogada_em = now(), motivo_revogacao = 'saida_do_usuario'
             WHERE id = $1 AND revogada_em IS NULL`,
@@ -301,7 +301,7 @@ export class SessoesController {
       )
     }
 
-    const ids = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const ids = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{ sessao_id: string }>(
         'SELECT * FROM auth.revogar_familia($1, $2)',
         [hashDoToken(apresentado), 'revogadas_pelo_usuario'],
@@ -385,7 +385,7 @@ export class SessoesController {
   private async buscarCredencial(
     email: string,
   ): Promise<{ usuario_id: string; senha_hash: string | null } | null> {
-    return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{ usuario_id: string; senha_hash: string | null }>(
         'SELECT usuario_id, senha_hash FROM auth.buscar_credencial($1)',
         [email],
@@ -400,7 +400,7 @@ export class SessoesController {
     plataforma: 'web' | 'mobile',
   ): Promise<string> {
     const vida = VIDAS[plataforma]
-    return comUsuario(this.pool, { usuarioId }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO sessoes (usuario_id, familia_id, refresh_hash, plataforma,
                               expira_em, expira_absoluto_em)
@@ -416,7 +416,7 @@ export class SessoesController {
   }
 
   private async carregarUsuario(usuarioId: string): Promise<unknown> {
-    return comUsuario(this.pool, { usuarioId }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ id: string; nome: string; email: string }>(
         'SELECT id, nome, email FROM usuarios WHERE id = $1 AND deleted_at IS NULL',
         [usuarioId],
@@ -428,7 +428,7 @@ export class SessoesController {
   }
 
   private async espacosDo(usuarioId: string): Promise<Espaco[]> {
-    return comUsuario(this.pool, { usuarioId }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<Espaco>(
         `SELECT t.id, t.nome, tu.papel FROM tenant_usuarios tu
            JOIN tenants t ON t.id = tu.tenant_id

@@ -1,5 +1,16 @@
+import { readFile } from 'node:fs/promises'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { subirPostgres, type BancoDeTeste } from './postgres.js'
+import { semearDoisTenants, subirPostgres, TENANT_A, USUARIO_A, type BancoDeTeste } from './postgres.js'
+import {
+  comAdmin,
+  comTenant,
+  comTenantDeAdmin,
+  comTenantDeAdminEscrita,
+  contextoDeAdmin,
+  contextoDeAdminEscrita,
+  contextoDeOperador,
+  contextoDoTenant,
+} from '../src/tenancy/tenancy.js'
 import { CAMPOS_VETADOS } from '../src/autorizacao/campos-vetados.js'
 
 /**
@@ -39,6 +50,7 @@ const RAZAO = ['lancamentos', 'contas', 'faturas', 'transferencias', 'saldo_snap
 
 beforeAll(async () => {
   banco = await subirPostgres()
+  await semearDoisTenants(banco.cliente)
 }, 120_000)
 
 afterAll(async () => {
@@ -46,16 +58,51 @@ afterAll(async () => {
 })
 
 describe('os quatro papéis existem, e com os atributos certos', () => {
-  it('nascem sem `LOGIN` — credencial é provisionamento, nunca migration (C-9)', async () => {
-    // O único `CREATE ROLE … LOGIN … PASSWORD` versionado do repositório tem a
-    // senha em claro, e migration é forward-only. Quem seguir esse precedente
-    // põe uma senha fixa num arquivo que roda em produção e não sai mais.
-    const r = await banco.cliente.query<{ rolname: string; rolcanlogin: boolean }>(
-      `SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname = ANY($1)`,
+  it('os quatro existem', async () => {
+    const r = await banco.cliente.query<{ rolname: string }>(
+      `SELECT rolname FROM pg_roles WHERE rolname = ANY($1)`,
       [PAPEIS],
     )
     expect(r.rows).toHaveLength(4)
-    for (const p of r.rows) expect(p.rolcanlogin).toBe(false)
+  })
+
+  it('**a migration não escreve `LOGIN` nem `PASSWORD`** — credencial é provisionamento (C-9)', async () => {
+    // A asserção é sobre o **texto da migration**, e não sobre o estado do
+    // banco: `LOGIN` chega depois, por provisionamento legítimo — o SRE em
+    // produção, a semente no ambiente local, `poolComo` aqui. Afirmar
+    // `rolcanlogin = false` mediria o passo seguinte, não este.
+    //
+    // O que precisa ser impossível é a senha entrar no repositório. Migration é
+    // forward-only: uma senha escrita ali fica no histórico para sempre, e o
+    // único `CREATE ROLE … LOGIN … PASSWORD` versionado que existe hoje é
+    // exatamente esse erro, herdado do bootstrap.
+    const sql = await readFile(
+      new URL('../migrations/0029_papeis_do_painel.sql', import.meta.url),
+      'utf8',
+    )
+    const instrucoes = sql
+      .split(/\r?\n/)
+      .filter((l) => !l.trimStart().startsWith('--'))
+      .join(' ')
+
+    // `NOLOGIN` contém `LOGIN`, então a busca usa limite de palavra e um
+    // lookbehind: sem eles a asserção falharia sobre a própria linha que a
+    // satisfaz.
+    expect(instrucoes).not.toMatch(/(?<!NO)\bLOGIN\b/)
+    expect(instrucoes).not.toMatch(/\bPASSWORD\b/)
+    expect(instrucoes).toMatch(/NOLOGIN/)
+  })
+
+  it('**os dois donos de função nunca logam**, nem sob provisionamento', async () => {
+    // `mavia_admin_contrato` e `mavia_admin_definer` são donos de função, não
+    // conexão. Um papel que loga é um papel que alguém alcança; o privilégio
+    // deles não deve ter porta — nem local, nem em teste, nem em produção.
+    const r = await banco.cliente.query<{ rolname: string; rolcanlogin: boolean }>(
+      `SELECT rolname, rolcanlogin FROM pg_roles
+        WHERE rolname IN ('mavia_admin_contrato','mavia_admin_definer')`,
+    )
+    expect(r.rows).toHaveLength(2)
+    for (const p of r.rows) expect(p.rolcanlogin, p.rolname).toBe(false)
   })
 
   it('**nenhum tem `BYPASSRLS`** — `sistema.md` §3.9', async () => {
@@ -292,5 +339,68 @@ describe('a medição que reprovou a v2', () => {
       /permission denied to set role|must be (a )?member/i,
     )
     await banco.cliente.query('ROLLBACK')
+  })
+})
+
+
+describe('a pool errada morre antes de tocar em dado', () => {
+  // A propriedade que a ADR 0024 D3 compra, e a razão de as três unidades de
+  // trabalho emitirem um `SET LOCAL ROLE` que parece redundante: a conexão já
+  // está autenticada como o papel certo, mas a instrução existe para que a
+  // conexão **errada** falhe. Remover a redundância faz a pool trocada passar a
+  // funcionar em silêncio, com o papel errado — achado S3-10.
+
+  it('**`comTenant` com a pool do painel** leva `permission denied to set role`', async () => {
+    const doPainel = await banco.poolComo('mavia_admin')
+    await expect(
+      comTenant(doPainel, contextoDoTenant(USUARIO_A, TENANT_A), async (c) => {
+        await c.query('SELECT 1 FROM lancamentos')
+        return 'nunca'
+      }),
+    ).rejects.toThrow(/permission denied to set role/i)
+  })
+
+  it('**`comTenantDeAdmin` com a pool do cliente** leva o mesmo', async () => {
+    const doCliente = await banco.poolComo('mavia_app')
+    await expect(
+      comTenantDeAdmin(doCliente, contextoDeAdmin(USUARIO_A, TENANT_A), async () => 'nunca'),
+    ).rejects.toThrow(/permission denied to set role/i)
+  })
+
+  it('**a pool de leitura não serve para escrever** — `mavia_admin` não é membro de `mavia_admin_escrita`', async () => {
+    const deLeitura = await banco.poolComo('mavia_admin')
+    await expect(
+      comTenantDeAdminEscrita(
+        deLeitura,
+        contextoDeAdminEscrita(USUARIO_A, TENANT_A),
+        async () => 'nunca',
+      ),
+    ).rejects.toThrow(/permission denied to set role/i)
+  })
+
+  it('e a pool certa funciona — sem isto, os três acima passariam por engano', async () => {
+    const doPainel = await banco.poolComo('mavia_admin')
+    const quantos = await comAdmin(doPainel, contextoDeOperador(USUARIO_A), async (c) => {
+      const r = await c.query<{ n: string }>('SELECT count(*)::text AS n FROM tenants')
+      return r.rows[0]!.n
+    })
+    // `mavia_admin` não tem policy em `tenants` ainda — isso é o ticket 05. O
+    // que este teste afirma é que a **conexão abre e a transação roda**, não o
+    // que ela enxerga.
+    expect(typeof quantos).toBe('string')
+  })
+
+  it('**o operador não carrega tenant** — `app.tenant_id` é zerado, não herdado', async () => {
+    // Numa conexão de pool reaproveitada, o valor da requisição anterior é a
+    // classe de defeito mais silenciosa que existe: a consulta funciona, e
+    // devolve o espaço de outra pessoa.
+    const doPainel = await banco.poolComo('mavia_admin')
+    const valor = await comAdmin(doPainel, contextoDeOperador(USUARIO_A), async (c) => {
+      const r = await c.query<{ t: string }>(
+        `SELECT current_setting('app.tenant_id', true) AS t`,
+      )
+      return r.rows[0]!.t
+    })
+    expect(valor).toBe('')
   })
 })

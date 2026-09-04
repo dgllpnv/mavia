@@ -12,7 +12,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool } from 'pg'
 import { firstValueFrom, of, type Observable } from 'rxjs'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * `Idempotency-Key`: a mesma mutação, enviada duas vezes, acontece uma vez.
@@ -61,7 +61,7 @@ export class IdempotenciaInterceptor implements NestInterceptor {
     // rotas sem tenant não são mutações de dinheiro.
     if (!autenticado) return proximo.handle()
 
-    const ctx = { tenantId: autenticado.tenantId, usuarioId: autenticado.usuarioId }
+    const ctx = contextoDoTenant(autenticado.usuarioId, autenticado.tenantId)
     const metodo = req.method
     const caminho = req.routeOptions.url ?? req.url
     const corpoHash = createHash('sha256')

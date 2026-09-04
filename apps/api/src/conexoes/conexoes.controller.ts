@@ -18,7 +18,7 @@ import type { Pool } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { GUARDIAO, type ClienteDoGuardiao } from '../guardiao/cliente.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import { provider } from './provider.js'
 import { ConexaoInexistente, revogarConexao } from './revogacao.js'
 
@@ -48,7 +48,7 @@ export class ConexoesController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()

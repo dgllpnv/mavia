@@ -216,14 +216,16 @@ describe('a unidade de trabalho recusa contexto ausente', () => {
     // Critério do `arquiteto-solucao` para o S2: sem `SET LOCAL`, é erro — e
     // não zero linhas. Zero linhas viraria "sumiram meus dados", que manda
     // procurar no lugar errado.
-    const { comTenant, ContextoAusente } = await import('../src/tenancy/tenancy.js')
+    const { comTenant, ContextoAusente, contextoDoTenant } = await import(
+      '../src/tenancy/tenancy.js',
+    )
 
     await expect(
-      comTenant(pool, { usuarioId: USUARIO_A, tenantId: '' }, async () => 'nunca'),
+      comTenant(pool, contextoDoTenant(USUARIO_A, ''), async () => 'nunca'),
     ).rejects.toThrow(ContextoAusente)
 
     await expect(
-      comTenant(pool, { usuarioId: '', tenantId: TENANT_A }, async () => 'nunca'),
+      comTenant(pool, contextoDoTenant('', TENANT_A), async () => 'nunca'),
     ).rejects.toThrow(/app.usuario_id/)
   })
 })

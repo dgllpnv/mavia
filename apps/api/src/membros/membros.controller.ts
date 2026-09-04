@@ -27,7 +27,7 @@ import { POOL } from '../contas/contas.controller.js'
 import { COFRE } from '../redis/tokens.js'
 import type { CofreDeAcesso } from '../redis/cofre-de-acesso.js'
 import { exigirCotaDePessoas } from '../cobranca/cobranca.controller.js'
-import { comTenant, comUsuario } from '../tenancy/tenancy.js'
+import { comTenant, comUsuario, contextoDeUsuario, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Membros do espaço — convidar, mudar papel, remover.
@@ -94,7 +94,12 @@ export class MembrosController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId, papel: a.papel }
+    // O `papel` acompanha para a autorização da rota, e **não** entra na
+    // unidade de trabalho: `contextoDoTenant` recebe só o que a transação
+    // precisa. Antes da marca, passar o `Autenticado` inteiro a `comTenant`
+    // compilava — e é essa mesma frouxidão estrutural que deixaria um
+    // contexto de administração entrar no caminho do cliente.
+    return { ...contextoDoTenant(a.usuarioId, a.tenantId), papel: a.papel }
   }
 
   @Get()
@@ -322,7 +327,7 @@ export class MembrosController {
    * lembrar de uma senha que ela nunca teve.
    */
   private async exigirSenha(usuarioId: string, senha: string): Promise<void> {
-    const hash = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const hash = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ senha_hash: string | null }>(
         'SELECT senha_hash FROM usuarios WHERE id = $1 AND deleted_at IS NULL',
         [usuarioId],
@@ -378,7 +383,7 @@ export class AceitarConviteController {
       .safeParse(corpo)
     if (!analise.success) throw new BadRequestException('Convite inválido.')
 
-    const meuEmail = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const meuEmail = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ email: string }>(
         'SELECT email FROM usuarios WHERE id = $1 AND deleted_at IS NULL',
         [usuarioId],
@@ -387,7 +392,7 @@ export class AceitarConviteController {
     })
     if (!meuEmail) throw new UnauthorizedException('Sessão inválida.')
 
-    const r = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const r = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const saida = await c.query<{
         id_do_tenant: string | null
         papel_concedido: string | null

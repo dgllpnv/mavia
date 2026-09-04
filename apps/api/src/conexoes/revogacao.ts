@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg'
 import { zerar } from '@mavia/guardiao'
 import type { ClienteDoGuardiao } from '../guardiao/cliente.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, type ContextoDoTenant } from '../tenancy/tenancy.js'
 import type { BankSyncProvider, MotivoDaRevogacao, ResultadoRevogacao } from './provider.js'
 
 /**
@@ -28,10 +28,13 @@ import type { BankSyncProvider, MotivoDaRevogacao, ResultadoRevogacao } from './
 /** O prazo da tentativa síncrona. Acima disto, o titular espera o job. */
 const PRAZO_DA_FASE_2_MS = 3_000
 
-export interface Contexto {
-  readonly tenantId: string
-  readonly usuarioId: string
-}
+/**
+ * Era uma interface própria, com a mesma forma de `ContextoDoTenant` — e por
+ * isso intercambiável com ele por estrutura. Passou a ser o mesmo tipo: duas
+ * definições que se aceitam mutuamente não são dois tipos, são um com dois
+ * nomes, e o segundo nome só serve para esconder que a marca não vale ali.
+ */
+export type Contexto = ContextoDoTenant
 
 export interface Dependencias {
   readonly pool: Pool

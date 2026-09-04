@@ -33,7 +33,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Planejamento — teto de despesa e piso de receita, por competência.
@@ -51,7 +51,7 @@ export class PlanejamentosController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   /** `AAAA-MM` na entrada, dia 1 no banco. A competência é o mês. */

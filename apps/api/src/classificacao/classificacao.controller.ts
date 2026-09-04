@@ -25,7 +25,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Categorização automática — as regras, e a reclassificação em lote.
@@ -73,7 +73,7 @@ export class RegrasController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()
@@ -208,7 +208,7 @@ export class AlterarLancamentoController {
   ): Promise<{ id: string; categoriaId: string | null; descricao: string }> {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    const ctx = { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    const ctx = contextoDoTenant(a.usuarioId, a.tenantId)
 
     const analise = z
       .object({

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
-import { Client } from 'pg'
+import { Client, Pool } from 'pg'
 import { aplicarMigrations } from '../src/db/migrar.js'
 
 /**
@@ -30,8 +30,23 @@ const SENHA_MIGRATE = 'mavia_local_dev'
 export interface BancoDeTeste {
   /** Conexão de superusuário. Usada só para semear, como um caminho privilegiado faria. */
   readonly cliente: Client
+  /**
+   * Abre um `Pool` autenticado **como um papel específico**.
+   *
+   * Existe para o painel de administração, cuja propriedade central é que a
+   * separação leitura/escrita é por **autenticação** e não por instrução
+   * (ADR 0024 D3). Um teste que use sempre a conexão de superusuário mede o
+   * privilégio do superusuário — que é todo — e afirma o contrário do que quer.
+   */
+  poolComo(papel: string): Promise<Pool>
   encerrar(): Promise<void>
 }
+
+/**
+ * A senha dos papéis provisionados no harness. Vale só dentro do container
+ * descartável que o Testcontainers derruba ao fim da suíte.
+ */
+const SENHA_DE_TESTE = 'mavia_teste'
 
 export async function subirPostgres(): Promise<BancoDeTeste> {
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer('postgres:17-alpine')
@@ -59,9 +74,36 @@ export async function subirPostgres(): Promise<BancoDeTeste> {
   await aplicarMigrations(migrador, MIGRATIONS)
   await migrador.end()
 
+  // Os papéis de conexão do painel nascem `NOLOGIN` na migration — condição
+  // C-9. Aqui recebem credencial pelo mesmo caminho que o SRE usa em produção
+  // e a semente usa no ambiente local: **provisionamento**, nunca migration.
+  //
+  // `mavia_admin_contrato` e `mavia_admin_definer` continuam sem `LOGIN`, de
+  // propósito: são donos de função, não conexão.
+  // O provisionamento acontece em `poolComo`, sob demanda — ver ali o porquê.
+
+  const pools: Pool[] = []
+
   return {
     cliente: superusuario,
+    async poolComo(papel: string) {
+      // Provisiona sob demanda, em vez de depender de quem provisionou antes.
+      // Cada arquivo de teste tem o próprio container, então não há colisão —
+      // e o teste deixa de quebrar quando outro arquivo muda a senha que usa.
+      await superusuario.query(`ALTER ROLE ${papel} LOGIN PASSWORD '${SENHA_DE_TESTE}'`)
+      const pool = new Pool({
+        host: container.getHost(),
+        port: container.getPort(),
+        database: container.getDatabase(),
+        user: papel,
+        password: SENHA_DE_TESTE,
+        max: 2,
+      })
+      pools.push(pool)
+      return pool
+    },
     async encerrar() {
+      await Promise.all(pools.map((p) => p.end()))
       await superusuario.end()
       await container.stop()
     },

@@ -31,7 +31,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Objetivo — acúmulo plurimensal com prazo.
@@ -52,7 +52,7 @@ export class ObjetivosController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()

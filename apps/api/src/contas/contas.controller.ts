@@ -17,7 +17,7 @@ import { zCriarConta, type Conta, type ListaDeContas } from '@mavia/contracts'
 import type { FastifyRequest } from 'fastify'
 import type { Pool } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import * as repositorio from './contas.repositorio.js'
 
 export const POOL = Symbol('POOL')
@@ -30,7 +30,7 @@ export class ContasController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    return contextoDoTenant(a.usuarioId, a.tenantId)
   }
 
   @Get()

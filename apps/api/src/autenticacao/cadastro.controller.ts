@@ -17,7 +17,7 @@ import { POOL } from '../contas/contas.controller.js'
 import { COFRE, LIMITE } from '../redis/tokens.js'
 import { VIDA_DO_ACESSO_EM_SEGUNDOS, type CofreDeAcesso } from '../redis/cofre-de-acesso.js'
 import { LimiteExcedido, type LimiteDeTentativas } from '../redis/limite-de-tentativas.js'
-import { comUsuario } from '../tenancy/tenancy.js'
+import { comUsuario, contextoDeUsuario } from '../tenancy/tenancy.js'
 import { cookieDeSessao } from './cookie.js'
 import { hashDeSenha } from './sessoes.controller.js'
 import { MENSAGEIRO, type Mensageiro } from '../mensageiro/mensageiro.js'
@@ -135,7 +135,7 @@ export class CadastroController {
     const token = randomBytes(32).toString('hex')
     const senhaHash = await hashDeSenha(d.senha)
 
-    const cabe = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const cabe = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{ registrar_pendente: boolean }>(
         'SELECT auth.registrar_pendente($1, $2, $3, $4, $5, $6)',
         [
@@ -178,7 +178,7 @@ export class CadastroController {
     if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
     const d = analise.data
 
-    const criado = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const criado = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       try {
         const r = await c.query<{ usuario_id: string; tenant_id: string }>(
           'SELECT * FROM auth.confirmar_cadastro($1, $2)',
@@ -224,7 +224,7 @@ export class CadastroController {
 
     const token = randomBytes(32).toString('hex')
 
-    const emitiu = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const emitiu = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       const r = await c.query<{ emitir_recuperacao: boolean }>(
         'SELECT auth.emitir_recuperacao($1, $2, $3, $4)',
         [
@@ -261,7 +261,7 @@ export class CadastroController {
 
     const senhaHash = await hashDeSenha(d.senha)
 
-    const desfecho = await comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    const desfecho = await comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       let usuarioId: string
       try {
         const r = await c.query<{ concluir_recuperacao: string }>(
@@ -375,7 +375,7 @@ export class CadastroController {
     const refresh = randomBytes(32).toString('hex')
     const vida = VIDAS[plataforma]
 
-    const sessaoId = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const sessaoId = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const r = await c.query<{ id: string }>(
         `INSERT INTO sessoes (usuario_id, familia_id, refresh_hash, plataforma,
                               expira_em, expira_absoluto_em)
@@ -389,7 +389,7 @@ export class CadastroController {
 
     const acesso = await this.cofre.emitir({ sessaoId, usuarioId })
 
-    const dados = await comUsuario(this.pool, { usuarioId }, async (c) => {
+    const dados = await comUsuario(this.pool, contextoDeUsuario(usuarioId), async (c) => {
       const u = await c.query('SELECT id, nome, email FROM usuarios WHERE id = $1', [usuarioId])
       const t = await c.query(
         `SELECT t.id, t.nome, tu.papel

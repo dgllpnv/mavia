@@ -28,7 +28,7 @@ import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
-import { comTenant, comUsuario } from '../tenancy/tenancy.js'
+import { comTenant, comUsuario, contextoDeUsuario, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * Plano e cobrança.
@@ -76,7 +76,12 @@ export class CobrancaController {
   private contexto(req: FastifyRequest) {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    return { usuarioId: a.usuarioId, tenantId: a.tenantId, papel: a.papel }
+    // O `papel` acompanha para a autorização da rota, e **não** entra na
+    // unidade de trabalho: `contextoDoTenant` recebe só o que a transação
+    // precisa. Antes da marca, passar o `Autenticado` inteiro a `comTenant`
+    // compilava — e é essa mesma frouxidão estrutural que deixaria um
+    // contexto de administração entrar no caminho do cliente.
+    return { ...contextoDoTenant(a.usuarioId, a.tenantId), papel: a.papel }
   }
 
   /**
@@ -191,7 +196,7 @@ export class WebhookController {
     const alvo = data.object as { subscription?: unknown; id?: unknown }
     const subscription = texto(alvo.subscription) ?? texto(alvo.id) ?? ''
 
-    return comUsuario(this.pool, { usuarioId: SEM_USUARIO }, async (c) => {
+    return comUsuario(this.pool, contextoDeUsuario(SEM_USUARIO), async (c) => {
       // Defesa 1: o id do evento é a chave primária. Reenvio é conflito, e
       // conflito significa "já tratei".
       //

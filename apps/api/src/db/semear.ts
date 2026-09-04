@@ -114,6 +114,22 @@ async function principal(): Promise<void> {
     // a VPS. O login de produção respondeu 500 até a credencial ser restaurada.
     if (ehLocal) {
       await c.query(`ALTER ROLE mavia_app LOGIN PASSWORD 'mavia_local_dev'`)
+
+      // Os dois papéis de conexão do painel de administração nascem `NOLOGIN`
+      // na migration 0029 — condição C-9, e a razão é que migration é
+      // forward-only: uma senha escrita ali fica no histórico para sempre.
+      //
+      // `LOGIN` e credencial são **provisionamento**. Em produção isso é do
+      // SRE, com segredo do ambiente; aqui é a mesma senha pública que
+      // `mavia_app` já usa, contra um Postgres que escuta em `127.0.0.1` e
+      // cujos dados o `mavia reset` apaga.
+      //
+      // Os outros dois — `mavia_admin_contrato` e `mavia_admin_definer` —
+      // continuam `NOLOGIN` em todo lugar, inclusive aqui: eles são **donos de
+      // função**, nunca conexão. Um papel que loga é um papel que alguém pode
+      // alcançar; o privilégio deles não deve ter porta.
+      await c.query(`ALTER ROLE mavia_admin LOGIN PASSWORD 'mavia_local_dev'`)
+      await c.query(`ALTER ROLE mavia_admin_escrita LOGIN PASSWORD 'mavia_local_dev'`)
     }
 
     const jaTem = await c.query('SELECT 1 FROM tenants WHERE id = $1', [TENANT])

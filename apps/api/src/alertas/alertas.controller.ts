@@ -7,7 +7,7 @@ import { AutorizacaoGuard } from '../autorizacao/autorizacao.guard.js'
 import { POOL } from '../contas/contas.controller.js'
 import { objetivosDoEspaco } from '../objetivos/objetivos.controller.js'
 import { planejamentosComRealizado } from '../planejamentos/planejamentos.controller.js'
-import { comTenant } from '../tenancy/tenancy.js'
+import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 
 /**
  * A central de alertas.
@@ -36,7 +36,7 @@ export class AlertasController {
   async listar(@Req() req: FastifyRequest): Promise<{ itens: Alerta[] }> {
     const a = req.autenticado
     if (!a) throw new BadRequestException('Contexto ausente.')
-    const ctx = { usuarioId: a.usuarioId, tenantId: a.tenantId }
+    const ctx = contextoDoTenant(a.usuarioId, a.tenantId)
 
     const itens = await comTenant(this.pool, ctx, async (c) => [
       ...(await this.doPlanejamento(c, ctx.tenantId)),
