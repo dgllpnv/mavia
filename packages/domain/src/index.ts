@@ -149,3 +149,7 @@ export {
 } from './classificacao.js'
 
 export { cotasVigentes, jobsAtivos, plano, podeEscrever, preco, transicao, COTAS_DO_TESTE, DIAS_DE_GRACA, DIAS_DE_TESTE, PLANOS, type CodigoDoPlano, type Cotas, type EstadoDaAssinatura, type EventoDaAssinatura, type Intervalo, type Plano, fimEfetivo } from './catalogo.js'
+
+// ADR 0025 D1 — desconto sobre o preço do plano. **Estimativa para a tela**;
+// quem cobra é a Stripe, e o valor final vem pelo webhook (DP-39).
+export { descontoPercentual, descontoDeValor, estimarComDesconto, type Desconto, type ErroDeDesconto, type Estimativa } from './desconto.js'

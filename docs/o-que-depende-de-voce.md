@@ -1,6 +1,8 @@
 # O que depende de você
 
-Sete pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, valores comerciais e decisões de produto.
+As pendências que o time não pode resolver sozinho.
+
+> **Atualizado em 2026-09-04.** As **oito decisões** do painel de administração (DP-32 a DP-40) foram **todas respondidas** e estão em `docs/decisoes-do-produto.md`. O que resta aqui são **ações**, não escolhas: coisas que exigem a sua mão num serviço de terceiro ou um dado que só você tem.
 
 As quatro primeiras **bloqueiam** alguma coisa. A sexta e a sétima reúnem oito escolhas que quase todas **não** bloqueiam — têm um padrão que eu sigo se você não disser nada. Duas exceções, e são as que valem a sua atenção: a **DP-32** decide quando o painel de administração pode ver cliente real, e a **DP-39** não tem padrão nenhum.
 
@@ -130,19 +132,27 @@ Escolher março teria o efeito oposto: o relatório ficaria mais fiel e a corres
 
 **O que destrava:** hoje ninguém consegue pagar. O lado do webhook está implementado e testado — o que falta é a conta e o catálogo de preços dentro dela.
 
-### Os preços já estão decididos (DP-27) e escritos no código
+### Os preços já estão decididos (DP-41) e escritos no código
 
-`packages/domain/src/catalogo.ts` é a fonte da verdade, em centavos:
+`packages/domain/src/catalogo.ts` é a fonte da verdade, em centavos. **Valores alinhados ao Organizze em 2026-09-04**, um a um:
 
-| Plano | Mensal | Anual | Pessoas | Espaços | Anexos | Conexões |
-|---|---:|---:|---:|---:|---:|---:|
-| Mavia Pessoal | R$ 59,00 | R$ 590,00 | 2 | 1 | 5 GB | 0 |
-| Mavia Família | R$ 79,00 | R$ 790,00 | 5 | 1 | 20 GB | 3 |
-| Mavia Negócio | R$ 99,00 | R$ 990,00 | 10 | 3 | 50 GB | 10 |
+| Plano | Mensal | Anual | Equivale a | Pessoas | Espaços | Anexos | Conexões |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Mavia Pessoal | R$ 35,00 | R$ 199,90 | Manual | 2 | 1 | 5 GB | 0 |
+| Mavia Família | R$ 45,00 | R$ 399,90 | Conectado | 5 | 1 | 20 GB | 3 |
+| Mavia Negócio | R$ 69,00 | R$ 599,90 | Conectado Plus | 10 | 3 | 50 GB | 10 |
 
-O anual é **dez vezes o mensal** — dois meses grátis, cerca de 16,7% de desconto.
+**Não há mais fórmula ligando o anual ao mensal.** Os descontos são 52,4%, 25,9% e 27,5% — três números diferentes, herdados do concorrente. Os seis valores são declarados um a um no catálogo, e é assim que precisa ser.
 
-Se você quiser mudar qualquer um desses seis valores, **fale agora**: mudar antes de existirem preços na Stripe é editar uma linha; mudar depois é criar preços novos, migrar as assinaturas vivas e manter os antigos por causa de quem contratou pelo preço velho.
+> **Duas consequências que você precisa saber, e nenhuma é impeditiva.**
+>
+> **1. O reembolso proporcional ficou mais curto.** A fórmula é `pago − meses_iniciados × mensal`, e com o desconto anual do concorrente ela chega a zero mais cedo: **6º mês** no Pessoal, **9º** nos outros dois (sob os preços antigos era o 10º nos três). Quem paga R$ 199,90 em janeiro e cancela em junho recebe zero. A regra não mudou, o preço mudou. Se quiser uma política mais generosa, é uma decisão sua e eu implemento.
+>
+> **2. Empatados no preço, dois dos três níveis hoje perdem item a item.** `Família` custa exatamente o que custa o Conectado, que entrega **3 conexões bancárias**; `Negócio` custa o que custa o Conectado Plus, com **10 conexões, PF e PJ**. O nosso épico 12 (conexão bancária) não existe ainda. O `Pessoal` está bem — o Manual do concorrente também não conecta banco, e ainda damos 2 pessoas contra 1 dele.
+>
+> A recomendação do time está na §2.6 da spec: **vender só o `Pessoal` no lançamento** e abrir `Família` e `Negócio` quando o épico 12 entrar. O catálogo tem um booleano (`disponivelParaCompra`) desenhado exatamente para isso, e fechar um nível não exige migração de dado nenhuma. **Os três seguem abertos até você decidir.**
+
+Se você quiser mudar qualquer um desses seis valores, **fale antes de criar os preços na Stripe**: mudar antes é editar uma linha; mudar depois é criar preços novos, migrar as assinaturas vivas e manter os antigos por causa de quem contratou pelo preço velho. Ver também a §8, sobre trocar preço pelo painel.
 
 ### O que preciso de você
 
@@ -152,12 +162,14 @@ Se você quiser mudar qualquer um desses seis valores, **fale agora**: mudar ant
 
 | Produto | Preço | Recorrência |
 |---|---|---|
-| Mavia Pessoal | R$ 59,00 BRL | mensal |
-| Mavia Pessoal | R$ 590,00 BRL | anual |
-| Mavia Família | R$ 79,00 BRL | mensal |
-| Mavia Família | R$ 790,00 BRL | anual |
-| Mavia Negócio | R$ 99,00 BRL | mensal |
-| Mavia Negócio | R$ 990,00 BRL | anual |
+| Mavia Pessoal | R$ 35,00 BRL | mensal |
+| Mavia Pessoal | R$ 199,90 BRL | anual |
+| Mavia Família | R$ 45,00 BRL | mensal |
+| Mavia Família | R$ 399,90 BRL | anual |
+| Mavia Negócio | R$ 69,00 BRL | mensal |
+| Mavia Negócio | R$ 599,90 BRL | anual |
+
+Atenção aos centavos nos anuais: são `199.90`, `399.90` e `599.90`. A Stripe pede o valor em centavos ou com vírgula decimal conforme a tela; confira que o resumo mostre **R$ 199,90** e não **R$ 19.990,00**.
 
 Cada um gera um identificador que começa com `price_`. Esses **não são segredo** — pode me mandar os seis por aqui, ou me dizer que estão criados e eu leio pela API.
 

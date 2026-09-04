@@ -10,6 +10,7 @@ import {
   podeEscrever,
   preco,
   transicao,
+  type CodigoDoPlano,
   type EstadoDaAssinatura,
   type EventoDaAssinatura,
 } from './catalogo.js'
@@ -35,28 +36,48 @@ const EVENTOS: readonly EventoDaAssinatura[] = [
 ]
 
 describe('o catálogo', () => {
-  it('os preços são os decididos pelo dono (DP-27)', () => {
-    expect(PLANOS.pessoal.mensal.centavos).toBe(5900n)
-    expect(PLANOS.familia.mensal.centavos).toBe(7900n)
-    expect(PLANOS.negocio.mensal.centavos).toBe(9900n)
+  it('os seis preços são os decididos pelo dono (DP-41)', () => {
+    // Os seis, e não os três mensais. A DP-27 conferia só o mensal porque o
+    // anual era `10 ×` e o outro teste o cobria; sem a relação, um anual errado
+    // não seria pego por ninguém.
+    expect(PLANOS.pessoal.mensal.centavos).toBe(3500n)
+    expect(PLANOS.pessoal.anual.centavos).toBe(19990n)
+    expect(PLANOS.familia.mensal.centavos).toBe(4500n)
+    expect(PLANOS.familia.anual.centavos).toBe(39990n)
+    expect(PLANOS.negocio.mensal.centavos).toBe(6900n)
+    expect(PLANOS.negocio.anual.centavos).toBe(59990n)
   })
 
-  it('**o anual é dez vezes o mensal, e ainda assim é declarado**', () => {
-    // A igualdade vale, e o teste a confere — mas o valor não é obtido por
-    // multiplicação em tempo de execução. Preço derivado por aritmética é preço
-    // que diverge entre a vitrine, a Stripe e o reembolso.
+  it('**o anual desconta, e o desconto é declarado — nunca calculado**', () => {
+    // A DP-27 tinha `anual = 10 × mensal` e este teste conferia a igualdade.
+    // A DP-41 a desfez: 5,7 · 8,9 · 8,7 mensalidades, três razões diferentes.
+    //
+    // O que sobrevive é a única propriedade que a vitrine promete e que uma
+    // troca de preço pode quebrar em silêncio: **pagar o ano custa menos que
+    // pagar doze meses**. Um anual maior que `12 ×` transformaria o botão
+    // "economize" numa cobrança a mais, e nenhum outro teste veria.
     for (const p of Object.values(PLANOS)) {
-      expect(p.anual.centavos).toBe(p.mensal.centavos * 10n)
+      expect(p.anual.centavos).toBeLessThan(p.mensal.centavos * 12n)
     }
   })
 
-  it('nenhum preço tem centavo quebrado', () => {
-    // Propriedade (b) da decisão do desconto: preços redondos nos três níveis,
-    // sem centavo quebrado em nenhuma tela.
-    for (const p of Object.values(PLANOS)) {
-      expect(p.mensal.centavos % 100n).toBe(0n)
-      expect(p.anual.centavos % 100n).toBe(0n)
-    }
+  it('o anual do Pessoal cobre menos de seis mensalidades — a consequência da DP-41', () => {
+    // Não é um desejo, é um fato registrado para não ser redescoberto na
+    // primeira solicitação de reembolso.
+    //
+    // A fórmula de `spec-planos:305` é `max(0, pago − meses_iniciados ×
+    // mensal)`. Com o desconto anual do concorrente (52% no Pessoal), ela
+    // chega a zero no **sexto** mês: quem pagou R$ 199,90 e cancela em julho
+    // recebe nada de volta, tendo usado metade do ano.
+    //
+    // Sob a DP-27 o piso era o décimo mês, e a fórmula parecia generosa. Ela
+    // não mudou; o preço mudou. Este teste falha no dia em que os preços se
+    // mexerem de novo, que é exatamente quando alguém precisa reolhar a
+    // política de reembolso.
+    const meses = (c: CodigoDoPlano) => Number(PLANOS[c].anual.centavos / PLANOS[c].mensal.centavos)
+    expect(meses('pessoal')).toBe(5)
+    expect(meses('familia')).toBe(8)
+    expect(meses('negocio')).toBe(8)
   })
 
   it('as cotas crescem com o plano', () => {
@@ -77,8 +98,8 @@ describe('o catálogo', () => {
   })
 
   it('o preço vem do intervalo', () => {
-    expect(preco('familia', 'mensal').centavos).toBe(7900n)
-    expect(preco('familia', 'anual').centavos).toBe(79000n)
+    expect(preco('familia', 'mensal').centavos).toBe(4500n)
+    expect(preco('familia', 'anual').centavos).toBe(39990n)
   })
 })
 

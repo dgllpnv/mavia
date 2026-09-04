@@ -245,7 +245,10 @@ describe('trocar de plano', () => {
   })
 
   it('o preço vem do catálogo, e é o decidido', async () => {
-    expect((await pedir('GET', '/v1/cobranca')).json().precoCentavos).toBe('9900')
+    // DP-41. O valor literal fica aqui de propósito: importar `preco()` faria o
+    // teste concordar com o catálogo por construção, e ele deixaria de detectar
+    // a troca de preço que não passou pela Stripe.
+    expect((await pedir('GET', '/v1/cobranca')).json().precoCentavos).toBe('6900')
   })
 })
 

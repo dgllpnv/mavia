@@ -10,15 +10,24 @@ import { dinheiro, type Money } from './money.js'
  *
  * A Stripe guarda os `price_id`; **o catálogo guarda o mapa**.
  *
- * ## O preço anual não é derivado
+ * ## O preço anual não é derivado, e desde a DP-41 não poderia ser
  *
- * "Dois meses grátis" é `anual = 10 × mensal`, e ainda assim o anual é uma
- * `Money` **própria**, declarada em centavos. Multiplicar em tempo de execução
- * daria um preço que diverge entre a vitrine, a Stripe e o reembolso — três
- * lugares que precisam concordar sobre o mesmo número.
+ * Até a DP-27 valia `anual = 10 × mensal`, e o teste conferia a igualdade. A
+ * **DP-41** alinhou os seis valores aos do Organizze, e a relação sumiu: o
+ * anual do Pessoal é **5,7 mensalidades**, o do Família **8,9**, o do Negócio
+ * **8,7**. Não há fórmula que produza os três.
  *
- * Nenhuma divisão acontece no caminho do dinheiro. "≈ R$ 29,17/mês" é texto de
+ * O que a DP-27 já fazia por disciplina virou necessidade: **cada preço é uma
+ * `Money` própria, declarada em centavos**. Nenhuma multiplicação, nenhuma
+ * divisão, nenhum percentual em tempo de execução. "≈ R$ 16,66/mês" é texto de
  * vitrine, arredondado só para exibir, e não entra em cálculo nenhum.
+ *
+ * ## O centavo quebrado entrou, e é um fato do mercado
+ *
+ * Os anuais terminam em `,90`. A DP-27 se orgulhava de preços redondos; o
+ * concorrente não os pratica, e alinhar preço é alinhar a forma dele. Nenhuma
+ * conta do domínio depende de redondeza — `Money` é inteiro em centavos e
+ * `19990n` é tão exato quanto `59000n`. O que muda é só a vitrine.
  */
 
 export type CodigoDoPlano = 'pessoal' | 'familia' | 'negocio'
@@ -56,29 +65,34 @@ const GB = 1024 * 1024 * 1024
  * Nomes decididos em DP-18: dizem **para quem é**. "Básico" foi descartado por
  * ensinar o cliente a se sentir mal, e "Conectado/Conectado Plus" por prometer
  * o agregador no nome.
+ *
+ * **Preços da DP-41**, alinhados um a um aos do Organizze na posição
+ * equivalente — Pessoal↔Manual, Família↔Conectado, Negócio↔Conectado Plus.
+ * O anual é o preço **à vista** do concorrente, que é o que o nosso campo
+ * significa: uma cobrança só, uma vez por ano.
  */
 export const PLANOS: Readonly<Record<CodigoDoPlano, Plano>> = {
   pessoal: {
     codigo: 'pessoal',
     nome: 'Mavia Pessoal',
-    mensal: dinheiro(5900n, 'BRL'),
-    anual: dinheiro(59000n, 'BRL'),
+    mensal: dinheiro(3500n, 'BRL'),
+    anual: dinheiro(19990n, 'BRL'),
     cotas: { pessoas: 2, espacos: 1, anexosBytes: 5 * GB, conexoes: 0 },
     disponivelParaCompra: true,
   },
   familia: {
     codigo: 'familia',
     nome: 'Mavia Família',
-    mensal: dinheiro(7900n, 'BRL'),
-    anual: dinheiro(79000n, 'BRL'),
+    mensal: dinheiro(4500n, 'BRL'),
+    anual: dinheiro(39990n, 'BRL'),
     cotas: { pessoas: 5, espacos: 1, anexosBytes: 20 * GB, conexoes: 3 },
     disponivelParaCompra: true,
   },
   negocio: {
     codigo: 'negocio',
     nome: 'Mavia Negócio',
-    mensal: dinheiro(9900n, 'BRL'),
-    anual: dinheiro(99000n, 'BRL'),
+    mensal: dinheiro(6900n, 'BRL'),
+    anual: dinheiro(59990n, 'BRL'),
     cotas: { pessoas: 10, espacos: 3, anexosBytes: 50 * GB, conexoes: 10 },
     disponivelParaCompra: true,
   },

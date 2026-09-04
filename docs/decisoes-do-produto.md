@@ -35,7 +35,8 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-24** | Vidas de sessão | Padrão aceito: **14/30 dias web, 60/180 mobile** | `docs/produto/spec-autenticacao.md` |
 | **DP-25** | Existe canal humano de recuperação? | **Não existe.** Confirmado | `docs/produto/spec-autenticacao.md` |
 | **DP-26** | Teto de tenants por usuário | Padrão aceito: **3 por dia, 10 ativos** | `docs/produto/spec-autenticacao.md` |
-| **DP-27** | Preços e desconto anual | **R$ 59 · R$ 79 · R$ 99** por mês; anual = 10 × mensal | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-27** ⛔ | Preços e desconto anual | ~~R$ 59 · R$ 79 · R$ 99; anual = 10 × mensal~~ — **substituída pela DP-41** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-41** | Preços alinhados ao Organizze | **R$ 35 · R$ 45 · R$ 69** por mês; anual à vista **R$ 199,90 · R$ 399,90 · R$ 599,90**, sem fórmula ligando os dois | `docs/produto/spec-planos-e-assinatura.md` §2.4, §2.6 |
 | **DP-28** | Ajustar cotas por causa do preço maior | **Não.** Cotas mantidas como estão. Sem promessa de prazo de suporte na página | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-29** | Duração do teste (7 dias) | **Mantida.** Reavaliar com dado de conversão, não por opinião | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-30** | O modo escuro segue a preferência do sistema? | **Sim.** `prefers-color-scheme` aplica o escuro; a escolha explícita no produto vence nos dois sentidos | `docs/design/direcao-visual.md` |
@@ -79,11 +80,23 @@ Se a emissão for definitivamente abandonada, a base legal desaparece e a tabela
 
 ## Preço — o que o patamar escolhido implica
 
-Os preços definidos pelo dono do produto são **R$ 59 (Pessoal), R$ 79 (Família) e R$ 99 (Negócio)** por mês, com o anual custando dez mensalidades.
+**Reescrito em 2026-09-04 pela DP-41.** O texto anterior explicava o que um preço *acima* do concorrente obriga; a premissa deixou de existir.
 
-Registro factual, sem juízo: isso coloca a Mavia **acima do Organizze em todos os níveis** — o plano de entrada fica 69% mais caro que os R$ 35 dele. A especificação de planos foi originalmente escrita ancorada naquela referência, e o raciocínio de posicionamento está sendo refeito, não apenas a tabela de valores.
+Os preços definidos pelo dono do produto são **R$ 35 (Pessoal), R$ 45 (Família) e R$ 69 (Negócio)** por mês, e os anuais à vista **R$ 199,90 · R$ 399,90 · R$ 599,90**. São os seis valores do Organizze, espelhados um a um na posição equivalente: Pessoal↔Manual, Família↔Conectado, Negócio↔Conectado Plus.
 
-A consequência que precisa estar escrita no produto: **preço acima do concorrente é promessa implícita**. A especificação deve declarar qual é essa promessa, e as cotas precisam ser revistas — cobrar mais e limitar igual é a combinação que produz cancelamento.
+Registro factual, sem juízo — **paridade de preço não é o alívio que parece**:
+
+| Nível | Nosso preço | Equivalente | Quem entrega mais hoje |
+|---|---:|---|---|
+| Pessoal | R$ 35,00 | Manual · R$ 35 | **empate honesto** — nenhum dos dois conecta banco, e damos 2 pessoas contra 1 |
+| Família | R$ 45,00 | Conectado · R$ 45 | **eles** — 3 conexões bancárias, que o épico 12 ainda não construiu |
+| Negócio | R$ 69,00 | Conectado Plus · R$ 69 | **eles** — 10 conexões, PF e PJ |
+
+Enquanto estávamos mais caros, o cliente precisava de uma **razão** para pagar a diferença, e razão se constrói com argumento. Igualados, ele não precisa de razão nenhuma: põe as duas tabelas lado a lado e conta linhas.
+
+**A consequência que precisa estar escrita no produto** mudou de forma: não é mais "declare a promessa implícita do preço maior", e sim **o épico 12 virou pré-condição de venda dos níveis `Família` e `Negócio`**. Cobrar R$ 45 é cobrar o preço de mercado da conexão bancária. A recomendação do time — decisão do dono, ainda em aberto — é `disponivelParaCompra = false` nesses dois níveis até a função existir. Ver §2.6 da spec.
+
+Duas coisas **não** mudaram, e é bom que não: as cotas revistas pela DP-28 continuam válidas (a de `pessoas` virou argumento em vez de amortecedor), e o catálogo continua declarando cada preço em centavos, sem fórmula — agora por necessidade, não só por disciplina.
 
 ---
 
@@ -91,7 +104,9 @@ A consequência que precisa estar escrita no produto: **preço acima do concorre
 
 O `product-financeiro` recomendou subir duas cotas por causa do preço mais alto: `pessoas` no Pessoal de 1 para 2, e anexos de 2/10/30 para 5/20/50 GB. **O dono do produto decidiu manter as cotas como estão.**
 
-O risco que ele apontou fica registrado, sem re-litígio: *a R$ 35 um plano solo é "o barato"; a R$ 59 acima do mercado, dizer a alguém que ele não pode dividir com quem divide as contas dele é a objeção mais previsível* — e casal é o caso mais comum de finanças pessoais no Brasil.
+O risco que ele apontou fica registrado, sem re-litígio: *dizer a alguém que ele não pode dividir o controle com quem divide as contas dele é a objeção mais previsível que existe* — e casal é o caso mais comum de finanças pessoais no Brasil.
+
+**A DP-41 mudou o peso desse risco.** O argumento original era "a R$ 35 um plano solo é o barato; a R$ 59 acima do mercado, não". Agora estamos **nos R$ 35**, frente a frente com um Manual que é individual — e a cota de 2 pessoas deixou de compensar preço para virar **a única linha em que o Pessoal ganha item a item**.
 
 **A reversão é barata, e é isso que torna a decisão de baixo risco.** Cota é catálogo, não arquitetura: subir `pessoas` no Pessoal é editar uma configuração e fazer deploy, sem migração de dado e sem retrabalho. Se a objeção aparecer na conversão ou no cancelamento, muda-se.
 
@@ -127,20 +142,21 @@ O custo é real e recai sobre o produto, não sobre o cliente: a tela de cadastr
 
 ---
 
-## Em aberto — esperando o dono
+## Resolvidas em 2026-09-04 — o painel de administração
 
-Estas ainda não foram decididas. **Nenhuma bloqueia o trabalho**: cada uma tem um padrão vigente que o time segue enquanto não houver resposta. Estão detalhadas em `docs/o-que-depende-de-voce.md` §6, e a justificativa completa vive em `docs/compliance/retencao-e-eliminacao.md` §11.
+Todas decididas pelo dono do produto. As sete que tinham "padrão vigente" foram
+**confirmadas**; a DP-39 não tinha padrão e foi escolhida.
 
-| # | Pergunta | Padrão vigente | Origem |
+| # | Decisão | Escolha | Onde está o detalhe |
 |---|---|---|---|
-| **DP-32** | Até quando o painel de admin fica sem MFA? | **Antes do primeiro cliente pagante.** Enquanto não houver escolha, o painel **não vai a produção com cliente real** | `retencao-e-eliminacao.md` §8.1.1 |
-| **DP-33** | Por quanto tempo um `motivo` + `referencia` autoriza aberturas de espaço? | **30 minutos.** Cada abertura continua gerando sua própria linha de auditoria; o que a janela reaproveita é a hipótese | `retencao-e-eliminacao.md` §11 |
-| **DP-34** | Com um único operador, a notificação entre pares vai para onde? | **Destino externo ao painel.** Uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema. Se a resposta for "não", a LIA da §8.1.1 precisa ser refeita | `retencao-e-eliminacao.md` §8.1.1 |
-| **DP-36** | Um pagamento recebido fora da Stripe muda o estado da assinatura, ou é só registro fiscal? | **Muda:** a baixa aplica `pagamento_recuperado` na mesma transação e limpa `graca_ate`. Se for só registro, precisa existir outra ação que libere o cliente que pagou — senão ele fica bloqueado no 15º dia | Achado **F-1** do validador financeiro |
-| **DP-37** | `pagamentos_manuais.competencia` é a do dinheiro recebido ou a do período coberto? Um pagamento anual gera uma ou doze linhas? | **Recebimento, uma linha, sem rateio.** Doze linhas exigiriam dividir, e R$ 590,00 e R$ 790,00 não dividem por 12 em centavos exatos — reintroduziria no caminho do dinheiro a divisão que a fórmula de reembolso foi desenhada para não ter | Achado **F-5** |
-| **DP-38** | `cortesia` é receita? Entra no total da escrituração? | **Não, e mais forte do que a proposta original.** `cortesia` e `ajuste` **saem da tabela** de pagamentos manuais — o enum fica com quatro valores, e a tabela passa a conter só dinheiro que entrou. Zerar o valor consertaria o total e não a exportação: uma linha de R$ 0,00 continuaria saindo ao titular como pagamento que ele nunca fez, que era a objeção original. Cortesia vira **tempo**, em dias, no campo `cortesia_ate` | Achado **F-6** · spec v3.2 §8.2 e |
-| **DP-39** | Quando o operador troca o plano, o que acontece na Stripe? | **SEM PADRÃO — precisa do dono.** Toda escrita do painel é, por construção, divergência para o job de reconciliação diário, que trata divergência como incidente e corrige seguindo a Stripe. Sem resposta, o painel e o job se desfazem mutuamente todo dia, e o cliente recebe e-mail de redução de acesso por uma mudança que a Mavia fez e desfez. Recomendado: **(a)** o painel escreve na Stripe e espera o webhook | Achado **F-15**, bloqueia o **deploy** |
-| **DP-40** | O operador pode rebaixar o plano no meio de um ciclo pago? | **Não — e a ação saiu do escopo do painel**, porque o caminho que ela deveria reusar **não existe**. A rota do cliente responde `fim_do_periodo` e não persiste nada (**P-17**, defeito vivo): não há tabela de troca agendada, não há job, e `assinaturas` não tem preço contratado persistido. Sua resposta continua valendo — ela decide o que construir no épico 11, e agora governa as duas rotas | Achado **F-8** · **P-17** · spec v3.2 §8.3 |
+| **DP-32** | Até quando o painel opera sem MFA? | **Antes do primeiro cliente pagante.** O painel roda local e em teste; **não vai a produção com cliente real** até o MFA existir. É o que o balanceamento de legítimo interesse assume ao concluir que o acesso do operador prevalece | `retencao-e-eliminacao.md` §8.1.1 |
+| **DP-33** | Por quanto tempo um `motivo` + `referencia` autoriza aberturas? | **30 minutos.** Cada abertura continua gerando a própria linha; o que a janela reaproveita é a hipótese, nunca o registro | spec v3.2 §5 |
+| **DP-34** | Com um operador só, o aviso vai para onde? | **Destino externo ao painel.** Uma notificação que só existe dentro do sistema que ela vigia não detecta o comprometimento desse sistema | spec v3.2 §6.3 |
+| **DP-36** | Pagamento por fora muda o estado da assinatura? | **Muda, e só onde o domínio permite.** `em_atraso` recupera; `expirada`, `teste` e `cancelada` **recusam** — registrar dinheiro que não muda contrato nenhum é pior do que recusar | Achado **F-1**, corrigido em **FC-1** |
+| **DP-37** | Qual competência a baixa registra? | **A do recebimento**, uma linha por pagamento. Doze linhas exigiriam dividir, e R$ 590,00 e R$ 790,00 não dividem por 12 em centavos exatos | Achado **F-5** |
+| **DP-38** | `cortesia` é receita? | **Não — e saiu da tabela.** Zerar o valor consertaria o total e não a exportação, onde uma linha de R$ 0,00 continuaria saindo ao titular como pagamento que ele nunca fez. Cortesia virou **tempo**, em dias | Achado **F-6** |
+| **DP-39** | Quando o operador troca o plano, o que acontece na Stripe? | **O painel escreve na Stripe e espera o webhook.** É a única alternativa que não cria uma segunda verdade sobre quanto o cliente paga. Custa uma chamada de API e a espera do retorno | Achado **F-15** · condição **C-11** |
+| **DP-40** | O operador pode rebaixar no meio de um ciclo pago? | **Não**, e a ação saiu do escopo do painel: o caminho que ela deveria reusar **não existe** (**P-17**). A resposta governa as duas rotas quando aquele caminho for construído | Achado **F-8** · **P-17** |
 
 ---
 
