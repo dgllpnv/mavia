@@ -98,14 +98,37 @@ describe('a baixa paga alguma coisa (F-1)', () => {
     expect(g.rows[0]!.graca_ate).toBeNull()
   })
 
-  it('**quem expirou reativa** — é a transição que a máquina de estados permite', async () => {
+  it('**quem expirou NÃO reativa por baixa manual** — e este teste afirmava o contrário', async () => {
+    // A versão anterior desta asserção dizia "quem expirou reativa", e estava
+    // errada. `transicao('expirada', 'pagamento_recuperado')` é **`null`** no
+    // domínio; a função reimplementava a máquina de estados num `CASE` em SQL,
+    // a cópia divergiu do original nesse ponto, e o teste consagrou a
+    // divergência.
+    //
+    // Com números: tenant `expirada` desde 10/06, `periodo_fim` em 10/06. Um
+    // Pix de R$ 79,00 gravava `estado = 'ativa'` — e a função **não pode**
+    // tocar `periodo_fim`, que está fora de todo `GRANT`. Setenta e nove reais
+    // compravam acesso indefinido.
+    //
+    // Uma suíte verde não prova que o comportamento está certo; prova que ele é
+    // o que alguém escreveu que deveria ser.
     await porEstado(TENANT_B, 'expirada', false)
     const r = await baixa(TENANT_B, {})
-    expect(r.statusCode).toBe(201)
-    expect(await estadoDe(TENANT_B)).toBe('ativa')
+    expect(r.statusCode).toBe(400)
+    expect(await estadoDe(TENANT_B)).toBe('expirada')
+  })
+
+  it('**quem está em teste também não** — pagar em teste é assinar, e assinar pede plano', async () => {
+    // Registrar dinheiro que não muda contrato nenhum é pior do que recusar: o
+    // cliente em teste que paga e continua em teste expira tendo pago.
+    await porEstado(TENANT_B, 'teste', false)
+    const r = await baixa(TENANT_B, {})
+    expect(r.statusCode).toBe(400)
   })
 
   it('**quem já estava ativo não muda de estado** — não há o que recuperar', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     await porEstado(TENANT_A, 'ativa', false)
     const r = await baixa(TENANT_A, {})
     expect(r.statusCode).toBe(201)
@@ -115,6 +138,8 @@ describe('a baixa paga alguma coisa (F-1)', () => {
 
 describe('a chave de idempotência (F-3)', () => {
   it('**a mesma referência duas vezes é recusada, com frase**', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     const ref = referencia()
     const primeira = await baixa(TENANT_A, { referenciaExterna: ref })
     expect(primeira.statusCode).toBe(201)
@@ -125,12 +150,16 @@ describe('a chave de idempotência (F-3)', () => {
   })
 
   it('a mesma referência em **outro cliente** passa — a chave é por espaço', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     const ref = referencia()
     expect((await baixa(TENANT_A, { referenciaExterna: ref })).statusCode).toBe(201)
     expect((await baixa(TENANT_B, { referenciaExterna: ref })).statusCode).toBe(201)
   })
 
   it('**referência curta demais é recusada** — inclusive para dinheiro em espécie', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     const r = await baixa(TENANT_A, { meio: 'dinheiro', referenciaExterna: 'ABC' })
     expect(r.statusCode).toBe(400)
   })
@@ -152,6 +181,8 @@ describe('a chave de idempotência (F-3)', () => {
 
 describe('o dinheiro tem forma (F-5, F-6, F-7)', () => {
   it('**a competência é derivada, no dia 1, em São Paulo**', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     // **31 de agosto às 22h em São Paulo é 1º de setembro em UTC.** Uma
     // competência digitada, ou derivada sem converter, mudaria a receita de mês
     // — e a escrituração é obrigação legal.
@@ -181,10 +212,14 @@ describe('o dinheiro tem forma (F-5, F-6, F-7)', () => {
   })
 
   it('**valor zero ou negativo é recusado**', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     expect((await baixa(TENANT_A, { valorCentavos: '0' })).statusCode).toBe(400)
   })
 
   it('**recebimento no futuro é recusado** — o dinheiro não entrou ainda', async () => {
+    await porEstado(TENANT_A, 'ativa', false)
+    await porEstado(TENANT_B, 'ativa', false)
     const r = await baixa(TENANT_A, {
       recebidoEm: new Date(Date.now() + 86_400_000).toISOString(),
     })
@@ -242,7 +277,7 @@ describe('o par de linhas, com o valor em claro (F-14)', () => {
       acao: string
       correlacao: string
       de: { estado?: string } | null
-      para: { estado?: string; valor_centavos?: number } | null
+      para: { estado?: string; valor_centavos?: number; referencia_sha256?: string } | null
     }>(
       `SELECT acao, correlacao, de, para FROM auditoria
         WHERE tenant_id = $1 AND ocorrido_em > $2::timestamptz ORDER BY ocorrido_em`,
@@ -260,5 +295,15 @@ describe('o par de linhas, com o valor em claro (F-14)', () => {
     expect(efeito.de?.estado).toBe('em_atraso')
     expect(efeito.para?.estado).toBe('ativa')
     expect(efeito.para?.valor_centavos).toBe(9900)
+
+    // **A referência entra hasheada.** É o end-to-end id do Pix do titular, que
+    // a política classifica como dado pessoal. Em claro na auditoria, o mesmo
+    // identificador existiria sob duas políticas de retenção diferentes — cinco
+    // anos fiscais na tabela de pagamentos, outro regime no log.
+    //
+    // Estado, valor e moeda continuam em claro, e isso é autorizado por escrito:
+    // "em claro apenas quando o valor é o objeto da mudança", e dar baixa em
+    // pagamento é exatamente esse caso.
+    expect(efeito.para?.referencia_sha256).toMatch(/^[0-9a-f]{64}$/)
   })
 })

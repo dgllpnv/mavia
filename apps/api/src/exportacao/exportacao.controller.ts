@@ -148,8 +148,26 @@ const CONJUNTOS = [
     // **Sem os identificadores da Stripe.** Eles são referência a um sistema de
     // terceiro, não dizem nada ao titular, e um identificador de cliente numa
     // operadora de pagamento é o tipo de coisa que não deve circular em arquivo.
-    colunas: `estado, plano, intervalo, periodo_inicio, periodo_fim, graca_ate,
-              criado_em, atualizado_em`,
+    // `cortesia_ate` sai junto: sem ela o arquivo do art. 18 informa um fim de
+    // direito de uso que **não é o do titular** — o tempo que o operador
+    // concedeu some do documento que existe para ser completo (FC-3).
+    colunas: `estado, plano, intervalo, periodo_inicio, periodo_fim, cortesia_ate,
+              graca_ate, criado_em, atualizado_em`,
+  },
+  {
+    // **Sai, e sem `registrado_por`** — achado FC-4.
+    //
+    // A tabela estava classificada em `EXPORTADA_EM_PARTE` e **não estava em
+    // `CONJUNTOS`**: o laço que monta o arquivo percorre esta lista, então o
+    // pagamento que o cliente fez por Pix não saía. Ele podia ser lido e não
+    // era lido — a classificação existia e a exportação não.
+    //
+    // Cinco anos de retenção fiscal sobre um dado do titular que ele não
+    // conseguia obter.
+    nome: 'pagamentos_manuais',
+    tabela: 'pagamentos_manuais',
+    colunas: `id, valor_centavos::text, moeda, competencia, recebido_em, meio,
+              referencia_externa, observacao, registrado_em`,
   },
   {
     nome: 'saldo_snapshots',

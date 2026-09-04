@@ -1,0 +1,16 @@
+-- 0036 · A exportação precisa ler a coluna pela qual ela filtra
+--
+-- O laço da exportação monta `SELECT <colunas> FROM <tabela> WHERE tenant_id = $1`,
+-- e `tenant_id` **não estava** no `GRANT` nominal de `mavia_app` sobre
+-- `pagamentos_manuais`. O Postgres responde `permission denied for table` —
+-- mensagem de tabela para um problema de coluna, e que não menciona qual.
+--
+-- É a terceira aparição da mesma regra nesta base, e vale escrevê-la de uma vez:
+-- **um privilégio de leitura é exigido por toda coluna que a instrução toca,
+-- inclusive as do `WHERE`, e inclusive quando a linha já é filtrada por RLS.**
+-- Foi assim que `mavia_eliminacao` não conseguia apagar o que tinha permissão
+-- de apagar, e é assim agora.
+--
+-- Conceder não afrouxa nada: `tenant_id` é o identificador do próprio espaço de
+-- quem consulta, e a RLS já o obriga a ser o dele.
+GRANT SELECT (tenant_id) ON pagamentos_manuais TO mavia_app;

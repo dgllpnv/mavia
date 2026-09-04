@@ -254,7 +254,7 @@ describe('o par de linhas que a regra 18 exige', () => {
       classe: string
       correlacao: string
       de: unknown
-      para: { razao?: string } | null
+      para: { razao_hash?: string; razao_comprimento?: number } | null
     }>(
       `SELECT acao, classe::text, correlacao, de, para FROM auditoria
         WHERE tenant_id = $1 AND ocorrido_em > $2::timestamptz ORDER BY ocorrido_em`,
@@ -268,7 +268,12 @@ describe('o par de linhas que a regra 18 exige', () => {
     // As duas são escrita financeira; a segunda carrega o de → para.
     expect(intencao!.classe).toBe('escrita_financeira')
     expect(efeito!.acao).toBe('concedeu_cortesia')
-    expect(efeito!.para?.razao).toBe('compensação')
+    // **A razão entra hasheada.** É texto livre de até 280 caracteres escrito
+    // pelo operador, e a política manda gravar campo livre como
+    // `{ hash, comprimento }` — é a mesma narrativa que o campo `referencia`
+    // foi endurecido para não receber, entrando pela porta ao lado.
+    expect(efeito!.para?.razao_hash).toMatch(/^[0-9a-f]{64}$/)
+    expect(efeito!.para?.razao_comprimento).toBeGreaterThan(0)
   })
 })
 

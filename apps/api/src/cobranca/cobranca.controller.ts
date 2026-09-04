@@ -10,19 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common'
-import {
-  cotasVigentes,
-  DIAS_DE_GRACA,
-  plano as planoDoCatalogo,
-  PLANOS,
-  podeEscrever,
-  preco,
-  transicao,
-  type CodigoDoPlano,
-  type EstadoDaAssinatura,
-  type EventoDaAssinatura,
-  type Intervalo,
-} from '@mavia/domain'
+import { cotasVigentes, DIAS_DE_GRACA, plano as planoDoCatalogo, PLANOS, podeEscrever, preco, transicao, type CodigoDoPlano, type EstadoDaAssinatura, type EventoDaAssinatura, type Intervalo, fimEfetivo } from '@mavia/domain'
 import { z } from 'zod'
 import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
@@ -60,7 +48,17 @@ interface Assinatura {
   readonly estado: EstadoDaAssinatura
   readonly plano: CodigoDoPlano
   readonly intervalo: Intervalo
+  /**
+   * **O fim efetivo do direito de uso**, não o do ciclo de cobrança.
+   *
+   * O nome fica: é o que a tela lê, e o que ela precisa mostrar é até quando a
+   * pessoa pode usar. O do ciclo vai ao lado, para quem precisa distinguir os
+   * dois — a tela de cobrança mostra a data de renovação, a de plano mostra até
+   * quando vale.
+   */
   readonly periodoFim: string
+  readonly periodoFimDoCiclo: string
+  readonly cortesiaAte: string | null
   readonly gracaAte: string | null
   readonly precoCentavos: string
   readonly podeEscrever: boolean
@@ -324,9 +322,11 @@ export async function lerAssinatura(c: PoolClient, tenantId: string): Promise<As
     plano: string
     intervalo: Intervalo
     periodo_fim: Date
+    cortesia_ate: Date | null
     graca_ate: Date | null
   }>(
-    'SELECT estado, plano, intervalo, periodo_fim, graca_ate FROM assinaturas WHERE tenant_id = $1',
+    `SELECT estado, plano, intervalo, periodo_fim, cortesia_ate, graca_ate
+       FROM assinaturas WHERE tenant_id = $1`,
     [tenantId],
   )
   const linha = r.rows[0]
@@ -354,7 +354,23 @@ export async function lerAssinatura(c: PoolClient, tenantId: string): Promise<As
     estado: linha.estado,
     plano: codigo,
     intervalo: linha.intervalo,
-    periodoFim: linha.periodo_fim.toISOString(),
+    /**
+     * **O fim efetivo, e não `periodo_fim`.**
+     *
+     * `periodo_fim` é do ciclo de cobrança e pertence à Stripe; `cortesia_ate`
+     * é o tempo que o operador concedeu. Lendo o primeiro, a tela do cliente
+     * continuava dizendo "seu teste vai até 08/09" **depois** de o operador ter
+     * prorrogado — e o operador desligava o telefone tendo prometido uma coisa
+     * que a tela contradizia.
+     *
+     * A função `fimEfetivo` existia desde o ticket 08 e **não tinha um único
+     * chamador**: a metade que decide se a cortesia vale alguma coisa estava
+     * escrita e desligada. Achado FC-3.
+     */
+    periodoFim: fimEfetivo(linha.periodo_fim, linha.cortesia_ate).toISOString(),
+    /** O do ciclo de cobrança, para quem precisa distinguir os dois. */
+    periodoFimDoCiclo: linha.periodo_fim.toISOString(),
+    cortesiaAte: linha.cortesia_ate?.toISOString() ?? null,
     gracaAte: linha.graca_ate?.toISOString() ?? null,
     precoCentavos: preco(codigo, linha.intervalo).centavos.toString(),
     podeEscrever: podeEscrever(linha.estado),

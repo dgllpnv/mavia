@@ -70,6 +70,22 @@ const RECUSAS: readonly (readonly [string, string])[] = [
   ['RAZAO_AUSENTE', 'Escreva a razão: ela vai para o registro.'],
   ['VALOR_INVALIDO', 'O valor da baixa é positivo, em centavos.'],
   ['RECEBIMENTO_NO_FUTURO', 'A data do recebimento não pode estar no futuro.'],
+  [
+    'ESTADO_NAO_PERMITE_BAIXA',
+    // Só `em_atraso` e `ativa` aceitam. `expirada` e `teste` recusam porque
+    // registrar dinheiro que não muda contrato nenhum é pior do que recusar: o
+    // cliente pagaria e continuaria expirando.
+    'Este estado da assinatura não aceita baixa manual. Quem expirou contrata de novo; ' +
+      'quem está em teste assina, e assinar pede plano e intervalo.',
+  ],
+  [
+    'TRANSICAO_OBSOLETA',
+    // A assinatura mudou entre a leitura e a escrita — tipicamente um webhook
+    // da Stripe chegando no meio. Recusar é o certo: aplicar sobrescreveria uma
+    // decisão mais recente que a nossa.
+    'A assinatura mudou enquanto a baixa era registrada. Confira o estado e tente de novo.',
+  ],
+  ['BAIXA_INEXISTENTE', 'Esta baixa não existe ou já foi estornada.'],
   // O índice único da regra 13. A frase nomeia o que aconteceu, porque
   // "violação de restrição" faria o operador achar que o sistema quebrou
   // quando ele acabou de ser protegido de contar a mesma receita duas vezes.
@@ -205,9 +221,15 @@ export class AdminController {
   async perfil(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string) {
     return this.comEspacoAberto(req, tenantId, '/v1/admin/clientes/:tenantId', async (c) => {
       const r = await c.query(
+        // `cortesia_ate` **e** `periodo_fim`, lado a lado. É o painel: ver os
+        // dois é o ponto. Sem a primeira, o operador que acabou de conceder
+        // trinta dias não tem como ver que concedeu — e repete a operação,
+        // que é como a cortesia passava a valer zero (FC-2, FC-3).
         `SELECT t.id, t.nome, t.criado_em,
                 a.plano::text AS plano, a.estado::text AS estado,
-                a.periodo_fim, a.graca_ate
+                a.periodo_fim, a.cortesia_ate, a.graca_ate,
+                greatest(a.periodo_fim, coalesce(a.cortesia_ate, a.periodo_fim))
+                  AS fim_efetivo
            FROM tenants t LEFT JOIN assinaturas a ON a.tenant_id = t.id
           WHERE t.id = $1`,
         [tenantId],
