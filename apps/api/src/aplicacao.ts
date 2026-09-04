@@ -9,12 +9,7 @@ import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
 import type { Mensageiro } from './mensageiro/mensageiro.js'
 import type { EstadoDoOauth } from './redis/estado-do-oauth.js'
-import {
-  chaveDaRota,
-  ROTAS_SEM_TENANT,
-  verificarCoberturaDaMatriz,
-  type Rota,
-} from './autorizacao/politica-acesso.js'
+import { chaveDaRota, ROTAS_SEM_TENANT, verificarCoberturaDaMatriz, type Rota, ROTAS_DE_ADMIN } from './autorizacao/politica-acesso.js'
 import { TenantNaoInformado, TenantNaoPertence, type Autenticador } from './autenticacao/autenticador.js'
 
 /**
@@ -32,9 +27,11 @@ export async function criarAplicacao(
   limite: LimiteDeTentativas,
   mensageiro?: Mensageiro,
   estadoDoOauth?: EstadoDoOauth,
+  /** A conexão do painel. Ausente, o painel não é registrado — ver o módulo. */
+  poolDoPainel?: Pool,
 ): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.comPool(pool, cofre, limite, mensageiro, estadoDoOauth),
+    AppModule.comPool(pool, cofre, limite, mensageiro, estadoDoOauth, poolDoPainel),
     new FastifyAdapter(),
     { logger: false },
   )
@@ -83,7 +80,20 @@ export async function criarAplicacao(
     })
 
     try {
-      const r = await autenticar(req, { exigeTenant: !ROTAS_SEM_TENANT.has(chave) })
+      // **`/v1/admin/*` nunca produz um `Autenticado`** — ADR 0024 D2.
+      //
+      // Sem esta segunda condição, o autenticador exigiria `X-Mavia-Tenant` na
+      // rota de admin e montaria um `Autenticado` com o tenant do cliente — e a
+      // partir daí **todos** os controladores existentes passariam a servir o
+      // operador, cada um chamando `comTenant`, que roda como `mavia_app`, com
+      // DML completo sobre o razão.
+      //
+      // E as rotas de admin **não** entram em `ROTAS_SEM_TENANT`: aquela lista
+      // dispensa da matriz e define `exigeTenant` ao mesmo tempo, e usá-la aqui
+      // seriam duas exceções pelo preço de uma (ADR 0024 D6).
+      const r = await autenticar(req, {
+        exigeTenant: !ROTAS_SEM_TENANT.has(chave) && !ROTAS_DE_ADMIN.has(chave),
+      })
       if (r.sessao) req.sessao = r.sessao
       if (r.autenticado) req.autenticado = r.autenticado
     } catch (erro) {

@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from '@nestjs/common'
 import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core'
 import { AutorizacaoGuard } from './autorizacao/autorizacao.guard.js'
+import { AdminController, POOL_DO_PAINEL } from './admin/admin.controller.js'
 import type { Pool } from 'pg'
 import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
@@ -42,10 +43,22 @@ export class AppModule {
      * conhecer a conexão.
      */
     estadoDoOauth?: EstadoDoOauth,
+    /**
+     * A conexão do painel de administração, autenticada como `mavia_admin`.
+     *
+     * **Opcional, e a ausência é um estado legítimo:** sem ela o painel
+     * simplesmente não é registrado, e nenhuma rota `/v1/admin/` existe no
+     * roteador. É o mesmo padrão do SMTP e do Google — recusar é melhor do que
+     * fingir, e uma rota de administração servida por uma pool que não existe
+     * seria pior que ausente.
+     */
+    poolDoPainel?: Pool,
   ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
+        // Só entra no roteador se houver pool própria — ver o parâmetro.
+        ...(poolDoPainel ? [AdminController] : []),
         SessoesController,
         CadastroController,
         GoogleController,
@@ -78,10 +91,8 @@ export class AppModule {
         { provide: GUARDIAO, useValue: new ClienteDoGuardiao() },
         { provide: MENSAGEIRO, useValue: mensageiro ?? mensageiroDoAmbiente() },
         { provide: ESTADO_OAUTH, useValue: estadoDoOauth },
-        // Global de propósito: idempotência escrita rota a rota é idempotência
-        // que falta na rota nova. Aqui é propriedade do transporte, e vale para
-        // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda
-        // não existem.
+        ...(poolDoPainel ? [{ provide: POOL_DO_PAINEL, useValue: poolDoPainel }] : []),
+
         // **Global, e nega por padrão** — achado S-4 do gate de segurança.
         //
         // `matriz-de-acesso.md` §0.3 e `sistema.md` §4.0 afirmavam que este
@@ -96,6 +107,11 @@ export class AppModule {
         // a mesma decisão pura não muda resultado. Ficam por ora — removê-las
         // é limpeza, e limpeza não entra no mesmo passo que muda a API inteira.
         { provide: APP_GUARD, useClass: AutorizacaoGuard },
+
+        // Global de propósito: idempotência escrita rota a rota é idempotência
+        // que falta na rota nova. Aqui é propriedade do transporte, e vale para
+        // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda
+        // não existem.
         { provide: APP_INTERCEPTOR, useClass: IdempotenciaInterceptor },
       ],
     }

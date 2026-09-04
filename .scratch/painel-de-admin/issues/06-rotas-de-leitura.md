@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02, 05
 
 # 06 · As rotas de leitura do painel
@@ -74,3 +74,25 @@ O motivo e a referência são pedidos **antes** de abrir o espaço, não depois.
 - Não implementa escrita nenhuma.
 - Não desenha tela (ticket 12): entrega as rotas e os contratos.
 - Não implementa `RL-ADMIN-ABERTURA` (ticket 10, **C-8**).
+
+## Comments
+
+**2026-09-04 · entregue. 13 asserções.** `/v1/admin/` existe no roteador pela primeira vez.
+
+As cinco rotas, o `AdminController`, a pool do painel ligada de `main.ts` até o módulo, e — a peça que carrega a ADR 0024 D2 — `exigeTenant` passando a excluir as rotas de admin.
+
+**Essa linha é o épico inteiro em uma condição.** O autenticador produz um `Autenticado` sempre que a rota exige tenant, e as rotas de admin **não podem** entrar em `ROTAS_SEM_TENANT` (D6: aquela lista dispensa da matriz e define `exigeTenant` ao mesmo tempo). Sem a segunda condição, o painel teria um `Autenticado` com o tenant do cliente — e todos os controladores existentes passariam a servi-lo, cada um chamando `comTenant`, que roda como `mavia_app`, com escrita completa sobre o razão.
+
+**A pool ausente é estado legítimo, não defeito.** Sem `DATABASE_URL_PAINEL`, o `AdminController` não é registrado e nenhuma rota `/v1/admin/` existe. É o mesmo padrão do SMTP e do Google: recusar é melhor que fingir, e uma rota de administração servida por uma pool que não existe é pior que ausente.
+
+**A hipótese vem em cabeçalho, e é pedida antes.** `x-mavia-motivo` e `x-mavia-referencia`, validados por Zod contra a lista fechada antes de qualquer consulta. Três asserções cobrem as três formas de burlar: sem cabeçalho, motivo fora do enum, referência vazia.
+
+**Duas coisas que o teste me obrigou a separar.**
+
+O arreio ganhou `abrirSessao(usuario)`. A asserção de 403 precisava de alguém **com sessão e sem concessão** — sem sessão a resposta é 401, e o teste mediria autenticação em vez de autorização. 401 diz "não entrou"; 403 diz "entrou e não pode", e é o segundo que importa aqui.
+
+E a asserção de que o controlador não chama `comTenant`, `comUsuario` nem `resolverTenant` é sobre o **código**, não sobre a requisição. Uma requisição que passa prova o caminho de hoje; o texto prova que o caminho de amanhã não existe.
+
+**Fora deste ticket:** `RL-ADMIN-BUSCA` não entrou — nenhuma classe de rate limit da matriz está implementada, e o substrato é condição de deploy (C-8, ticket 13). E a rota de baixas anteriores é a quarta tela, do ticket 07.
+
+Verde: typecheck 9/9, lint 9/9, API **565** em 38 arquivos, E2E 23.

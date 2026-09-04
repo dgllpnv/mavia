@@ -46,6 +46,8 @@ export interface ApiDeTeste {
     /** Cabeçalhos extras — `Idempotency-Key`, por exemplo. */
     cabecalhos?: Record<string, string>
   }): ReturnType<NestFastifyApplication['inject']>
+  /** Abre uma sessão real para um usuário fora dos dois da semente. */
+  abrirSessao(usuarioId: string): Promise<void>
   encerrar(): Promise<void>
 }
 
@@ -84,6 +86,12 @@ export async function subirApi(): Promise<ApiDeTeste> {
     },
   }
 
+  // A conexão do painel, autenticada como `mavia_admin` — pool própria, papel
+  // próprio, sem parentesco com `mavia_app` (ADR 0024 D3). O arreio a monta
+  // sempre: uma aplicação de teste sem painel esconderia justamente as rotas
+  // que este épico existe para provar.
+  const poolDoPainel = await banco.poolComo('mavia_admin')
+
   const app = await criarAplicacao(
     pool,
     autenticadorDeSessao(pool, cofre),
@@ -91,6 +99,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
     limite,
     mensageiro,
     new EstadoDoOauth(redis),
+    poolDoPainel,
   )
   await app.init()
 
@@ -99,7 +108,14 @@ export async function subirApi(): Promise<ApiDeTeste> {
   // aplicação não tem.
   const tokens = new Map<string, string>()
   const refresh = new Map<string, string>()
-  for (const usuario of [USUARIO_A, USUARIO_B]) {
+
+  /**
+   * Abre uma sessão de verdade para um usuário — refresh no Postgres, access no
+   * cofre. Exposta porque nem todo teste se contenta com os dois usuários da
+   * semente: o painel precisa de alguém **com sessão e sem concessão**, para
+   * distinguir "não entrou" de "entrou e não pode".
+   */
+  async function abrirSessao(usuario: string): Promise<void> {
     const token = randomBytes(32).toString('hex')
     const hash = createHash('sha256').update(token, 'utf8').digest()
     const r = await banco.cliente.query<{ id: string }>(
@@ -114,7 +130,10 @@ export async function subirApi(): Promise<ApiDeTeste> {
     tokens.set(usuario, await cofre.emitir({ sessaoId: r.rows[0]!.id, usuarioId: usuario }))
   }
 
+  for (const usuario of [USUARIO_A, USUARIO_B]) await abrirSessao(usuario)
+
   return {
+    abrirSessao,
     banco,
     app,
     redis,

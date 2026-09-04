@@ -32,6 +32,33 @@ async function principal(): Promise<void> {
       'postgresql://mavia_app:mavia_local_dev@127.0.0.1:4732/mavia',
   })
 
+  /**
+   * A conexão do painel de administração — ADR 0024 D3.
+   *
+   * **Pool própria, autenticada diretamente como `mavia_admin`**, e não o pool
+   * do cliente com `SET ROLE`. A razão foi medida contra Postgres 17:
+   *
+   *     BEGIN; SET LOCAL ROLE leitor; UPDATE t SET v=99;              -- denied
+   *     BEGIN; SET LOCAL ROLE leitor; RESET ROLE; UPDATE t SET v=99;  -- UPDATE 1
+   *
+   * Uma instrução desfaz a trava. Com papel próprio e sem parentesco com
+   * `mavia_app`, `RESET ROLE` aterrissa em quem não escreve.
+   *
+   * **Sem a variável, o painel não sobe** — e isso é um estado legítimo, não um
+   * defeito: nenhuma rota `/v1/admin/` é registrada, como o SMTP ausente faz o
+   * cadastro recusar em vez de fingir. Uma rota de administração servida por
+   * uma pool que não existe seria pior que ausente.
+   *
+   * `max: 4` porque o painel é operado por pessoas, não por tráfego: quatro
+   * conexões cobrem folgadamente dois operadores, e o teto existe para que uma
+   * varredura acidental não consuma o pool do produto.
+   */
+  const urlDoPainel = process.env['DATABASE_URL_PAINEL']
+  const poolDoPainel = urlDoPainel ? new Pool({ connectionString: urlDoPainel, max: 4 }) : undefined
+  if (!poolDoPainel) {
+    console.log('painel de administração desligado — defina DATABASE_URL_PAINEL para ligá-lo')
+  }
+
   // Bloco 47xx, como o Postgres. `maxRetriesPerRequest: null` é exigência do
   // BullMQ e não muda o comportamento do cofre.
   const redis = new Redis(process.env['REDIS_URL'] ?? 'redis://127.0.0.1:4779', {
@@ -54,6 +81,7 @@ async function principal(): Promise<void> {
     limite,
     undefined,
     new EstadoDoOauth(redis),
+    poolDoPainel,
   )
 
   // O horizonte da recorrência passa a andar sozinho — pendência P-8.

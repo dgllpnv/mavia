@@ -244,7 +244,13 @@ export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
  *
  * Nasce vazia. Cada ticket de rota acrescenta a sua.
  */
-export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([])
+export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([
+  'GET /v1/admin/clientes',
+  'POST /v1/admin/clientes/:tenantId/abrir',
+  'GET /v1/admin/clientes/:tenantId',
+  'GET /v1/admin/clientes/:tenantId/contas',
+  'GET /v1/admin/clientes/:tenantId/lancamentos',
+])
 
 export function chaveDaRota(rota: Rota): string {
   return `${rota.metodo} ${rota.caminho}`
