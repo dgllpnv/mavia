@@ -50,6 +50,7 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   // Família de contrato — dono `mavia_admin_contrato` (ticket 08).
   ['prorrogar_teste', 'mavia_admin_contrato'],
   ['conceder_cortesia', 'mavia_admin_contrato'],
+  ['registrar_pagamento', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

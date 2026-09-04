@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
 import { subirApi, type ApiDeTeste } from './aplicacao-de-teste.js'
-import {
-  CHAVES_DA_EXPORTACAO,
-  EXPORTADA_JUNTO,
-  FORA_DA_EXPORTACAO,
-  TABELAS_EXPORTADAS,
-} from '../src/exportacao/exportacao.controller.js'
+import { CHAVES_DA_EXPORTACAO, EXPORTADA_JUNTO, FORA_DA_EXPORTACAO, TABELAS_EXPORTADAS, EXPORTADA_EM_PARTE } from '../src/exportacao/exportacao.controller.js'
 
 /**
  * Relatórios e exportação.
@@ -273,6 +268,7 @@ describe('exportação — o direito de portabilidade', () => {
     const classificadas = new Set([
       ...TABELAS_EXPORTADAS,
       ...EXPORTADA_JUNTO.keys(),
+      ...EXPORTADA_EM_PARTE.keys(),
       ...FORA_DA_EXPORTACAO.keys(),
     ])
     const esquecidas = r.rows.map((l) => l.table_name).filter((t) => !classificadas.has(t))
@@ -286,5 +282,28 @@ describe('exportação — o direito de portabilidade', () => {
     expect(pode({ metodo: 'GET', caminho: '/v1/exportacao' }, 'proprietario')).toBe(true)
     expect(pode({ metodo: 'GET', caminho: '/v1/exportacao' }, 'membro')).toBe(false)
     expect(pode({ metodo: 'GET', caminho: '/v1/exportacao' }, 'visualizador')).toBe(false)
+  })
+})
+
+
+describe('o terceiro estado da classificação — `EXPORTADA_EM_PARTE`', () => {
+  it('**as colunas omitidas não aparecem na saída real**, e não só na lista', async () => {
+    // Sem esta asserção, a lista vira documentação: alguém acrescenta a coluna
+    // à consulta, a lista continua dizendo que ela sai omitida, e o campo sai
+    // assim mesmo. A trava de verdade é o `GRANT` por coluna da migration
+    // `0034` — esta asserção é o que garante que as duas concordam.
+    const { EXPORTADA_EM_PARTE } = await import('../src/exportacao/exportacao.controller.js')
+
+    for (const [tabela, regra] of EXPORTADA_EM_PARTE) {
+      for (const coluna of regra.colunasOmitidas) {
+        const r = await api.banco.cliente.query(
+          `SELECT 1 FROM information_schema.column_privileges
+            WHERE table_name = $1 AND column_name = $2
+              AND grantee = 'mavia_app' AND privilege_type = 'SELECT'`,
+          [tabela, coluna],
+        )
+        expect(r.rowCount, `${tabela}.${coluna} não pode ser legível por mavia_app`).toBe(0)
+      }
+    }
   })
 })

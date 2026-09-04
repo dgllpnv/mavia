@@ -199,6 +199,40 @@ export const EXPORTADA_JUNTO: ReadonlyMap<string, string> = new Map([
 ])
 
 /**
+ * Tabelas que saem **em parte** — o terceiro estado, e ele não existia.
+ *
+ * A classificação era binária e fechada: ou a tabela sai inteira, ou não sai.
+ * `pagamentos_manuais` não cabe em nenhum dos dois: o titular tem direito ao
+ * **fato** do pagamento (valor, data, meio, comprovante), e `registrado_por` é
+ * o `usuarios.id` de um funcionário da Mavia. Entregá-lo contrariaria por porta
+ * lateral a decisão de não expor ao cliente o registro de acesso do operador —
+ * ele descobriria pelo arquivo o que a decisão determinou não contar.
+ *
+ * **A omissão é um privilégio que não existe, não uma linha no serializador.**
+ * O `GRANT SELECT` de `mavia_app` sobre esta tabela é nominal por coluna e não
+ * inclui `registrado_por` (migration `0034`). Se um dia alguém acrescentar a
+ * coluna à consulta, o banco recusa — em vez de a lista abaixo virar
+ * documentação de uma promessa que o código deixou de cumprir.
+ *
+ * O teste que acompanha afirma as duas metades: a tabela está classificada, e
+ * as colunas omitidas **não aparecem na saída real**.
+ */
+export const EXPORTADA_EM_PARTE: ReadonlyMap<
+  string,
+  { readonly colunasOmitidas: readonly string[]; readonly porque: string }
+> = new Map([
+  [
+    'pagamentos_manuais',
+    {
+      colunasOmitidas: ['registrado_por'],
+      porque:
+        'o titular tem direito ao fato do pagamento, não ao crachá de quem o digitou — ' +
+        'e entregá-lo contrariaria por porta lateral a decisão de não expor o operador',
+    },
+  ],
+])
+
+/**
  * Tabelas com `tenant_id` que **não** entram na exportação, e o porquê de cada
  * uma. A lista existe para que o teste de completude possa falhar quando
  * aparecer uma tabela nova que ninguém classificou.

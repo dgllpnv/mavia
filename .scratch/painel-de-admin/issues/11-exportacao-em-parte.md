@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 07
 
 # 11 · `EXPORTADA_EM_PARTE` — o terceiro estado do teste de completude

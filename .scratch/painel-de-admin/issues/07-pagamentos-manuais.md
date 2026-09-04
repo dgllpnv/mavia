@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05, 08
 
 > **Atenção ao bloqueio.** A tabela de fatias do épico diz `Blocked by: 05`. Este ticket declara **05 e 08**, e a razão é de migration, não de gosto: `admin.registrar_pagamento` escreve `origem_da_ultima_escrita` (§8.6, critério 21), coluna que a §Modelo de dados cria no `ALTER TABLE assinaturas` do ticket 08. Migration é forward-only — ou 08 vem antes, ou aquele `ALTER` migra para cá. Escolhi reordenar em vez de mover escopo, porque as três colunas novas de `assinaturas` numa migration só é o que o spec escreve. **Se o dono preferir 07 ∥ 08**, o conserto é mover `origem_da_ultima_escrita` + o `CREATE OR REPLACE` de `auth.aplicar_estado_da_assinatura` para a migration deste ticket, e o bloqueio volta a ser só 05. Ver `README.md`.

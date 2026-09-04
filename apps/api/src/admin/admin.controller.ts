@@ -68,6 +68,12 @@ const RECUSAS: readonly (readonly [string, string])[] = [
   ['ESTADO_NAO_PERMITE_CORTESIA', 'Este estado da assinatura não recebe cortesia.'],
   ['ASSINATURA_INEXISTENTE', 'Este espaço não tem assinatura.'],
   ['RAZAO_AUSENTE', 'Escreva a razão: ela vai para o registro.'],
+  ['VALOR_INVALIDO', 'O valor da baixa é positivo, em centavos.'],
+  ['RECEBIMENTO_NO_FUTURO', 'A data do recebimento não pode estar no futuro.'],
+  // O índice único da regra 13. A frase nomeia o que aconteceu, porque
+  // "violação de restrição" faria o operador achar que o sistema quebrou
+  // quando ele acabou de ser protegido de contar a mesma receita duas vezes.
+  ['pagamento_manual_unico', 'Esta referência já foi registrada para este cliente.'],
 ]
 
 const zBusca = z.object({
@@ -100,6 +106,25 @@ type Abertura = z.infer<typeof zAbertura>
  * favor, e o teto de dias é conferido no banco — aqui a validação só evita uma
  * ida ao Postgres para recusar o óbvio.
  */
+/**
+ * A baixa de pagamento.
+ *
+ * `referenciaExterna` é **obrigatória** e é a chave de idempotência da regra 13
+ * — end-to-end id do Pix, número do comprovante, do boleto ou do recibo.
+ * Inclusive para dinheiro em espécie: ali ela é o número do recibo que alguém
+ * precisou emitir.
+ *
+ * Sem ela, dois operadores dão baixa no mesmo Pix em horas diferentes e a
+ * escrituração soma o dobro do que entrou (achado F-3).
+ */
+const zBaixa = z.object({
+  valorCentavos: z.string().regex(/^[1-9][0-9]*$/, 'o valor é positivo, em centavos'),
+  meio: z.enum(['pix', 'transferencia', 'boleto', 'dinheiro']),
+  referenciaExterna: z.string().trim().min(6).max(140),
+  recebidoEm: z.string().datetime(),
+  observacao: z.string().trim().max(1000).optional(),
+})
+
 const zTempoConcedido = z.object({
   dias: z.number().int().min(1).max(30),
   razao: z.string().trim().min(3).max(280),
@@ -216,6 +241,72 @@ export class AdminController {
         )
         return { itens: r.rows }
       },
+    )
+  }
+
+  /**
+   * As baixas anteriores — e ela existe **por causa** do achado F-3.
+   *
+   * Dar baixa sem ver as baixas anteriores é o cenário da duplicidade com outra
+   * roupa: o índice único recusa a repetição exata, e não recusa a mesma
+   * quantia lançada com outra referência. A tela é o que faz o operador
+   * perceber antes de o banco recusar.
+   */
+  @Get('clientes/:tenantId/pagamentos')
+  async pagamentos(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string) {
+    return this.comEspacoAberto(
+      req,
+      tenantId,
+      '/v1/admin/clientes/:tenantId/pagamentos',
+      async (c) => {
+        const r = await c.query(
+          `SELECT id, valor_centavos::text, moeda, competencia, recebido_em, meio,
+                  referencia_externa, observacao, registrado_em
+             FROM pagamentos_manuais
+            WHERE deleted_at IS NULL
+            ORDER BY recebido_em DESC LIMIT 100`,
+        )
+        return { itens: r.rows }
+      },
+    )
+  }
+
+  @Post('clientes/:tenantId/pagamentos')
+  @HttpCode(201)
+  async darBaixa(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string, @Body() corpo: unknown) {
+    const { motivo, referencia } = this.hipotese(req)
+    const operador = this.operador(req)
+
+    const analise = zBaixa.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const d = analise.data
+
+    return this.traduzindoRecusa(async () =>
+      comTenantDeAdminEscrita(
+        this.poolDeEscrita,
+        contextoDeAdminEscrita(operador, tenantId),
+        async (c) => {
+          const abertura = await c.query<{ correlacao: string }>(
+            `SELECT admin.abrir_espaco_para_escrita($1, $2::motivo_de_acesso, $3, $4, $5) AS correlacao`,
+            [tenantId, motivo, referencia, 'deu_baixa', '/v1/admin/pagamentos'],
+          )
+
+          const r = await c.query<{ id_do_pagamento: string; estado_novo: string }>(
+            `SELECT * FROM admin.registrar_pagamento($1, $2::bigint, $3::meio_de_pagamento,
+                                                     $4, $5::timestamptz, $6, $7)`,
+            [
+              tenantId,
+              d.valorCentavos,
+              d.meio,
+              d.referenciaExterna,
+              d.recebidoEm,
+              d.observacao ?? null,
+              abertura.rows[0]!.correlacao,
+            ],
+          )
+          return { id: r.rows[0]!.id_do_pagamento, estado: r.rows[0]!.estado_novo }
+        },
+      ),
     )
   }
 
