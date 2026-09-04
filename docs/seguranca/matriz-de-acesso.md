@@ -43,10 +43,14 @@ Esta frase resolve A-27 e precisa estar escrita porque o time vai supor o contr�
 
 Consequências operacionais, todas verificáveis:
 
-- `withTenant(tenantId, fn)` recebe **um único** argumento de origem possível, o `TenantContext`. Uma regra de lint proíbe `withTenant(req.params.…)` literalmente; a violação reprova o build.
+- `comTenant(pool, ctx, fn)` recebe **um único** argumento de origem possível, o `ContextoDoTenant`.
+
+  > **Correção de 2026-09-04.** Esta linha dizia: *"`withTenant(tenantId, fn)` … Uma regra de lint proíbe `withTenant(req.params.…)` literalmente; a violação reprova o build."* **As duas metades eram falsas.** A função se chama `comTenant` (`apps/api/src/tenancy/tenancy.ts:64`), não `withTenant`, e recebe o contexto inteiro em vez do id solto; e `eslint.config.js` não tem nenhuma regra sobre ela — o lint descrito casaria com zero linhas do repositório. O erro sobreviveu meses porque a frase é plausível e ninguém a executou. Foi ele que reprovou a v1 do spec do painel de administração, que o citou como salvaguarda existente. Fica registrado em vez de apagado: **a lição é que controle afirmado em documento normativo precisa apontar para arquivo e linha, ou não é controle.**
+
+  A garantia real hoje é estrutural, não de lint: `comTenant` usa `set_config($1, $2, true)` com parâmetro vinculado (`tenancy.ts:76-80`), e o `ContextoDoTenant` só é produzido pelo pipeline de sessão.
 - A comparação acontece num interceptor nomeado (`AsserirTenantDoPath`) declarado uma vez, não num `if` por controller.
 - Divergência é 403 com corpo genérico — **não** 404 e **não** "tenant não encontrado": as duas variantes revelam existência de tenant alheio.
-- O mesmo tratamento vale para qualquer rota futura que carregue `:tenantId`. Não há exceção prevista, e criar uma exige ADR.
+- O mesmo tratamento vale para qualquer rota futura que carregue `:tenantId`, com **uma** exceção, nomeada e delimitada pelo [ADR 0024](../adr/0024-acesso-administrativo-entre-espacos.md) (aceito em 2026-09-04): as rotas sob `/v1/admin/`. Ali o identificador do caminho é a fonte, porque o painel de administração precisa **escolher** o espaço — e a exceção só existe sob as três condições da D1, sendo a decisiva que a requisição de admin **não carrega um `Autenticado`**, o que impede os controladores do cliente de servi-la. Uma segunda exceção exige ADR nova.
 
 Isso resolve o IDOR de tenant. A **autopromoção a `proprietario`** é fechada separadamente, por R-4.
 

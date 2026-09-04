@@ -641,7 +641,13 @@ Ausência de `X-Mavia-Tenant` com múltiplos tenants é **400**, nunca escolha i
 
 O processo `parser` **não tem papel de banco** — não abre conexão.
 
-**A única exceção de leitura sem contexto de tenant** é `outbox_pendencias` (`tenant_id`, booleano, sem dado financeiro) e a view `tenants_ativos`. Está declarada aqui porque uma exceção escrita é auditável e uma exceção implícita não é. Critério de aceite (A-01): com `mavia_jobs` conectado e `app.tenant_id` não definido, `SELECT count(*) FROM outbox` retorna **0**.
+**As exceções de leitura sem contexto de tenant são três, e a lista é fechada.** Estão declaradas aqui porque uma exceção escrita é auditável e uma exceção implícita não é.
+
+1. **`outbox_pendencias`** — `tenant_id`, booleano, sem dado financeiro.
+2. **A view `tenants_ativos`.**
+3. **`admin.listar_clientes(...)`** — acrescentada pelo [ADR 0024](../adr/0024-acesso-administrativo-entre-espacos.md), aceito em 2026-09-04. Função `SECURITY DEFINER` de `mavia_admin_definer` (`NOLOGIN NOBYPASSRLS`, jamais `mavia_auth`, que já lê cinco tabelas cross-tenant, e jamais `mavia_migrate`, que tem `BYPASSRLS`), com projeção fixa — espaço, titular, plano, estado —, **sem dado financeiro do razão**, executável apenas pelo pool do painel de administração, que verifica concessão ativa e grava a linha de auditoria na mesma instrução.
+
+Critério de aceite (A-01): com `mavia_jobs` conectado e `app.tenant_id` não definido, `SELECT count(*) FROM outbox` retorna **0**. Critério de aceite da terceira: chamar `admin.listar_clientes` sem concessão ativa devolve **erro**, não linhas.
 
 **RLS isola tenants; propriedade dentro do tenant é responsabilidade explícita da rota (A-27).** Toda rota sobre recurso cuja chave inclui `usuario_id` — `notificacoes`, `preferencias`, `sessoes` — verifica `usuario_id = TenantContext.usuarioAtual()` no servidor, além da RLS. A RLS não vê esse caso por construção.
 
@@ -980,9 +986,9 @@ Exercidos agora, para não serem re-litigados em code review:
 5. **Nenhum `::date` sobre `TIMESTAMPTZ` sem `AT TIME ZONE` explícito.** É como o contraexemplo D faz R$ 500,00 sumirem do ano.
 6. **`lancamentos.fatura_id` nunca aponta para a fatura que uma transferência paga.** O vínculo é `transferencias.fatura_id`, e só ele.
 7. **Nenhum seam novo** em repositório Drizzle, serviço NestJS interno ou componente isolado de `packages/ui`. Lista fechada de seis seams; ampliar exige ADR.
-8. **Nenhum papel de banco que atende requisição ou job com `BYPASSRLS`**, e nenhuma leitura sem contexto de tenant além das duas exceções nomeadas em §3.9.
+8. **Nenhum papel de banco que atende requisição ou job com `BYPASSRLS`**, e nenhuma leitura sem contexto de tenant além das **três** exceções nomeadas em §3.9. A terceira entrou pelo ADR 0024; uma quarta exige ADR nova, e este veto continua valendo sobre ela.
 9. **Nenhum processo que manipula DEK executa parsing de arquivo de usuário.**
-10. **Nenhum `id` de tenant em path de rota.** O tenant vem do contexto; duas fontes de verdade é IDOR.
+10. **Nenhum `id` de tenant em path de rota**, com **uma** exceção nomeada. O tenant vem do contexto; duas fontes de verdade é IDOR. A exceção é `/v1/admin/`, criada pelo [ADR 0024](../adr/0024-acesso-administrativo-entre-espacos.md) D1 — e ela só existe sob três condições simultâneas: a rota está sob esse prefixo; o identificador do caminho **nunca** é atribuído a `app.tenant_id` diretamente, sendo apenas argumento das funções `admin.abrir_espaco*`, que gravam a auditoria e definem o GUC na mesma instrução; e a requisição **não carrega um `Autenticado`**, o que impede que os controladores do cliente passem a servi-la. Fora disso, `params` alimentando `set_config('app.tenant_id', …)` é defeito.
 11. **Nenhum cursor resolvido por lookup de `id`.**
 12. **`Conta` tem `tipo`.** Não copiar a fraqueza 2 do Organizze.
 13. **`packages/ui` não importa `packages/contracts`; nenhum `packages/*` importa `apps/*`.**
