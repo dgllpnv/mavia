@@ -1,0 +1,19 @@
+-- 0039 · O papel de contrato precisa ler `tenants`
+--
+-- A `0029` deu a ele `INSERT (id, nome, timezone, moeda_base)` e **nenhum
+-- `SELECT`** — e `admin.cadastrar_cliente` precisa dele em dois lugares:
+--
+--   · `INSERT … RETURNING id` — devolver a coluna é lê-la;
+--   · o `JOIN tenants t` da verificação de teto, que filtra por `t.criado_em` e
+--     `t.deleted_at`.
+--
+-- A quarta aparição da mesma regra nesta base, e vale fixá-la de vez:
+--
+-- > **Um privilégio de leitura é exigido por toda coluna que a instrução toca**
+-- > — as do `SELECT`, as do `WHERE`, as do `JOIN` e as do `RETURNING` —, e ele
+-- > é independente da RLS, que decide *quais linhas*, não *quais colunas*.
+--
+-- As três anteriores: `DELETE … WHERE` sem `SELECT` no gatilho de imutabilidade,
+-- o `WHERE tenant_id` da exportação, e a policy ausente da `0038`. As quatro
+-- responderam com mensagens que apontavam para o lugar errado.
+GRANT SELECT (id, nome, criado_em, deleted_at) ON tenants TO mavia_admin_contrato;

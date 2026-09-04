@@ -45,17 +45,23 @@ describe('as rotas do painel estão declaradas, e o boot passou', () => {
     // Se a asserção de prefixo do ticket 02 tivesse falhado — rota registrada
     // fora da lista, ou chave da lista fora do prefixo —, o `subirApi` teria
     // lançado no `beforeAll`.
-    expect([...ROTAS_DE_ADMIN].sort()).toEqual([
+    // **Os dois lados ordenados**, e não só o esperado. A versão anterior
+    // comparava contra uma lista escrita à mão, e cada rota nova quebrava o
+    // teste por posição em vez de por conteúdo — ruído que ensina a atualizar
+    // a lista sem ler o que ela diz.
+    const esperadas = [
       'GET /v1/admin/clientes',
       'GET /v1/admin/clientes/:tenantId',
       'GET /v1/admin/clientes/:tenantId/contas',
       'GET /v1/admin/clientes/:tenantId/lancamentos',
       'GET /v1/admin/clientes/:tenantId/pagamentos',
+      'POST /v1/admin/clientes',
       'POST /v1/admin/clientes/:tenantId/abrir',
       'POST /v1/admin/clientes/:tenantId/cortesia',
       'POST /v1/admin/clientes/:tenantId/pagamentos',
       'POST /v1/admin/clientes/:tenantId/teste/prorrogar',
-    ])
+    ]
+    expect([...ROTAS_DE_ADMIN].sort()).toEqual([...esperadas].sort())
   })
 })
 

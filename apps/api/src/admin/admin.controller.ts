@@ -28,6 +28,17 @@ export const POOL_DO_PAINEL = Symbol('POOL_DO_PAINEL')
 export const POOL_DE_ESCRITA = Symbol('POOL_DE_ESCRITA')
 
 /**
+ * O alvo da abertura quando o espaço **ainda não existe** — o cadastro.
+ *
+ * `admin.abrir_espaco_para_escrita` exige um alvo, e no cadastro não há um: o
+ * identificador nasce dentro da própria transação. Este UUID nulo é o alvo
+ * declarado, e torna a linha de intenção distinguível de qualquer espaço real —
+ * o que é melhor que usar o id do operador, que seria mentira, ou omitir a
+ * abertura, que deixaria a única escrita do painel sem hipótese declarada.
+ */
+const ESPACO_A_CRIAR = '00000000-0000-0000-0000-000000000000'
+
+/**
  * O painel de administração — rotas de leitura.
  *
  * ## Cada tela tem rota própria, e isso é a maior parte do orçamento do épico
@@ -86,6 +97,16 @@ const RECUSAS: readonly (readonly [string, string])[] = [
     'A assinatura mudou enquanto a baixa era registrada. Confira o estado e tente de novo.',
   ],
   ['BAIXA_INEXISTENTE', 'Esta baixa não existe ou já foi estornada.'],
+  [
+    'TITULAR_INEXISTENTE',
+    // A função não cria identidade: ela vincula alguém que já tem conta.
+    'Esta pessoa ainda não tem conta na Mavia. Peça a ela que se cadastre primeiro.',
+  ],
+  ['NOME_AUSENTE', 'Dê um nome ao espaço.'],
+  // Os mesmos tetos da rota do cliente, com os mesmos nomes de exceção: o
+  // painel **não é bypass** do limite que o produto cumpre (A-18, DP-26).
+  ['TETO_DIARIO_DE_TENANTS', 'Este titular já criou três espaços nas últimas 24 horas.'],
+  ['TETO_DE_TENANTS_ATIVOS', 'Este titular já tem dez espaços ativos.'],
   // O índice único da regra 13. A frase nomeia o que aconteceu, porque
   // "violação de restrição" faria o operador achar que o sistema quebrou
   // quando ele acabou de ser protegido de contar a mesma receita duas vezes.
@@ -117,12 +138,6 @@ const zAbertura = z.object({
 type Abertura = z.infer<typeof zAbertura>
 
 /**
- * O corpo das duas escritas de tempo. `razao` é **obrigatória** e vai para a
- * linha de auditoria: uma cortesia sem motivo escrito é indistinguível de um
- * favor, e o teto de dias é conferido no banco — aqui a validação só evita uma
- * ida ao Postgres para recusar o óbvio.
- */
-/**
  * A baixa de pagamento.
  *
  * `referenciaExterna` é **obrigatória** e é a chave de idempotência da regra 13
@@ -141,6 +156,25 @@ const zBaixa = z.object({
   observacao: z.string().trim().max(1000).optional(),
 })
 
+/**
+ * O cadastro de um cliente novo.
+ *
+ * `titularId`, e **não** e-mail e senha: a função não cria identidade. Criar
+ * conta é ato de quem vai ser dono dela, com credencial que só ele conhece — um
+ * operador criando login para terceiro é um operador que conhece a senha de um
+ * cliente.
+ */
+const zCadastro = z.object({
+  titularId: z.string().uuid(),
+  nome: z.string().trim().min(2).max(120),
+})
+
+/**
+ * O corpo das duas escritas de tempo. `razao` é **obrigatória** e vai hasheada
+ * para a linha de auditoria: uma cortesia sem motivo escrito é indistinguível
+ * de um favor. O teto de dias é conferido **no banco** — aqui a validação só
+ * evita uma ida ao Postgres para recusar o óbvio.
+ */
 const zTempoConcedido = z.object({
   dias: z.number().int().min(1).max(30),
   razao: z.string().trim().min(3).max(280),
@@ -290,6 +324,43 @@ export class AdminController {
         )
         return { itens: r.rows }
       },
+    )
+  }
+
+  @Post('clientes')
+  @HttpCode(201)
+  async cadastrar(@Req() req: FastifyRequest, @Body() corpo: unknown) {
+    const { motivo, referencia } = this.hipotese(req)
+    const operador = this.operador(req)
+
+    const analise = zCadastro.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const d = analise.data
+
+    return this.traduzindoRecusa(async () =>
+      comTenantDeAdminEscrita(
+        this.poolDeEscrita,
+        contextoDeAdminEscrita(operador, ESPACO_A_CRIAR),
+        async (c) => {
+          const abertura = await c.query<{ correlacao: string }>(
+            `SELECT admin.abrir_espaco_para_escrita($1, $2::motivo_de_acesso, $3, $4, $5) AS correlacao`,
+            [ESPACO_A_CRIAR, motivo, referencia, 'cadastrou_cliente', '/v1/admin/clientes'],
+          )
+          const r = await c.query<{ id: string }>(
+            'SELECT admin.cadastrar_cliente($1, $2, $3) AS id',
+            [d.titularId, d.nome, abertura.rows[0]!.correlacao],
+          )
+          return {
+            id: r.rows[0]!.id,
+            // O texto que a tela mostra, e ele é a metade que impede o operador
+            // de procurar o botão que não existe: o espaço **não** vira `ativa`
+            // por aqui. Dizer isso agora é mais barato que explicar depois.
+            aviso:
+              'Este espaço fica em teste por sete dias, com as cotas do Família. ' +
+              'Ele só passa a ativo quando o cliente assinar.',
+          }
+        },
+      ),
     )
   }
 

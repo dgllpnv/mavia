@@ -52,6 +52,7 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   ['conceder_cortesia', 'mavia_admin_contrato'],
   ['registrar_pagamento', 'mavia_admin_contrato'],
   ['estornar_baixa', 'mavia_admin_contrato'],
+  ['cadastrar_cliente', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

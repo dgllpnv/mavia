@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05, 07
 
 # 09 · `POST /v1/admin/clientes` — cadastrar o espaço de um cliente novo

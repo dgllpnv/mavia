@@ -254,6 +254,7 @@ export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([
   'POST /v1/admin/clientes/:tenantId/cortesia',
   'GET /v1/admin/clientes/:tenantId/pagamentos',
   'POST /v1/admin/clientes/:tenantId/pagamentos',
+  'POST /v1/admin/clientes',
 ])
 
 export function chaveDaRota(rota: Rota): string {
