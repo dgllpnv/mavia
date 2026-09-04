@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 # 04 · `concessoes_de_admin`, a invariante de dois administradores e a resolução por requisição
@@ -64,3 +64,21 @@ Depois deste ticket existe a resposta a "quem é admin agora", derivada de uma t
 - **Não cria tela nem rota de conceder admin.** Só o script (§4). Se um dia a tela existir, ela é o `PATCH /membros/:usuarioId` deste épico e merece as quatro travas da **R-4** (`matriz-de-acesso.md:57-64`).
 - Não implementa a notificação entre pares (ticket 10) — só garante que o conjunto "os outros operadores" deixa de poder ser vazio.
 - Não cria função nenhuma no esquema `admin` (ticket 05).
+
+## Comments
+
+**2026-09-04 · entregue. 12 asserções.**
+
+`0031_concessoes_de_admin.sql`: a tabela append-only sem `tenant_id`, o índice de concessão ativa única, o gatilho `AFTER UPDATE … FOR EACH STATEMENT`, as três policies (uma estreita para `mavia_admin`, duas com o predicado de concessão ativa para os donos de função), e `admin.conceder` / `admin.revogar`, que **gravam a própria linha de auditoria**.
+
+**O melhor teste do ticket falhou primeiro, e a falha foi a prova.** A versão inicial da asserção de auditoria começava com `DELETE FROM auditoria WHERE entidade = 'concessao_de_admin'`, para isolar a medição. Levou `AUDITORIA_IMUTAVEL`: o gatilho do ticket 03 barrou **o próprio teste que existe para verificar o log**.
+
+Está certo, e reescrevi o teste em vez do gatilho. Ele agora mede pela borda, com uma marca de tempo. **Um log que o teste consegue limpar é um log que a aplicação consegue limpar** — e a conveniência de isolar uma medição não é razão para abrir a porta que o épico inteiro existe para fechar.
+
+**A invariante é só de `UPDATE`, e a decisão está escrita na migration.** Cobrir `INSERT` exigiria isenção para a primeira concessão, e isenção é exatamente o escape hatch que a imutabilidade foi escrita para fechar. O gatilho **impede cair** para um operador; **não impede operar** com um. A diferença é real: com um só, a detecção entre pares é o conjunto vazio, e quem descobre o abuso está do mesmo lado de quem pode cometê-lo. Coberto pela **DP-32**, padrão vigente, decisão do dono pendente.
+
+**A policy do painel é estreita de propósito**, e o teste afirma isso: um operador vê a própria concessão e nenhuma outra. Uma policy ampla entregaria, numa conexão sem segundo fator, a lista de todos os operadores da Mavia com nome e e-mail — que é o alvo de quem já comprometeu um deles.
+
+**Critérios 8 e 10 esperam o ticket 06.** O 8 tem a metade estrutural coberta aqui: a asserção sobre `pg_policy` prova que nenhuma policy de `tenants`, `usuarios` ou `tenant_usuarios` conhece a tabela, que é o caminho perigoso. A metade de requisição precisa de rota de admin. O 10 idem — o resolvedor está pronto em `comAdmin`, falta a rota que o exercite.
+
+Verde: typecheck 9/9, lint 9/9, API **538** em 36 arquivos.
