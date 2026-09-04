@@ -2,7 +2,9 @@
 
 Sete pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, valores comerciais e decisões de produto.
 
-As cinco primeiras **bloqueiam** alguma coisa. A sexta reúne três escolhas que **não** bloqueiam — todas têm um padrão que eu sigo se você não disser nada —, mas uma delas decide quando o painel de administração pode ver cliente real.
+As quatro primeiras **bloqueiam** alguma coisa. A sexta e a sétima reúnem oito escolhas que quase todas **não** bloqueiam — têm um padrão que eu sigo se você não disser nada. Duas exceções, e são as que valem a sua atenção: a **DP-32** decide quando o painel de administração pode ver cliente real, e a **DP-39** não tem padrão nenhum.
+
+> **O item 3 já está resolvido.** Ficou aqui como registro do que foi decidido e do que a decisão produziu.
 
 Cada item abaixo diz **o que ele destrava**, **o que exatamente preciso de você**, **onde conseguir** e **o que eu faço depois**. Estão em ordem de dependência — o item 1 é pré-requisito de metade dos outros.
 
@@ -79,7 +81,18 @@ Troque `SEU-DOMINIO` pelo domínio do item 1. O remetente precisa ser do domíni
 
 ---
 
-## 3 · Estorno de compra no cartão — ADR 0023
+## 3 · ~~Estorno de compra no cartão — ADR 0023~~ ✅ **resolvido em 2026-09-04**
+
+**Você decidiu:** *"o estorno entra na fatura vigente, como é padrão nos bancos"* — que é exatamente a D1 do ADR.
+
+**Está implementado e provado.** `apps/api/test/estorno-no-cartao.test.ts`, 10 asserções contra Postgres real; suíte completa em 471. Nenhuma migration foi necessária — o modelo já comportava a decisão, o que faltava era ela. A pendência **P-6** está fechada.
+
+Um segundo defeito estava escondido atrás do primeiro e saiu junto: `settled_at` era gravado incondicionalmente, o que poria o crédito de cartão no realizado **antes de a fatura ser paga**. Agora nasce nulo e recebe data pelo pagamento da fatura, como todo lançamento de cartão.
+
+O botão passou a existir na tela, com a frase que explica onde o crédito cai — quem estorna uma compra de março e vê o crédito em maio precisa entender isso sem abrir um documento.
+
+<details>
+<summary>O texto original, de quando isto esperava você</summary>
 
 **O que falta: só a sua palavra.** Este é o item mais barato da lista.
 
@@ -108,6 +121,8 @@ Escolher março teria o efeito oposto: o relatório ficaria mais fiel e a corres
 **O que preciso de você:** "aceito" ou "prefiro março, e aqui está o porquê".
 
 **O que eu faço depois:** mudo o estado do ADR para aceito e implemento. Não precisa de migration — o modelo já comporta a decisão, o que faltava era ela. É trabalho de algumas horas, com testes, e fecha a pendência P-6. O botão de estorno passa a existir na tela de compra de cartão, com uma frase explicando onde o crédito vai cair.
+
+</details>
 
 ---
 
