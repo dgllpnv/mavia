@@ -1,10 +1,10 @@
 # Painel de administração — ponteiro para o spec
 
-Status: needs-risk-gate
+Status: ready-for-agent
 
 O spec **não** vive aqui. Ele está em:
 
-**`docs/superpowers/specs/2026-09-04-perfil-de-admin-design.md`** — versão **v3.1**
+**`docs/superpowers/specs/2026-09-04-perfil-de-admin-design.md`** — versão **v3.2**
 
 E o pré-requisito arquitetural, aceito, em:
 
@@ -24,7 +24,7 @@ Então: o spec fica onde a skill o pôs, os tickets ficam aqui, e este arquivo c
 |---|---|---|
 | 1ª | v1 | **Reprovado.** A alegação central era falsa: citava uma regra de lint que não existe (`eslint.config.js` não tem nenhuma sobre `comTenant`, e a função nem se chama `withTenant`) |
 | 2ª | v2 | **Reprovado.** *"O spec descreve travas de banco de dados sobre uma topologia de conexão que não as suporta."* Um `Pool` único como `mavia_app`, e todo papel proposto a um `SET ROLE` de distância. Medido: `SET LOCAL ROLE leitor; RESET ROLE; UPDATE` commita |
-| 3ª | v3 → v3.1 | **Aprovado com condições.** Nove de nove achados anteriores fechados. Cinco condições de ticket, fechadas na v3.1; cinco de deploy, abertas por desenho |
+| 3ª · appsec | v3 → v3.1 | **Aprovado com condições.** Nove de nove achados anteriores fechados. Cinco condições de ticket, fechadas na v3.1; cinco de deploy, abertas por desenho |
 
 ## Gate de risco
 
