@@ -1,5 +1,6 @@
 import { Module, type DynamicModule } from '@nestjs/common'
-import { APP_INTERCEPTOR } from '@nestjs/core'
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core'
+import { AutorizacaoGuard } from './autorizacao/autorizacao.guard.js'
 import type { Pool } from 'pg'
 import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
@@ -81,6 +82,20 @@ export class AppModule {
         // que falta na rota nova. Aqui é propriedade do transporte, e vale para
         // qualquer mutação que traga `Idempotency-Key` — inclusive as que ainda
         // não existem.
+        // **Global, e nega por padrão** — achado S-4 do gate de segurança.
+        //
+        // `matriz-de-acesso.md` §0.3 e `sistema.md` §4.0 afirmavam que este
+        // guard já era global. Não era: ele vinha por decorador, controlador a
+        // controlador, e um controlador novo sem o decorador subia limpo,
+        // passava na asserção de boot, e respondia a qualquer sessão
+        // autenticada. Dois documentos normativos descreviam um mecanismo que
+        // o código não tinha.
+        //
+        // As ocorrências de `@UseGuards(AutorizacaoGuard)` continuam válidas e
+        // passam a ser redundantes: guards do Nest compõem, e rodar duas vezes
+        // a mesma decisão pura não muda resultado. Ficam por ora — removê-las
+        // é limpeza, e limpeza não entra no mesmo passo que muda a API inteira.
+        { provide: APP_GUARD, useClass: AutorizacaoGuard },
         { provide: APP_INTERCEPTOR, useClass: IdempotenciaInterceptor },
       ],
     }

@@ -225,6 +225,27 @@ export const ROTAS_PUBLICAS: ReadonlySet<string> = new Set([
   'POST /v1/auth/google/retorno',
 ])
 
+/**
+ * As rotas do painel de administração — ADR 0024 D1 e D2.
+ *
+ * **Conjunto de chaves exatas, como as duas irmãs acima**, e não um prefixo.
+ * A tentação de escrever `caminho.startsWith('/v1/admin/')` é real e é o
+ * caminho pelo qual a próxima rota entra sem ninguém decidir. Aqui, uma rota
+ * nova exige uma linha nova — e essa linha é onde alguém para e pensa.
+ *
+ * O literal do prefixo aparece **uma vez**, na asserção de boot, que confere as
+ * duas direções: toda rota sob `/v1/admin/` está nesta lista, e nenhuma chave
+ * desta lista aponta para fora do prefixo.
+ *
+ * O que esta lista dispensa: a matriz de papéis, porque o operador não tem
+ * papel no espaço do cliente. O que ela **não** dispensa: a sessão. E o que ela
+ * garante: `req.autenticado` permanece **nulo** nestas rotas, o que impede os
+ * controladores do cliente de servi-las.
+ *
+ * Nasce vazia. Cada ticket de rota acrescenta a sua.
+ */
+export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([])
+
 export function chaveDaRota(rota: Rota): string {
   return `${rota.metodo} ${rota.caminho}`
 }
@@ -258,9 +279,28 @@ export class RotaSemRegra extends Error {
 export function verificarCoberturaDaMatriz(rotasRegistradas: readonly Rota[]): void {
   const faltantes = rotasRegistradas
     .map(chaveDaRota)
-    // Uma rota está coberta se tem papel declarado OU se é declaradamente sem
-    // espaço. As duas listas juntas são a política inteira; nenhuma rota pode
-    // faltar nas duas.
-    .filter((chave) => !MATRIZ.has(chave) && !ROTAS_SEM_TENANT.has(chave))
+    // Uma rota está coberta se tem papel declarado, OU é declaradamente sem
+    // espaço, OU é do painel de administração. As três listas juntas são a
+    // política inteira; nenhuma rota pode faltar nas três.
+    .filter(
+      (chave) => !MATRIZ.has(chave) && !ROTAS_SEM_TENANT.has(chave) && !ROTAS_DE_ADMIN.has(chave),
+    )
   if (faltantes.length > 0) throw new RotaSemRegra(faltantes)
+
+  // O prefixo, nas duas direções, e o literal aparece **só aqui**.
+  //
+  // Ida: uma rota registrada sob `/v1/admin/` que ninguém pôs na lista cairia
+  // no ramo padrão do guard, que exige `req.autenticado` — e como o caminho de
+  // admin nunca o produz, ela responderia 401 para sempre, sem que ninguém
+  // entendesse por quê.
+  //
+  // Volta: uma chave na lista apontando para fora do prefixo dispensaria da
+  // matriz uma rota comum, que é o buraco na direção perigosa.
+  const semDeclaracao = rotasRegistradas
+    .map(chaveDaRota)
+    .filter((chave) => chave.includes(' /v1/admin/') && !ROTAS_DE_ADMIN.has(chave))
+  if (semDeclaracao.length > 0) throw new RotaSemRegra(semDeclaracao)
+
+  const foraDoPrefixo = [...ROTAS_DE_ADMIN].filter((chave) => !chave.includes(' /v1/admin/'))
+  if (foraDoPrefixo.length > 0) throw new RotaSemRegra(foraDoPrefixo)
 }

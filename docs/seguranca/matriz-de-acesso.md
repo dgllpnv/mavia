@@ -17,7 +17,13 @@ Três artefatos derivam daqui, nesta ordem:
 
 1. **`packages/domain/politica-acesso/tabela.ts`** — transcrição literal da §2 (matriz papel × ação × recurso). Puro, sem I/O, testado em S1. Uma linha por `(acao, recurso)`; o valor é o conjunto de papéis.
 2. **`packages/contracts/autorizacao.ts`** — cada rota declara `{ acao, recurso, condicoes[], reautenticacao, rateLimit }`. O OpenAPI gerado carrega essa declaração como extensão `x-mavia-autorizacao`.
-3. **`apps/api/src/auth/guard-global.ts`** — um `Guard` global que **nega por padrão**. Rota sem declaração não sobe: a verificação é feita no *boot*, percorrendo o manifesto de rotas do Nest contra o manifesto de `contracts`, e o processo falha ao subir com a lista das rotas não declaradas. Falhar no boot, nunca em runtime.
+3. **`apps/api/src/autorizacao/autorizacao.guard.ts`**, registrado como `APP_GUARD` em `app.module.ts` — um `Guard` global que **nega por padrão**. Rota sem declaração não sobe: a verificação é feita no *boot*, percorrendo o manifesto de rotas do Nest contra o manifesto de `contracts`, e o processo falha ao subir com a lista das rotas não declaradas. Falhar no boot, nunca em runtime.
+
+> **Correção de 2026-09-04.** Esta linha descrevia o mecanismo certo com o nome de um arquivo que nunca existiu, e **o guard não era global** — vinha por decorador, controlador a controlador, e `app.module.ts` registrava um interceptor e nenhum `APP_GUARD`. Um controlador novo **com** entrada nesta matriz e **sem** o decorador subia limpo, passava na asserção de boot e respondia a qualquer sessão autenticada; a asserção verificava que a rota tinha *entrada*, não que o guard estava *ligado*.
+>
+> Não havia buraco vivo — os cinco controladores sem decorador eram os de autenticação, públicos por desenho. O risco era prospectivo, e o alvo mais valioso teria sido o painel de administração. Fechado no ticket 02 daquele épico, com `guard-global.test.ts` medindo o comportamento das 22 rotas de sessão e credencial que a mudança poderia ter quebrado.
+>
+> É o segundo controle desta matriz que se descobriu inexistente ao ser citado — o primeiro foi a regra de lint da R-3. **Os dois erros têm a mesma forma: uma frase plausível que ninguém executou.** Daí a regra que este documento passa a seguir: controle citado aponta para arquivo e linha, ou não é controle.
 
 **Critério de aceite estrutural (S4 + S2, obrigatório antes do primeiro épico com rota):**
 

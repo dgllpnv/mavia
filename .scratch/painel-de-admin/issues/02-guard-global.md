@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # 02 · O guard global, o opt-out nominal e `ROTAS_DE_ADMIN`
 
@@ -65,3 +65,23 @@ Sem migration.
 - Não cria rota de admin nenhuma. `ROTAS_DE_ADMIN` pode nascer vazia — a asserção de boot é bidirecional e passa com o conjunto vazio enquanto nenhuma rota `/v1/admin/` estiver registrada.
 - Não resolve a concessão contra a tabela: `concessoes_de_admin` é o ticket 04. Até lá o ramo de admin é alcançável e sem rota nenhuma para servir; o resolvedor é injetado pelo 04.
 - Não implementa MFA (fora do escopo do épico) nem a allowlist de rede (**C-6**, `sre-devops-vps`).
+
+
+## Comments
+
+**2026-09-04 · entregue, com escopo declarado**
+
+`APP_GUARD` registrado, guard com os quatro ramos, `ROTAS_DE_ADMIN` como conjunto de chaves exatas, e a cobertura de boot passando a considerar as **três** listas mais a asserção de prefixo nas duas direções. `guard-global.test.ts`, 9 asserções.
+
+**Critérios 1 a 5: cumpridos.** Os 6 a 9 **não entraram, e a razão é dependência, não corte:**
+
+- **6 e 7 (step-up com `tenant_alvo`)** — o mecanismo de step-up **não existe no repositório**. Verifiquei: nenhuma ocorrência de `tickets_step_up`, `stepUp` ou `step_up` em `apps/api/src`. `exigeReautenticacao` é um predicado sobre a matriz, e não há nada que emita ou consuma um ticket. Construí-lo aqui seria um épico dentro do ticket.
+- **8 (revalidação da sessão no Postgres) e 9 (`req.autenticado` nulo sob `/admin`)** — o ramo 3 do guard já existe e já mantém `req.autenticado` nulo, mas **não há rota de admin para exercitá-lo**: `ROTAS_DE_ADMIN` nasce vazia. Medir revogação em uma requisição exige `concessoes_de_admin`, que é o ticket 04.
+
+O ramo 3 entra agora, vazio de consumidor, por um motivo: sem ele a primeira rota `/v1/admin/` cairia no ramo 4, exigiria `req.autenticado` — que o caminho de admin nunca produz — e responderia 401 para sempre, com o defeito parecendo de autenticação.
+
+**Uma asserção que eu tinha escrito errado.** Ela afirmava que nenhuma rota pública devolve 401. `POST /v1/sessoes/renovar` devolve, e está certo: é a rota dizendo *"sua sessão expirou"*, não o guard dizendo *"você não passa"*. Pior que o falso negativo: a asserção ficaria **verde** se o guard passasse a barrá-la, porque o 401 continuaria lá com outro dono. Agora ela olha a mensagem, que é literal e só do guard.
+
+**Um alerta de higiene para quem for medir a suíte.** Na primeira execução completa depois desta mudança, um arquivo falhou no *setup* e passou sozinho em seguida; a segunda execução completa ficou verde. É contenção de container com 34 arquivos subindo Testcontainers, não regressão — mas é ruído que vai voltar, e vale um teto de paralelismo quando incomodar.
+
+Verde: typecheck 9/9, lint 9/9, API **503** em 34 arquivos, E2E **23**.
