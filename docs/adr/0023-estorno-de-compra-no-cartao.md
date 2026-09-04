@@ -1,7 +1,8 @@
 # ADR 0023 — O estorno de compra no cartão entra na fatura aberta, pela regra que já existe
 
-**Estado:** proposto
-**Data:** 2026-09-03
+**Estado:** **aceito**
+**Data:** 2026-09-03 · **Aceito em 2026-09-04 pelo dono do produto**, nos termos *"o estorno entra na fatura vigente, como é padrão nos bancos"* — que é a D1 desta ADR.
+**Implementado em:** `apps/api/src/lancamentos/lancamentos.repositorio.ts` (`estornar`), `apps/api/src/cartoes/compras.ts` (`faturaQueRecebe` e `carregarCartaoDaCompra` passam a ser públicas), `apps/web/src/componentes/detalhe-do-lancamento.tsx`. Provado por `apps/api/test/estorno-no-cartao.test.ts`, 10 asserções contra Postgres real.
 **Substitui:** nada. Complementa o ADR 0007 (bases temporais do cartão) e o 0005 (dinheiro e partida dobrada).
 **Fecha:** pendência P-6.
 

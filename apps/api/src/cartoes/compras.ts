@@ -192,7 +192,7 @@ interface FaturaDestino {
  * A busca é limitada. Sem limite, um estado esquisito no banco viraria um laço
  * abrindo faturas até o fim do calendário.
  */
-async function faturaQueRecebe(
+export async function faturaQueRecebe(
   c: PoolClient,
   tenantId: string,
   cartao: CartaoDaCompra,
@@ -223,6 +223,43 @@ async function faturaQueRecebe(
   throw new ConflictException(
     `Nenhuma fatura deste cartão aceita lançamento nos próximos ${HORIZONTE_DE_BUSCA} meses.`,
   )
+}
+
+/**
+ * Carrega o cartão no formato que a colocação em fatura precisa.
+ *
+ * Mora aqui, e não no controlador, desde que o estorno passou a precisar dele
+ * (ADR 0023). Duas cópias desta consulta são duas chances de uma delas
+ * esquecer o `deleted_at` — e um cartão excluído recebendo compra é uma linha
+ * que não aparece em tela nenhuma.
+ */
+export async function carregarCartaoDaCompra(
+  c: PoolClient,
+  tenantId: string,
+  cartaoId: string,
+): Promise<CartaoDaCompra> {
+  const r = await c.query<{
+    id: string
+    closing_day: number
+    due_day: number
+    conta_pagamento_id: string | null
+    moeda: CartaoDaCompra['moeda']
+  }>(
+    `SELECT id, closing_day, due_day, conta_pagamento_id, moeda FROM cartoes
+      WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    [tenantId, cartaoId],
+  )
+  const l = r.rows[0]
+  // 404 e não 403: dizer "existe, mas não é seu" já entrega a existência do
+  // cartão de outro cliente. A RLS é quem faz a linha não aparecer.
+  if (!l) throw new NotFoundException('Cartão não encontrado.')
+  return {
+    id: l.id,
+    closingDay: l.closing_day,
+    dueDay: l.due_day,
+    contaPagamentoId: l.conta_pagamento_id,
+    moeda: l.moeda,
+  }
 }
 
 /**

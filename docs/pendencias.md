@@ -176,7 +176,21 @@ esquecimento. Se algum dia uma tela passar a depender de métrica intrínseca, o
 
 ---
 
-## P-6 · Estorno de compra no cartão
+## ~~P-6 · Estorno de compra no cartão~~ ✅ **fechada**
+
+**Fechada em 2026-09-04**, pelo [ADR 0023](adr/0023-estorno-de-compra-no-cartao.md), aceito pelo dono do produto: *"o estorno entra na fatura vigente, como é padrão nos bancos"*.
+
+**A decisão:** o crédito entra na fatura cuja janela contém o `posted_at` **do estorno** — que é a regra 10 aplicada sem exceção nenhuma, e não uma regra nova. Fatura fechada não se reescreve: creditar a fatura da compra original produziria `pago > total` e deixaria a projeção de caixa do mês corrente errada.
+
+**O que mudou no código, e o que não mudou.** Nenhuma migration — o modelo já comportava a decisão. `estornar` passou a ler `cartao_id`, a herdar a moeda de `cartoes`, a colocar o crédito em fatura **pela mesma função que coloca qualquer compra** (`faturaQueRecebe`, agora pública), e a gravar `settled_at` **nulo** para cartão. Este último era um segundo defeito escondido atrás do primeiro: a implementação anterior gravava `settled_at = posted_at` incondicionalmente, o que poria o crédito no realizado antes de a fatura ser paga — violação da regra 8, e o mesmo erro que o ADR 0007 já havia corrigido uma vez.
+
+Ganhou também a recusa da D6: estorno com data anterior ao original responde 400. Sem ela, um crédito retroativo cairia numa fatura já paga.
+
+A tela deixou de recusar e passou a explicar onde o crédito cai — quem estorna uma compra de março e vê o crédito em maio precisa entender isso sem abrir um ADR.
+
+**Provado por** `apps/api/test/estorno-no-cartao.test.ts`: 10 asserções contra Postgres real, incluindo a que trava a decisão (fatura distinta quando o reembolso é tardio, **mesma** fatura quando chega na mesma janela) e a que impede a regressão do lançamento de conta, onde `settled_at` continua preenchido.
+
+### O texto original
 
 **Onde:** `apps/api/src/lancamentos/lancamentos.repositorio.ts`, `estornar`
 **Bloqueia:** o botão de estorno na tela de detalhe, para lançamento de cartão

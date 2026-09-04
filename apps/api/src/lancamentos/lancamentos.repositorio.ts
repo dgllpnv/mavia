@@ -1,6 +1,8 @@
-import { statusDeLancamento, type StatusDeLancamento } from '@mavia/domain'
+import { ConflictException } from '@nestjs/common'
+import { faturaAlvo, statusDeLancamento, type StatusDeLancamento } from '@mavia/domain'
 import type { CriarEstorno, CriarLancamento, CriarTransferencia, Lancamento } from '@mavia/contracts'
 import type { PoolClient } from 'pg'
+import { carregarCartaoDaCompra, faturaQueRecebe } from '../cartoes/compras.js'
 
 /**
  * Escrita do átomo — inclui transferência e estorno.
@@ -83,6 +85,18 @@ export class EstornoExcedeOriginal extends Error {
   constructor(readonly disponivel: bigint) {
     super(`O estorno passa do que resta do original. Disponível: ${disponivel} centavos.`)
     this.name = 'EstornoExcedeOriginal'
+  }
+}
+
+/**
+ * ADR 0023 D6. Não é preciosismo de validação: sem isto, um estorno com data
+ * anterior à compra cairia numa fatura **já paga** — e a regra que o ADR
+ * inteiro existe para proteger é que fatura fechada não se reescreve.
+ */
+export class EstornoAntesDoOriginal extends Error {
+  constructor() {
+    super('O estorno não pode ser anterior ao lançamento que ele desfaz.')
+    this.name = 'EstornoAntesDoOriginal'
   }
 }
 
@@ -244,10 +258,12 @@ export async function estornar(
   const orig = await cliente.query<{
     valor_centavos: string
     conta_id: string | null
+    cartao_id: string | null
     categoria_id: string | null
+    posted_at: Date
     estornado: string
   }>(
-    `SELECT o.valor_centavos, o.conta_id, o.categoria_id,
+    `SELECT o.valor_centavos, o.conta_id, o.cartao_id, o.categoria_id, o.posted_at,
             coalesce((SELECT sum(abs(e.valor_centavos)) FROM lancamentos e
                        WHERE e.estorno_de_lancamento_id = o.id AND e.deleted_at IS NULL), 0)::text
               AS estornado
@@ -267,7 +283,58 @@ export async function estornar(
   if (pedido > disponivel) throw new EstornoExcedeOriginal(disponivel)
 
   const postedAt = new Date(dados.postedAt)
+  // ADR 0023 D6: um crédito antes da despesa não descreve nada real. Vale
+  // para os dois tipos — na conta produziria saldo negativo por uma janela
+  // que nunca existiu; no cartão, crédito numa fatura anterior à compra.
+  if (postedAt.getTime() < o.posted_at.getTime()) throw new EstornoAntesDoOriginal()
+
   const valor = original < 0n ? pedido : -pedido
+
+  // ------------------------------------------------------------------------
+  // Cartão — ADR 0023
+  // ------------------------------------------------------------------------
+  // O crédito entra na fatura cuja janela contém o **seu** `posted_at`, e não
+  // na da compra original. É a regra 10 aplicada sem exceção: não existe um
+  // segundo caminho de colocação de lançamento em fatura, e por isso o
+  // reembolso passa por `faturaQueRecebe`, a mesma função da compra.
+  //
+  // `settled_at` fica **nulo**. Quem move dinheiro num lançamento de cartão é
+  // o pagamento da fatura (regra 8); preenchê-lo aqui poria o crédito no
+  // realizado antes de a fatura ser paga — e, se a fatura for de um mês
+  // futuro, no realizado de um mês que ainda não chegou.
+  if (o.cartao_id) {
+    const cartao = await carregarCartaoDaCompra(cliente, tenantId, o.cartao_id)
+    const fatura = await faturaQueRecebe(cliente, tenantId, cartao, faturaAlvo(cartao, postedAt))
+
+    const r = await cliente.query<Linha>(
+      `INSERT INTO lancamentos (tenant_id, cartao_id, categoria_id, valor_centavos, moeda,
+                                posted_at, settled_at, descricao, fatura_id,
+                                estorno_de_lancamento_id, origem, criado_por)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, 'ajuste', $10)
+       RETURNING ${COLUNAS}`,
+      [
+        tenantId,
+        o.cartao_id,
+        o.categoria_id,
+        valor.toString(),
+        cartao.moeda,
+        postedAt,
+        dados.descricao ?? 'Estorno',
+        fatura.id,
+        originalId,
+        usuarioId,
+      ],
+    )
+    const l = r.rows[0]
+    if (!l) throw new ConflictException('Não foi possível registrar o estorno.')
+    return paraContrato(l, agora)
+  }
+
+  // ------------------------------------------------------------------------
+  // Conta — inalterado
+  // ------------------------------------------------------------------------
+  // Aqui `settled_at` é preenchido de propósito: quem estorna um lançamento de
+  // conta está informando que o dinheiro voltou. Não há fatura no meio.
   const r = await cliente.query<Linha>(
     `INSERT INTO lancamentos (tenant_id, conta_id, categoria_id, valor_centavos, moeda,
                               posted_at, settled_at, descricao,

@@ -119,6 +119,14 @@ O custo é real e recai sobre o produto, não sobre o cliente: a tela de cadastr
 
 ---
 
+## Resolvidas em 2026-09-04
+
+| # | Decisão | Escolha | Onde está o detalhe |
+|---|---|---|---|
+| **DP-35** | Em qual fatura entra o estorno de uma compra no cartão? | **Na fatura vigente** — a que está aberta na data do reembolso, *"como é padrão nos bancos"*. Não na fatura da compra original, que já foi fechada e paga | [ADR 0023](adr/0023-estorno-de-compra-no-cartao.md), **aceito** |
+
+---
+
 ## Em aberto — esperando o dono
 
 Estas ainda não foram decididas. **Nenhuma bloqueia o trabalho**: cada uma tem um padrão vigente que o time segue enquanto não houver resposta. Estão detalhadas em `docs/o-que-depende-de-voce.md` §6, e a justificativa completa vive em `docs/compliance/retencao-e-eliminacao.md` §11.

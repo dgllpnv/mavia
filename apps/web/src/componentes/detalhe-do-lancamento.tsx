@@ -125,6 +125,17 @@ export function DetalheDoLancamento({
                 continuam no extrato — a correção fica visível, em vez de o mês
                 mudar sozinho.
               </p>
+              {/* ADR 0023: quem estorna uma compra de março e vê o crédito na
+                  fatura de maio precisa entender isso sem abrir um documento.
+                  A frase aparece só no cartão porque só ali há fatura no meio. */}
+              {ehDeCartao && (
+                <p className="mt-8 max-w-[52ch] text-sm text-ink-3">
+                  O crédito entra na <strong>fatura aberta na data do reembolso</strong>, como
+                  faz a administradora do cartão — e não na fatura da compra, que já foi
+                  fechada. Se o reembolso chegar antes de a fatura fechar, os dois caem
+                  na mesma e o total já sai com o desconto.
+                </p>
+              )}
             </>
           ) : (
             <p className="max-w-[52ch] text-sm text-ink-3">{PORQUE_NAO[razaoParaNao({ ehTransferencia, ehEstorno, ehDeCartao })]}</p>
@@ -142,13 +153,12 @@ interface Situacao {
 }
 
 function podeEstornar(s: Situacao): boolean {
-  return !s.ehTransferencia && !s.ehEstorno && !s.ehDeCartao
+  return !s.ehTransferencia && !s.ehEstorno
 }
 
 function razaoParaNao(s: Situacao): keyof typeof PORQUE_NAO {
   if (s.ehTransferencia) return 'transferencia'
   if (s.ehEstorno) return 'estorno'
-  if (s.ehDeCartao) return 'cartao'
   return 'nenhuma'
 }
 
@@ -157,12 +167,6 @@ const PORQUE_NAO = {
     'Uma transferência não se estorna: ela tem duas pernas, e desfazer uma delas ' +
     'criaria dinheiro. Lance a transferência inversa.',
   estorno: 'Isto já é um estorno. Estornar um estorno seria refazer o lançamento original.',
-  // Declarado como pendência em `docs/pendencias.md` (P-6): o estorno de compra
-  // no cartão precisa decidir em qual fatura o crédito entra, e essa é uma
-  // regra de negócio, não um detalhe de implementação.
-  cartao:
-    'O estorno de compra no cartão ainda não existe: falta decidir em qual fatura ' +
-    'o crédito entra, e isso é regra de negócio, não detalhe de código.',
   nenhuma: '',
 } as const
 

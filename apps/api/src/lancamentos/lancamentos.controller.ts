@@ -229,6 +229,8 @@ export class LancamentosController {
       return new NotFoundException(erro.message)
     if (erro instanceof repositorio.EstornoExcedeOriginal)
       return new ConflictException(erro.message)
+    if (erro instanceof repositorio.EstornoAntesDoOriginal)
+      return new BadRequestException(erro.message)
 
     const texto = String((erro as { message?: string }).message ?? '')
     if (texto.includes('DESPESA_TEM_SINAL_NEGATIVO'))
