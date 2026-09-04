@@ -686,3 +686,172 @@ export const zRevogacao = z.object({
 export type Conexao = z.infer<typeof zConexao>
 export type CriarConexao = z.infer<typeof zCriarConexao>
 export type Revogacao = z.infer<typeof zRevogacao>
+
+// ---------------------------------------------------------------------------
+// Painel de administração — épico 13
+// ---------------------------------------------------------------------------
+/**
+ * **Estes schemas são `snake_case`, e sozinhos no arquivo.**
+ *
+ * Todo o resto do contrato é `camelCase` porque cada controlador do produto
+ * mapeia a linha do Postgres para o nome de domínio antes de responder. O
+ * controlador do painel **não mapeia**: ele devolve `r.rows` cru
+ * (`admin.controller.ts`), de propósito — a projeção fixa das funções de
+ * `admin` é o que impede `ip_hash` e `user_agent_hash` de vazarem, e reescrever
+ * cada linha na camada HTTP reintroduziria uma lista que alguém precisa lembrar
+ * de manter.
+ *
+ * A consequência é esta: o nome da coluna **é** o nome do campo na rede. Fingir
+ * o contrário aqui, com um mapeamento escrito à mão no cliente, criaria a
+ * segunda fonte de verdade que este pacote existe para não ter.
+ *
+ * ## Por que os instantes são `z.string()` e não `z.coerce.date()`
+ *
+ * Eles atravessam JSON. `TIMESTAMPTZ` vira ISO em UTC, e quem decide o fuso da
+ * exibição é a tela — `America/Sao_Paulo`, regra 7. Coagir para `Date` aqui
+ * esconderia a conversão num lugar onde ninguém a procura.
+ *
+ * `competencia` é `DATE` — **data civil, não instante** — e por isso é lida
+ * como texto e nunca convertida de fuso. Ver `competenciaPorExtenso`.
+ */
+
+export const zEstadoDaAssinatura = z.enum([
+  'teste',
+  'ativa',
+  'em_atraso',
+  'cancelada',
+  'expirada',
+])
+
+export const zMotivoDeAcesso = z.enum(['chamado', 'incidente', 'defeito', 'ordem_judicial'])
+
+export const zMeioDePagamento = z.enum(['pix', 'transferencia', 'boleto', 'dinheiro'])
+
+export const zClienteNaLista = z.object({
+  tenant_id: zUuid,
+  nome: z.string(),
+  /** O e-mail do proprietário. Nulo quando o espaço ficou sem titular ativo. */
+  titular: z.string().nullable(),
+  plano: z.string().nullable(),
+  estado: zEstadoDaAssinatura.nullable(),
+  criado_em: z.string(),
+})
+
+/**
+ * O perfil, e o par que ele existe para mostrar.
+ *
+ * `fim_efetivo = greatest(periodo_fim, coalesce(cortesia_ate, periodo_fim))` é
+ * **derivado no `SELECT`**, nunca coluna. Ele e `periodo_fim` aparecem lado a
+ * lado na tela porque sem os dois o operador que acabou de conceder trinta dias
+ * não vê que concedeu, e concede de novo (achados FC-2 e FC-3).
+ */
+export const zPerfilDoCliente = z.object({
+  id: zUuid,
+  nome: z.string(),
+  criado_em: z.string(),
+  plano: z.string().nullable(),
+  estado: zEstadoDaAssinatura.nullable(),
+  periodo_fim: z.string().nullable(),
+  cortesia_ate: z.string().nullable(),
+  graca_ate: z.string().nullable(),
+  fim_efetivo: z.string().nullable(),
+})
+
+export const zContaDoCliente = z.object({
+  id: zUuid,
+  nome: z.string(),
+  tipo: z.string(),
+  saldo_inicial_centavos: zCentavos,
+  moeda: zMoeda,
+  incluir_no_saldo_geral: z.boolean(),
+})
+
+export const zLancamentoDoCliente = z.object({
+  id: zUuid,
+  valor_centavos: zCentavos,
+  moeda: zMoeda,
+  posted_at: z.string(),
+  settled_at: z.string().nullable(),
+  descricao: z.string().nullable(),
+  origem: z.string().nullable(),
+})
+
+export const zBaixaAnterior = z.object({
+  id: zUuid,
+  valor_centavos: zCentavos,
+  moeda: zMoeda,
+  /** `DATE` no dia 1. Data civil: nunca convertida de fuso. */
+  competencia: z.string(),
+  recebido_em: z.string(),
+  meio: zMeioDePagamento,
+  referencia_externa: z.string(),
+  observacao: z.string().nullable(),
+  registrado_em: z.string(),
+})
+
+/**
+ * Uma linha do registro de auditoria.
+ *
+ * `registros` é `BIGINT` no banco e o driver o devolve como **string**; um
+ * `z.number()` aqui reprovaria toda linha de leitura. `de` e `para` são `JSONB`
+ * e só existem na linha de **efeito** de uma escrita — a de intenção os tem
+ * nulos, por construção (§8.5).
+ */
+export const zLinhaDoRegistro = z.object({
+  ocorrido_em: z.string(),
+  tenant_id: zUuid.nullable(),
+  usuario_id: zUuid.nullable(),
+  ator_tipo: z.string().nullable(),
+  entidade: z.string().nullable(),
+  entidade_id: zUuid.nullable(),
+  acao: z.string(),
+  classe: z.string().nullable(),
+  rota: z.string().nullable(),
+  registros: z.union([z.string(), z.number()]).nullable(),
+  motivo: zMotivoDeAcesso.nullable(),
+  referencia: z.string().nullable(),
+  correlacao: zUuid.nullable(),
+  de: z.unknown().nullable(),
+  para: z.unknown().nullable(),
+})
+
+/** A resposta do cadastro. O `aviso` é texto de interface, não decoração. */
+export const zClienteCadastrado = z.object({
+  id: zUuid,
+  aviso: z.string(),
+})
+
+export const zBaixaRegistrada = z.object({
+  id: zUuid,
+  estado: zEstadoDaAssinatura,
+})
+
+export const zTempoConcedido = z.object({ cortesiaAte: z.string() })
+
+export type EstadoDaAssinatura = z.infer<typeof zEstadoDaAssinatura>
+export type MotivoDeAcesso = z.infer<typeof zMotivoDeAcesso>
+export type MeioDePagamento = z.infer<typeof zMeioDePagamento>
+export type ClienteNaLista = z.infer<typeof zClienteNaLista>
+export type PerfilDoCliente = z.infer<typeof zPerfilDoCliente>
+export type ContaDoCliente = z.infer<typeof zContaDoCliente>
+export type LancamentoDoCliente = z.infer<typeof zLancamentoDoCliente>
+export type BaixaAnterior = z.infer<typeof zBaixaAnterior>
+export type LinhaDoRegistro = z.infer<typeof zLinhaDoRegistro>
+export type ClienteCadastrado = z.infer<typeof zClienteCadastrado>
+export type BaixaRegistrada = z.infer<typeof zBaixaRegistrada>
+export type TempoConcedido = z.infer<typeof zTempoConcedido>
+
+/**
+ * As respostas de lista do painel, embrulhadas.
+ *
+ * O envelope `{ itens: [...] }` é o formato de toda leitura de `/v1/admin`, e
+ * ele vive aqui e não no cliente web: `apps/web` **não depende de `zod`** — de
+ * propósito, para que nenhuma tela invente validação por conta própria. Quem
+ * quiser analisar uma resposta do painel usa um destes.
+ */
+export const zListaDeClientes = z.object({ itens: z.array(zClienteNaLista) })
+export const zListaDePerfis = z.object({ itens: z.array(zPerfilDoCliente) })
+export const zListaDeContasDoCliente = z.object({ itens: z.array(zContaDoCliente) })
+export const zListaDeLancamentosDoCliente = z.object({ itens: z.array(zLancamentoDoCliente) })
+export const zListaDeBaixas = z.object({ itens: z.array(zBaixaAnterior) })
+export const zListaDoRegistro = z.object({ itens: z.array(zLinhaDoRegistro) })

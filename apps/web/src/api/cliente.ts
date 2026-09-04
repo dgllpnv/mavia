@@ -109,6 +109,16 @@ interface Opcoes {
   readonly metodo?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   readonly corpo?: unknown
   readonly tenantId?: string
+  /**
+   * Cabeçalhos extras da requisição.
+   *
+   * Existe para o painel de administração, e só para ele: `x-mavia-motivo` e
+   * `x-mavia-referencia` são a hipótese declarada antes de o espaço de um
+   * cliente abrir, e a API responde 400 sem os dois. O produto não usa este
+   * campo — `X-Mavia-Tenant` continua tendo lugar próprio acima, porque ele vai
+   * em toda chamada e um campo genérico o tornaria esquecível.
+   */
+  readonly cabecalhos?: Record<string, string>
 }
 
 export async function chamar<T>(caminho: string, opcoes: Opcoes = {}): Promise<T> {
@@ -156,7 +166,7 @@ export async function chamar<T>(caminho: string, opcoes: Opcoes = {}): Promise<T
 }
 
 function enviar(caminho: string, opcoes: Opcoes): Promise<Response> {
-  const cabecalhos: Record<string, string> = {}
+  const cabecalhos: Record<string, string> = { ...opcoes.cabecalhos }
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json'
   if (opcoes.tenantId) cabecalhos['x-mavia-tenant'] = opcoes.tenantId
   if (acesso) cabecalhos['authorization'] = `Bearer ${acesso}`

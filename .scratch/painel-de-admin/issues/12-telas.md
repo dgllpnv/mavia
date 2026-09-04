@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 06, 07, 08, 09, 10
 
 # 12 · As telas do painel

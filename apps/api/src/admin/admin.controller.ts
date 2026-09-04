@@ -582,8 +582,34 @@ export class AdminController {
 
     return this.traduzindoRecusa(async () =>
       comTenantDeAdmin(this.pool, contextoDeAdmin(operador, tenantId), async (c) => {
-        await this.abrirEspaco(c, tenantId, motivo, referencia, 'leu', rota)
-        return leitura(c)
+        const correlacao = await this.abrirEspaco(c, tenantId, motivo, referencia, 'leu', rota)
+        const resultado = await leitura(c)
+
+        // **A segunda linha, com a contagem** — e ela existe porque a primeira
+        // não pode tê-la.
+        //
+        // `admin.abrir_espaco` roda **antes** da leitura: naquele instante
+        // ninguém sabe quantos registros a consulta vai devolver. E `auditoria`
+        // não aceita `UPDATE` de ninguém, então a linha da abertura nunca é
+        // completada depois.
+        //
+        // A §8 promete "rota e contagem", e sem esta segunda linha a promessa
+        // era falsa: medido no banco, as quatro telas de cliente gravavam
+        // `registros` nulo. "Abriu o espaço" não responde à natureza dos dados
+        // afetados que o art. 48 pede; "abriu o espaço, rota X, 143 registros"
+        // responde.
+        //
+        // É a mesma forma do par intenção/efeito das escritas, e a `correlacao`
+        // é o que permite afirmar que as duas são o mesmo ato.
+        await c.query(
+          `INSERT INTO auditoria (tenant_id, usuario_id, ator_tipo, entidade,
+                                  entidade_id, acao, classe, rota, registros, correlacao)
+           VALUES ($1, $2, 'operador', 'tenant', $1, 'leu_registros',
+                   'leitura_em_massa', $3, $4, $5)`,
+          [tenantId, operador, rota, resultado.itens.length, correlacao],
+        )
+
+        return resultado
       }),
     )
   }

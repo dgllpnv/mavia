@@ -171,8 +171,46 @@ describe('cada tela deixa a sua própria linha', () => {
     const linhas = await linhasDesde(marca)
     expect(linhas.map((l) => l.rota)).toEqual([
       '/v1/admin/clientes/:tenantId',
+      '/v1/admin/clientes/:tenantId',
+      '/v1/admin/clientes/:tenantId/contas',
       '/v1/admin/clientes/:tenantId/contas',
     ])
+  })
+
+  it('**cada tela grava a contagem**, numa segunda linha correlacionada', async () => {
+    // A §8 promete "rota e contagem", e a promessa era falsa: `abrir_espaco`
+    // roda **antes** da leitura, quando ninguém sabe quantos registros virão, e
+    // `auditoria` não aceita `UPDATE` — a linha da abertura nunca é completada
+    // depois. Medido no banco: as quatro telas de cliente gravavam `registros`
+    // nulo.
+    //
+    // "Abriu o espaço" não responde à natureza dos dados afetados; "abriu o
+    // espaço, rota X, 143 registros" responde.
+    const m = await api.banco.cliente.query<{ t: string }>('SELECT now()::text AS t')
+    const r = await api.pedir({
+      metodo: 'GET',
+      url: `/v1/admin/clientes/${TENANT_A}/contas`,
+      usuario: USUARIO_A,
+      cabecalhos: HIPOTESE,
+    })
+    expect(r.statusCode).toBe(200)
+
+    const linhas = await api.banco.cliente.query<{
+      acao: string
+      registros: string | null
+      correlacao: string
+    }>(
+      `SELECT acao, registros::text, correlacao FROM auditoria
+        WHERE ator_tipo = 'operador' AND ocorrido_em > $1::timestamptz
+        ORDER BY ocorrido_em`,
+      [m.rows[0]!.t],
+    )
+
+    expect(linhas.rows.map((l) => l.acao)).toEqual(['leu', 'leu_registros'])
+    // A mesma correlação: é ela que permite afirmar que as duas são o mesmo ato.
+    expect(linhas.rows[0]!.correlacao).toBe(linhas.rows[1]!.correlacao)
+    expect(linhas.rows[0]!.registros).toBeNull()
+    expect(Number(linhas.rows[1]!.registros)).toBe(r.json().itens.length)
   })
 
   it('**a leitura enxerga o espaço do cliente**, e o operador não é membro dele', async () => {

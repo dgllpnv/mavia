@@ -1,0 +1,285 @@
+/**
+ * O painel de operação — **composição dos tokens, não uma segunda identidade.**
+ *
+ * `docs/design.md` §4 pede três direções e escolha humana **para a identidade do
+ * produto**, e isso já aconteceu: DP-30 e DP-31 escolheram, e os valores vivem
+ * em `@mavia/ui`. Inventar uma pele para o painel seria exatamente as "cinco
+ * ideias em cinco telas" que a §3 condena. Aqui não há uma cor, um raio nem um
+ * passo tipográfico novo: tudo abaixo é `var(--…)`.
+ *
+ * O que **é** próprio do painel é a densidade e o cromo. O extrato de um cliente
+ * é uma lista de 56px porque a pessoa olha o próprio dinheiro; a lista de
+ * clientes de um operador é uma tabela de jornal, porque ele varre trinta linhas
+ * atrás de uma. A referência é a página de cotações, não o aplicativo.
+ */
+
+/* --------------------------------------------------------------------------
+ * O cromo
+ *
+ * **Deliberadamente diferente da barra do produto**, e a diferença não é
+ * decorativa: um operador com as duas abas abertas precisa saber, em um
+ * quadro de visão periférica, em qual delas está. A barra do produto é sólida
+ * na cor da marca; a do painel é papel com uma régua grossa de tinta embaixo —
+ * a mesma gramática do trilho, no papel de cabeçalho.
+ * ----------------------------------------------------------------------- */
+.painel-barra {
+  display: flex;
+  align-items: center;
+  gap: var(--s-24);
+  min-height: var(--altura-nav);
+  padding: 0 var(--s-24);
+  background: var(--paper-0);
+  color: var(--ink-1);
+  border-bottom: 3px solid var(--ink-1);
+}
+
+.painel-barra__marca {
+  font-family: var(--fonte-numero);
+  font-size: var(--text-2);
+  font-weight: var(--peso-realizado);
+  letter-spacing: var(--tracking-2);
+  color: var(--ink-0);
+}
+
+/* O sufixo que nomeia onde se está. Não é badge nem pílula: é a palavra, na
+   cor da tinta secundária, depois de uma barra. */
+.painel-barra__lugar {
+  font-family: var(--fonte-corpo);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-xs);
+  text-transform: uppercase;
+  font-weight: var(--peso-rotulo);
+  color: var(--ink-3);
+}
+
+.painel-barra__destino {
+  font-size: var(--text-corpo);
+  color: var(--ink-3);
+  padding: var(--s-8) 0;
+  border-bottom: 2px solid transparent;
+}
+
+.painel-barra__destino:hover {
+  color: var(--ink-1);
+}
+
+/* A seleção não é só cor: a tinta escurece **e** a régua aparece. */
+.painel-barra__destino[aria-current='page'] {
+  color: var(--ink-0);
+  border-bottom-color: var(--ink-0);
+  font-weight: var(--peso-rotulo);
+}
+
+/* --------------------------------------------------------------------------
+ * A tabela
+ *
+ * Sem card em volta: o alinhamento resolve (§2.2). A régua fina separa as
+ * linhas, o cabeçalho é o `.rotulo` do produto, e a densidade é a feature —
+ * 36px de linha contra os 56px do extrato do cliente.
+ * ----------------------------------------------------------------------- */
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela thead th {
+  font-family: var(--fonte-corpo);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-xs);
+  text-transform: uppercase;
+  font-weight: var(--peso-rotulo);
+  color: var(--ink-3);
+  text-align: left;
+  padding: var(--s-8) var(--s-12);
+  border-bottom: 2px solid var(--ink-1);
+  white-space: nowrap;
+}
+
+.tabela tbody td {
+  font-size: var(--text-corpo);
+  padding: var(--s-8) var(--s-12);
+  border-bottom: 1px solid var(--line);
+  vertical-align: baseline;
+}
+
+/**
+ * **`surface-1` e não `surface-2`, e a diferença é um centésimo de WCAG.**
+ *
+ * Medido: `--ink-3` sobre `--surface-2` dá 4,49:1 — abaixo do mínimo de 4,5:1
+ * por uma casa decimal. Sobre `--surface-1` dá 4,87:1. O texto em repouso, sobre
+ * papel, dá 5,02:1; passar o ponteiro por cima de uma linha não pode ser o gesto
+ * que reprova a tela.
+ */
+.tabela tbody tr:hover td {
+  background: var(--surface-1);
+}
+
+.tabela td:first-child,
+.tabela th:first-child {
+  padding-left: 0;
+}
+
+.tabela td:last-child,
+.tabela th:last-child {
+  padding-right: 0;
+}
+
+/* Coluna curta que não deve quebrar: rótulo de enum, estado, meio. Sem isto,
+   "chamado de suporte" ocupa três linhas e a tabela perde a densidade que é a
+   razão de ela ser tabela. */
+.tabela .curta {
+  white-space: nowrap;
+}
+
+/**
+ * Coluna numérica — valor, contagem e data.
+ *
+ * `tabular-nums` e alinhamento à direita, `docs/design.md:50` e a auditoria da
+ * §5. Vale para **toda** coluna de número, e não só para a de dinheiro: uma
+ * coluna de datas com figuras proporcionais dança do mesmo jeito, e o operador
+ * varre esta tabela procurando a linha fora do padrão.
+ */
+.tabela .numero,
+.tabela th.numero {
+  font-family: var(--fonte-numero);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+ * O par que a tela existe para mostrar: fim efetivo × fim do ciclo
+ *
+ * Assimétrico de propósito (§2.5): o fim efetivo domina, o fim do ciclo é a
+ * coluna de apoio. Duas colunas iguais diriam que os dois números têm o mesmo
+ * peso, e não têm — quem decide o direito de uso é o efetivo.
+ * ----------------------------------------------------------------------- */
+.par-de-fins {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--s-32);
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .par-de-fins {
+    grid-template-columns: 1fr;
+    gap: var(--s-16);
+  }
+}
+
+/* O número grande da tela. 36px contra 15px de corpo: 2,4×; com a data em
+   `text-heroi` seria 3,7×, e a data não merece esse peso — quem carrega a
+   relação de escala da tela é o título, em `heroi`. */
+.fim-efetivo {
+  font-family: var(--fonte-numero);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-size: var(--text-4);
+  line-height: var(--lh-4);
+  font-weight: var(--peso-realizado);
+  color: var(--ink-0);
+}
+
+.fim-do-ciclo {
+  font-family: var(--fonte-numero);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-size: var(--text-2);
+  line-height: var(--lh-2);
+  color: var(--ink-2);
+}
+
+/* --------------------------------------------------------------------------
+ * Aviso — o que a escrita faz, e o que ela não faz
+ *
+ * Nem card nem faixa colorida: régua à esquerda e texto. A cor entra só onde a
+ * consequência é uma mudança de direito de uso, e nunca sozinha — o rótulo
+ * acima dela diz a mesma coisa em palavras.
+ * ----------------------------------------------------------------------- */
+.consequencia {
+  border-left: 3px solid var(--line-forte);
+  padding: var(--s-4) 0 var(--s-4) var(--s-16);
+}
+
+.consequencia--muda-acesso {
+  border-left-color: var(--atencao);
+}
+
+/* --------------------------------------------------------------------------
+ * A hipótese em curso, no alto de toda tela do espaço de um cliente
+ *
+ * Ela fica visível o tempo todo porque o operador precisa lembrar sob que
+ * pretexto está lendo — e porque esquecer disso é como um acesso legítimo vira
+ * um passeio.
+ * ----------------------------------------------------------------------- */
+.hipotese-em-curso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-8) var(--s-16);
+  padding: var(--s-8) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-3);
+}
+
+/* --------------------------------------------------------------------------
+ * O número que abre toda tela de leitura — o elemento-assinatura, aqui
+ *
+ * O trilho é a assinatura do produto: "quanto disto já é fato, e onde estava
+ * previsto terminar". No painel o denominador é outro e a forma é a mesma —
+ * um número grande, o que ele conta escrito ao lado, e a régua de 2px de
+ * pontas quadradas embaixo.
+ *
+ * E o número **não é decorativo**: em toda tela de leitura ele é a contagem de
+ * registros que a consulta devolveu — o que o operador acabou de ver sobre um
+ * cliente, dito de uma vez em vez de estimado rolando a página.
+ *
+ * 56px contra 15px de corpo dá 3,73:1 — acima do mínimo de 3:1 da auditoria da
+ * §5. É por isso que ele é `heroi` e não `text-4`: 36px daria 2,4:1 e reprovaria.
+ * ----------------------------------------------------------------------- */
+.painel-heroi {
+  font-family: var(--fonte-numero);
+  font-size: var(--text-heroi);
+  line-height: var(--lh-heroi);
+  letter-spacing: var(--tracking-heroi);
+  font-weight: var(--peso-heroi);
+  color: var(--ink-0);
+  /* Figuras proporcionais: em 56px cada dígito com a largura de um zero deixa
+     um `121` frouxo. `tabular-nums` é obrigatório em **coluna**, e este número
+     está sozinho. */
+  font-variant-numeric: proportional-nums lining-nums slashed-zero;
+}
+
+/** O identificador técnico — UUID, correlação, referência externa. */
+.identificador {
+  font-family: var(--fonte-id);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+  word-break: break-all;
+}
+
+/* --------------------------------------------------------------------------
+ * O `de → para` de uma escrita de contrato
+ *
+ * Duas linhas rotuladas, e não uma string com uma seta no meio: numa coluna
+ * estreita a seta some no fim de uma quebra e o operador não sabe qual metade
+ * é o valor anterior. `min-width` porque esta é a única coluna com conteúdo
+ * variável, e sem ela as colunas de largura fixa a espremem até a ilegibilidade.
+ * ----------------------------------------------------------------------- */
+.de-para {
+  font-family: var(--fonte-id);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  color: var(--ink-2);
+  min-width: 30ch;
+  /* `anywhere` e não `break-all`: quebra na oportunidade que o espaço depois da
+     vírgula cria, e só parte uma palavra quando ela sozinha não cabe. */
+  overflow-wrap: anywhere;
+}
+
+.de-para .rotulo {
+  margin-right: var(--s-4);
+}
