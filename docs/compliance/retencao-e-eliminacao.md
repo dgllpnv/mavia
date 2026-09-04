@@ -1,6 +1,6 @@
 # Retenção e eliminação de dados pessoais
 
-- **Data:** 2026-09-01 · **revisado em 2026-09-04** pelo épico do painel de administração (§3.8, §8.1.1, e os carve-outs de §3.5, §3.6, §4.4, §5.3, §8.2)
+- **Data:** 2026-09-01 · **revisado em 2026-09-04** pelo épico do painel de administração (§3.8, §8.1.1, e os carve-outs de §3.5, §3.6, §4.4, §5.3, §8.2) · **emendado em 2026-09-04** pelo próprio parecer de gate sobre a v3.1 do spec do painel: §3.6 (executor da purga da `observacao`), §4.4.1 (o gêmeo anonimizado), §5.3 e §6.3 (entrega da lista de acessos ao titular que elimina), §8.1.1 (o eixo de escrita do operador), e R-29 a R-31
 - **Autor:** `especialista-lgpd-compliance`
 - **Status:** Normativo. É o **estado alvo** para o qual o job `retencao.aplicar` converge. Contradizer este documento exige ADR.
 - **Destrava:** B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-09, B-11, B-12, B-13, B-14, B-15, B-16, B-17 do `docs/validacao/gate-risco-spec.md`
@@ -176,13 +176,20 @@ Todas as classes abaixo têm a mesma finalidade-mãe — *permitir que o titular
 | `cobrancas` (valor, **`valor_reembolsado`**, datas, estado, `stripe_invoice_id`) | Provar o que foi cobrado, **e quanto foi devolvido**, e sustentar a escrituração fiscal | **Obrigação legal** (7º II) | `emitida_em` | **5 anos contados de 1º de janeiro do ano seguinte** (CTN art. 173 I) | `apagar`. **Sobrevive à eliminação do espaço** (§5.3) |
 | `dados_fiscais` (`documento` CPF/CNPJ, `tipo_documento`, `nome_fiscal`) | Emitir a nota fiscal do serviço contratado | **Obrigação legal** (7º II) | Vencimento da última `Cobranca` do tenant | Enquanto houver `Cobranca` dentro do prazo acima | `apagar` a linha. **Sobrevive à eliminação do espaço** (§5.3). Quatro vetos de uso secundário na §2.2 |
 | `pagamentos_manuais` (`valor_centavos`, `moeda`, `competencia`, `meio`, `registrado_por`, `registrado_em`) | Provar que um pagamento recebido fora da Stripe foi recebido, de quem, quando, por qual meio e por qual operador | **Obrigação legal** (7º II) — é receita da Mavia e entra na mesma escrituração das `cobrancas` | `registrado_em` | **5 anos contados de 1º de janeiro do ano seguinte** (CTN art. 173 I) | `apagar`. **Sobrevive à eliminação do espaço** (§5.3). `registrado_por` **não** é anonimizado: é operador, não titular — §3.8 |
-| `pagamentos_manuais.observacao` (texto livre) | Deixar o operador anotar o que o campo estruturado não expressa (nº do comprovante, acordo pontual) | Legítimo interesse (7º IX) — **não** é elemento da escrituração; o que a obrigação legal exige são valor, data e meio | `registrado_em` | **12 meses** | `apagar` a coluna (`UPDATE ... SET observacao = NULL`), preservando a linha. Campo livre — §2.3 vale integralmente, e a UI avisa ao operador, ao lado do campo, que a observação sai na exportação pedida pelo cliente |
+| `pagamentos_manuais.observacao` (texto livre) | Deixar o operador anotar o que o campo estruturado não expressa (nº do comprovante, acordo pontual) | Legítimo interesse (7º IX) — **não** é elemento da escrituração; o que a obrigação legal exige são valor, data e meio | `registrado_em` | **12 meses**, ou a **eliminação do espaço** — o que vier primeiro (§5.3) | `apagar` a coluna (`UPDATE ... SET observacao = NULL`), preservando a linha. Campo livre — §2.3 vale integralmente, e a UI avisa ao operador, ao lado do campo, que a observação sai na exportação pedida pelo cliente |
 | `eventos_cobranca` (`event.id`, tipo, horários, resultado) | Impedir que um evento repetido cobre ou altere duas vezes, e permitir apurar uma disputa | Legítimo interesse (7º IX) | `recebido_em` | **12 meses** | `apagar`. **Não contém dado pessoal** — nunca payload, nunca e-mail, nunca valor. É a razão de a tabela poder viver fora da RLS |
 | `lista_espera` (`email`, instituição desejada, faixa de disposição a pagar) | Avisar **uma vez** quando a conexão bancária existir | **Consentimento** (7º I), texto na §10.7 | Envio do aviso, ou descadastro | **30 dias** após o aviso · **imediato** no descadastro | `apagar`. Dado de quem **não é cliente**. Nunca usado para outra comunicação — veto |
 | Dados de cartão de pagamento (PAN, CVV, validade completa, nome impresso, endereço de cobrança) | — | — | — | **Não coletamos.** Checkout hospedado: o dado do cartão nunca transita pelo nosso servidor, e por isso não entramos no escopo PCI-DSS | — |
 | Emissão de nota fiscal | — | — | — | **Não emitimos hoje** (DP-16). Nenhuma integração fiscal, nenhum número de nota guardado. `cobrancas.documento_fiscal_id` fica reservado e nulo | — |
 
 > **Se o dono decidir definitivamente não emitir nota**, a base legal de `dados_fiscais` desaparece e a tabela é apagada por inteiro sob `mavia_retencao`, com entrada em `retencao_execucoes`. A saída está escrita para que a coleta não vire permanente por inércia.
+
+**Quem executa a purga da `observacao`, e o que ainda não existe.** Um prazo sem executor nomeado é o mesmo defeito que este documento existe para corrigir, uma tabela adiante. Então, por extenso:
+
+1. **O papel é `mavia_retencao`**, e o privilégio é `GRANT UPDATE (observacao) ON pagamentos_manuais TO mavia_retencao` — nominal por coluna, pela mesma razão do §4.3: o papel que zera uma anotação não pode alterar valor, moeda, competência nem `registrado_por`, que são a escrituração.
+2. **A policy não precisa de nada novo.** `tenant_isolation` sobre `pagamentos_manuais` é escrita sem cláusula `TO`, logo vale para todo papel, e o job já roda por tenant com `SET LOCAL app.tenant_id` (§4.3, trava 5).
+3. **`mavia_retencao` não existe.** As únicas `CREATE ROLE` do repositório são `mavia_app` e `mavia_jobs` (`0001_fundacao.sql:16,19`), `mavia_auth` (`0004_cadastro.sql:19`) e `mavia_migrate` (`bootstrap-papeis.sql`). Todo o §4.3 é, hoje, **a construir** — e isso vale como condição, não como pressuposto, exatamente como o spec do painel marca `auditoria`.
+4. **O `GRANT` entra na migration que cria a tabela**, não numa migration futura. Migration é forward-only e o privilégio custa uma linha; adiá-lo é aceitar que a primeira obrigação vença com o executor sem privilégio — e, pelo modo de falha documentado em `bootstrap-papeis.sql`, um `GRANT` ausente não faz migration nenhuma falhar. Quem transforma a omissão em falha visível é o teste de esquema do **R-29**.
 
 ### 3.7 Inteligência (épico 7, condicionado a §9)
 
@@ -212,7 +219,16 @@ Duas consequências práticas, escritas para não serem redescobertas:
 
 **O que isso faz com o `DROP PARTITION`.** `auditoria` é particionada por mês e o expurgo é da partição inteira (§8.3), então **a partição só pode cair quando a classe de maior prazo dentro dela vencer**. Isso já valia antes deste épico — as classes de escrita financeira e de segurança já são de 5 anos —, e a classe de acesso de operador não muda o teto. O que ela muda é o expurgo por linha: se algum dia existir um caminho de `DELETE` seletivo em `auditoria` (o papel `mavia_eliminacao` da §3.2 do spec é o primeiro), ele **não pode** varrer linhas de operador aos 12 meses junto com as de leitura em massa.
 
-**O limite que os 5 anos não vencem, e que fica declarado.** `auditoria` **não** está entre os sobreviventes da §5.3. Quando o cliente elimina o espaço, as linhas de acesso de operador **àquele espaço** são apagadas junto — é o que o art. 18 VI exige e o que o R-08 verifica. Consequência: o registro de que a Mavia leu o espaço de alguém dura 5 anos **ou até esse alguém encerrar o contrato**, o que vier antes. Não há como ter as duas coisas: o que resta são `concessoes_de_admin`, que prova *quem teve acesso à base* e sobrevive porque não tem `tenant_id`, e `retencao_execucoes`, que prova que o expurgo aconteceu. É menos do que se gostaria numa apuração tardia, e é o resultado correto — a eliminação do titular vence a conveniência probatória do controlador.
+**O limite que os 5 anos não vencem, e que fica declarado.** `auditoria` **não** está entre os sobreviventes da §5.3. Quando o cliente elimina o espaço, as linhas de acesso de operador **àquele espaço** são apagadas junto — é o que o art. 18 VI exige e o que o R-08 verifica.
+
+> ⚠️ **Corrigido em 2026-09-04, no parecer sobre a v3.1 do spec do painel.** Este parágrafo dizia que o registro dura *"5 anos ou até esse alguém encerrar o contrato, o que vier antes"* e concluía que *"é o resultado correto"*. A conclusão estava certa pela metade e concedia demais. O erro foi tratar a linha como tendo **um** titular, quando esta mesma §3.8 e a §4.4 dizem que ela tem **dois** — e é por isso que o `usuario_id` do operador não é anonimizado ali. Se o segundo titular justifica preservar a **identidade** de quem operou por 5 anos, ele justifica preservar o **fato** pelos mesmos 5 anos.
+>
+> A pergunta se desfaz quando se percebe que são duas, com donos diferentes:
+>
+> - **"A Mavia leu o *meu* espaço?"** depende do vínculo com o titular, e **não pode** sobreviver ao pedido dele. Isso não é defeito: é o art. 18 VI funcionando. O defeito seria ele perder a evidência sem saber — e a saída é a entrega antes do apagamento (§5.3, parte (a)).
+> - **"O operador X abusou?"** é accountability do controlador (arts. 37 e 46), não precisa do cliente, e **pode** sobreviver anonimizada (§4.4.1).
+>
+> O que resta identificado, além disso, continua sendo `concessoes_de_admin` — que prova *quem teve acesso à base* e sobrevive porque não tem `tenant_id` — e `retencao_execucoes`, que prova que o expurgo aconteceu.
 
 ---
 
@@ -290,6 +306,31 @@ A razão é que os três caminhos de volta que a §4.4 destrói são exatamente 
 
 Escrito assim, a assimetria fica explícita e defensável: **a Mavia anonimiza quem é titular e mantém identificado quem opera em nome dela.** O inverso — preservar o cliente e apagar o funcionário — é o desenho que todo log de acesso ruim tem, e produz um registro que só serve para vigiar quem não precisava ser vigiado.
 
+#### 4.4.1 O gêmeo anonimizado — como o acesso de operador sobrevive à eliminação do espaço
+
+A §4.4 anonimiza o **autor** e preserva o **fato**. Esta seção faz o simétrico na outra ponta: quando o espaço é eliminado, ela anonimiza o **espaço lido** e preserva o **fato mais o autor**. É o mesmo mecanismo, virado noventa graus, e existe porque a linha de `ator_tipo = 'operador'` tem dois titulares — o cliente, cujo espaço foi aberto, e o operador, que o abriu.
+
+**A base.** Art. 16 IV: o dado pode ser conservado, após o término do tratamento, para *"uso exclusivo do controlador, vedado seu acesso por terceiro, e desde que anonimizados os dados"*. Combinado com o art. 12, o resultado sai do escopo da lei — **desde que a anonimização seja real no padrão exigente da §4.4, e não nominal.**
+
+**Os três caminhos de volta ao cliente, e como cada um morre.** Mesma tabela da §4.4, mesmo rigor, outro alvo:
+
+| Caminho de volta | Como é destruído |
+|---|---|
+| `tenant_id`, que mapeia a linha ao espaço | Substituído por token irrecuperável. A linha em `tenants` é apagada fisicamente e o **pepper daquele tenant é destruído no guardião de chaves** na mesma execução (§5.3) — sem o pepper não há como recomputar o token a partir de um `tenant_id` conhecido, nem comparar contra um candidato |
+| `referencia`, que pode identificar por singularidade | Entra **hasheada**. É o único campo com risco real: para `motivo = chamado`, a §8.1.1 admite como referência *"o e-mail e a data em que ele pediu"*. Sem esta redação, o gêmeo carregaria um e-mail de cliente eliminado, e a anonimização seria nominal |
+| O conteúdo do `de/para` | Já minimizado **na escrita** (§8.2): campo livre e valor entram como hash e comprimento |
+
+O que sobrevive é isto, e só isto: *"em 12/03/2027, o operador Fulano abriu um espaço, motivo `chamado`, rota X, 143 registros"* — identificado do lado de quem opera, anônimo do lado de quem contratou. Responde "o operador X abusou?" e é incapaz de responder "ele leu o espaço da pessoa Y?", que é exatamente o recorte que o art. 18 VI impõe.
+
+**O mecanismo é `INSERT` do gêmeo e depois `DELETE` do original**, executado pelo papel `mavia_eliminacao` (§3.2 do spec do painel — o caminho de `DELETE` seletivo em `auditoria` que a §3.8 antecipa), nas **mesmas três condições simultâneas** daquela isenção, e na ordem normativa que ela já fixou — *grava primeiro, apaga depois*. **Nada de `UPDATE` neste caminho**, e `mavia_eliminacao` não recebe nenhum: o único `UPDATE` que este documento concede sobre `auditoria` continua sendo o do §4.3 — três colunas, para `mavia_retencao`, para anonimizar o autor. Reescrever uma linha existente para trocar o `tenant_id` seria alterar um fato registrado; gravar o gêmeo e apagar o original mantém a tabela append-only no sentido literal, e deixa a passagem visível no `retencao_execucoes` da mesma transação.
+
+Duas consequências que fazem esta saída caber no desenho existente em vez de pedir um desenho novo:
+
+1. **O R-08 não muda uma vírgula.** Ele afirma que não sobra linha **com aquele `tenant_id`** — e não sobra: o `tenant_id` foi destruído junto com o pepper que o reconstituiria. O gêmeo não é uma sexta tabela na lista de sobreviventes da §5.3, porque não é uma linha daquele tenant. É uma linha de ninguém.
+2. **A isenção de imutabilidade não se amplia.** O custo é `GRANT INSERT ON auditoria TO mavia_eliminacao` e uma asserção. O papel continua `NOLOGIN`, continua sem `SELECT` em tabela de negócio, continua inalcançável por qualquer papel do painel, e continua exigindo a linha em `retencao_execucoes` gravada antes, na mesma transação.
+
+**Sem o gêmeo, a perda é irreversível e silenciosa.** Por isso o requisito é datado pelo evento e não pelo calendário: entre o painel alcançar cliente real e o `DELETE /tenants/:id` alcançar produção, **o que subir por último não sobe sem ele** (R-31).
+
 ### 4.5 Ordem de precedência para as próximas colisões
 
 Escrita agora para que a próxima não seja re-litigada:
@@ -349,13 +390,22 @@ Em seguida: `DELETE` físico de **todas** as tabelas com aquele `tenant_id`, na 
 | `consentimentos` | Ônus da prova do controlador (art. 8º §2º) | 5 anos, com `usuario_id` anonimizado e `escopo` reduzido a instituição + data + versão do texto |
 | `cobrancas` (§3.6) | Obrigação legal tributária | 5 anos, contados de 1º de janeiro do ano seguinte à cobrança |
 | `dados_fiscais` (§3.6) | O documento é elemento necessário da nota fiscal das cobranças que sobrevivem | Com as `cobrancas`. **É o único lugar onde o documento do titular sobrevive à eliminação**, e isso precisa estar em português claro na tela "Dados e privacidade" |
-| `pagamentos_manuais` (§3.6) | Obrigação legal tributária — é receita recebida, e o fato de ter entrado por fora da Stripe não a tira da escrituração | 5 anos, contados de 1º de janeiro do ano seguinte ao `registrado_em`. `observacao` já está nula desde os 12 meses (§3.6), então o que sobrevive é valor, moeda, competência, meio e o operador que deu baixa |
+| `pagamentos_manuais` (§3.6) | Obrigação legal tributária — é receita recebida, e o fato de ter entrado por fora da Stripe não a tira da escrituração | 5 anos, contados de 1º de janeiro do ano seguinte ao `registrado_em`. **`observacao` é zerada por este job, sempre**, independente dos 12 meses da §3.6 — ver abaixo. O que sobrevive é valor, moeda, competência, meio e o operador que deu baixa |
 | `eliminacoes_journal` | Impedir que uma restauração ressuscite o espaço | Só `(tenant_id, tipo, concluido_em)`, sem conteúdo |
 | `retencao_execucoes` | Accountability (art. 37) | Contagens, sem dado pessoal — **e sem `tenant_id`**, por isso não conta no R-08 |
 
 **Cinco tabelas com `tenant_id`** sobrevivem: `consentimentos`, `cobrancas`, `dados_fiscais`, `pagamentos_manuais` e `eliminacoes_journal`. `retencao_execucoes` está na lista porque também não é apagada, mas não carrega `tenant_id` e por isso é invisível ao teste do R-08. Eram quatro antes deste épico; `pagamentos_manuais` é a quinta, e **sem esta linha o R-08 reprova a implementação do painel** — a primeira baixa manual de pagamento deixaria uma linha com `tenant_id` que o teste de eliminação não perdoa.
 
 Nada mais. Se alguém precisar acrescentar um item a esta lista, ele vira uma linha aqui com a base legal ao lado — nunca uma exceção em código.
+
+**`pagamentos_manuais.observacao` não sobrevive, e o prazo dela não se aplica aqui.** A §3.6 dá à `observacao` 12 meses e base de **legítimo interesse**, dizendo por extenso que ela *não* é elemento da escrituração — o que a obrigação legal preserva são valor, data e meio. Logo a linha sobrevive por obrigação legal e a coluna **não tem por que sobreviver com ela**. Escrever "já está nula desde os 12 meses" era assumir que os 12 meses passaram: um espaço eliminado no terceiro mês deixaria texto livre sobre o cliente vivo por mais quatro anos e nove meses, sem base, contra o art. 16. Então: **`DELETE /tenants/:id` executa `UPDATE pagamentos_manuais SET observacao = NULL` para aquele `tenant_id`, sempre, na mesma execução** — e o R-22 passa a afirmar isso (R-30).
+
+**Antes de apagar o registro de acesso, entregue-o a quem ele é sobre.** As linhas de `auditoria` com `ator_tipo = 'operador'` referentes a este espaço são apagadas aqui — é o art. 18 VI, e está certo. O que não pode acontecer é o titular perder a evidência **sem saber que a estava perdendo**. Duas obrigações, as duas baratas:
+
+1. **O diálogo de eliminação e o e-mail da janela de 7 dias (§5.5) dizem, em português claro:** *"O registro de quando alguém da administração da Mavia abriu este espaço vai junto. Ele está na cópia dos seus dados que enviamos agora — depois da eliminação, não teremos mais como consultá-lo."*
+2. **A exportação final inclui a lista de acessos de operador** àquele espaço, sem depender de pedido: data e hora, motivo, referência, rota e contagem de registros. **Não sai** `ip_hash` nem `user_agent_hash` — R-5 da matriz de acesso vale aqui como vale em toda resposta —, e o operador aparece como identificação da Mavia, nunca como `usuario_id` cru, pela mesma razão de `pagamentos_manuais.registrado_por` na §6.1.
+
+É o mesmo conteúdo que o titular receberia pelo art. 18 I e II, entregue no único momento em que pedir depois deixa de ser possível. O que sobra do lado da Mavia, para a apuração de abuso interno, é o gêmeo anonimizado da §4.4.1.
 
 ### 5.4 "Começar do zero" — `POST /tenants/:id/comecar-do-zero`
 
@@ -411,10 +461,11 @@ O CSV e o OFX de lançamentos de `arquitetura-informacao.md` §2.2 continuam exi
 ### 6.3 Regras de conteúdo
 
 1. **A exportação nunca contém mais do que o solicitante já pode ler pela API.** O gerador aplica a `matriz-de-acesso.md`: para `membro` e `visualizador`, filtra as atividades de segurança de outros membros e omite o e-mail dos demais. Sem isso, a exportação vira um caminho de escalada de leitura.
-2. **Nunca sai:** `senha_hash`, `refresh_hash`, `mfa_segredo_cifrado`, `credenciais_cifradas`, `dek_cifrada`, `ip_hash`, `user_agent_hash`, `lancamentos_brutos.payload`. Os mesmos sete campos da regra R-5 da matriz de acesso.
+2. **Nunca sai:** `senha_hash`, `refresh_hash`, `mfa_segredo_cifrado`, `credenciais_cifradas`, `dek_cifrada`, `ip_hash`, `user_agent_hash`, `lancamentos_brutos.payload` — e `dados_fiscais.documento`, que a matriz acrescentou à mesma regra. **A lista canônica é a R-5 de `matriz-de-acesso.md`**, e é por identificador que ela se cita: contada por itens são sete, contada por colunas são nove, e foi essa aritmética que produziu, no spec do painel, um teste que passava verde sobre um campo vetado. Aqui vale a regra, não a contagem.
 3. **`lancamentos_brutos`** sai normalizado. O payload cru contém agência, conta e chave Pix de **terceiros** (§7) — exportá-lo entregaria a um titular o dado pessoal de pessoas que nunca contrataram a Mavia.
 4. **Prazo:** gerada automaticamente em ≤ **72 h**, e nunca mais de **15 dias** (art. 19 §3º combinado com a expectativa razoável do titular).
 5. **Saída de membro:** ao ser removido, o ex-membro recebe automaticamente uma exportação do que **ele** criou, disponível por 30 dias, com aviso por e-mail (B-09). É o único caminho pelo qual ele exerce portabilidade depois de perder o acesso.
+6. **Eliminação do espaço:** a exportação final inclui a **lista de acessos de operador** àquele espaço — data e hora, motivo, referência, rota e contagem de registros —, mesmo que ninguém a tenha pedido. É a única entrega deste documento que não nasce de um pedido, e a razão está na §5.3: depois da eliminação, nem o titular nem a Mavia têm como consultá-la. A justificativa que hoje mantém `auditoria` fora da exportação diz que ela *"sai por outro fluxo"*; para as linhas de acesso de operador, este é um dos dois fluxos — o outro é o pedido do art. 18 I e II.
 
 ### 6.4 O teste que impede a regressão
 
@@ -465,7 +516,9 @@ Acumular isso indefinidamente contraria o art. 6º III (necessidade) de forma di
 
 **Por que este teste é novo, e não uma extensão do §8.1.** A §8.1 fecha com *"retirada qualquer uma delas, a LIA precisa ser refeita"*. A **DA-2** do épico do painel retira exatamente uma: *"o log é exposto ao próprio titular"* — e retira a que mais pesava, porque era ela que transformava um registro **sobre** a pessoa num instrumento **da** pessoa. Mas mesmo que nenhuma salvaguarda tivesse caído, o §8.1 não se estenderia: lá o agente é membro do espaço, a finalidade é transparência entre quem divide as contas, e o alcance é um espaço. Aqui o agente é funcionário do controlador, a finalidade é operar a empresa, e o alcance é a base inteira. Três eixos diferentes é tratamento diferente, com teste próprio.
 
-**O tratamento, em uma frase.** Um operador da Mavia abre o espaço de um cliente e lê os dados financeiros dele — saldos, lançamentos, contas, cartões, faturas, objetivos, anexos — sem pertencer àquele espaço.
+**O tratamento, em uma frase.** Um operador da Mavia abre o espaço de um cliente e lê os dados financeiros dele — saldos, lançamentos, contas, cartões, faturas, objetivos, anexos — sem pertencer àquele espaço; e, em duas tabelas que **não** são o razão, escreve.
+
+O eixo de leitura é o que este balanceamento pesa. O de escrita tem base própria e entra aqui como **ato de operador**, não como tratamento novo — a distinção está adiante, na necessidade.
 
 ---
 
@@ -493,7 +546,25 @@ A quarta hipótese do enum, `ordem_judicial`, **não se sustenta neste legítimo
 | Acesso apenas com consentimento pontual do titular | Bom em (a), inviável em (b) — um incidente não espera resposta de e-mail — e sem efeito em ordem judicial. Também é consentimento sob desequilíbrio: quem está com o saldo errado autoriza o que for |
 | Ambiente de cópia anonimizada | Não reproduz o dado que causou o defeito. E anonimizar bem uma base financeira inteira é mais caro e mais arriscado que o acesso auditado |
 
-**O que a necessidade exclui, e por isso é normativo:** leitura sem hipótese declarada; escrita no dado financeiro do cliente — garantida pelo papel `mavia_admin`, que só tem `SELECT`, e não por disciplina; personificação do titular; e qualquer finalidade que não seja uma das três — produto, marketing, cobrança ativa ou treino de modelo (este último já proibido pela **DP-8**).
+**O que a necessidade exclui, e por isso é normativo:** leitura sem hipótese declarada; **escrita no razão do cliente** — `lancamentos`, `contas`, `faturas`, `transferencias`, `saldo_snapshots` —, garantida por nenhum dos papéis do painel ter `GRANT` de escrita nessas tabelas, e não por disciplina de quem escreve a rota; personificação do titular; e qualquer finalidade que não seja uma das três — produto, marketing, cobrança ativa ou treino de modelo (este último já proibido pela **DP-8**).
+
+> ⚠️ **Corrigido em 2026-09-04.** Este parágrafo dizia *"escrita no dado financeiro do cliente — garantida pelo papel `mavia_admin`, que só tem `SELECT`"*. As duas metades precisavam de conserto. **A primeira era ampla demais:** o spec do painel diz, na própria voz, que `assinaturas` e `pagamentos_manuais` **são** dado financeiro, e o operador escreve nas duas. O que a necessidade exclui é o **razão**, e é isso que a frase sempre quis dizer. **A segunda ficou incompleta:** o painel autentica por dois papéis, e quem escreve é `mavia_admin_escrita`, não `mavia_admin`. Nomear só o papel de leitura fazia a salvaguarda parecer maior do que é.
+
+#### O eixo de escrita, e por que ele não se apoia neste legítimo interesse
+
+O operador executa quatro escritas: trocar plano, trocar intervalo, adicionar tempo e dar baixa em pagamento recebido fora da Stripe. Elas tocam `assinaturas` e `pagamentos_manuais` — **a relação comercial, não o razão**. E a distinção jurídica importa mais que a técnica:
+
+| | Leitura do espaço do cliente | Escrita em `assinaturas` e `pagamentos_manuais` |
+|---|---|---|
+| **Base do tratamento do dado** | Legítimo interesse (7º IX) — **é o que esta LIA balanceia** | **Execução de contrato** (7º V) para a assinatura; **obrigação legal** (7º II) para o pagamento manual, que é receita e entra na escrituração (§3.6). **Nenhuma delas depende deste balanceamento** |
+| **O que esta LIA cobre** | A leitura em si | **O ato do operador** sobre esses dados: alguém que não é o titular alterando o contrato dele e registrando dinheiro em nome dele. O dado tem base própria; o ato precisa de hipótese, registro e controle, como a leitura |
+| **Controle compensatório** | Hipótese declarada na mesma instrução que abre o espaço | **`admin.abrir_espaco_para_escrita`** — mesma hipótese, mesma instrução, mesmo parâmetro vinculado, com **classe de escrita financeira** no log em vez da classe de leitura; e o **step-up carregando o `tenant_alvo`**, que impede um ticket emitido para um cliente de autorizar a mesma escrita em outro |
+| **`de/para` no log** | Minimizado (§8.2) | **Em claro** para os campos de `assinaturas` e para o valor da baixa (§8.2) — "alterou o plano" sem dizer de qual para qual não registra nada, e o valor é o próprio ato, não extrato do cliente |
+
+Duas consequências normativas:
+
+1. **Escrita sem abertura é defeito, não descuido.** Nenhuma das quatro escritas define `app.tenant_id` por outro caminho; sem a função de abertura, o `UPDATE` afeta zero linhas e o `INSERT` viola o `WITH CHECK`. A propriedade *"não se toca o espaço de um cliente sem registrar"* vale para os dois eixos ou não vale para nenhum — construída só na leitura, ela era falsa como escrita.
+2. **O razão continua fora, e por privilégio.** Nenhum papel do painel tem `GRANT` de escrita em `lancamentos`, `contas`, `faturas`, `transferencias` ou `saldo_snapshots`. Corrigir lançamento de cliente é pedido **ao** cliente, nunca feito por cima dele.
 
 #### Hipóteses de acesso — lista fechada, com referência obrigatória
 
@@ -512,8 +583,9 @@ A quarta hipótese do enum, `ordem_judicial`, **não se sustenta neste legítimo
 
 | Salvaguarda | O que ela cobre | Onde |
 |---|---|---|
-| **Hipótese declarada antes do ato**, na mesma instrução que abre o espaço | É a única do conjunto que atua **antes** da leitura, e a única que muda o comportamento de quem age. As demais são forenses | §3 e §1.2 do spec |
-| Papel `mavia_admin`, só `SELECT` nas tabelas de negócio e `INSERT` em `auditoria` | O admin não altera nem apaga dado do cliente — por privilégio, não por rota bem escrita | §1.3 do spec |
+| **Hipótese declarada antes do ato**, na mesma instrução que abre o espaço — **nas duas funções de abertura, a de leitura e a de escrita** | É a única do conjunto que atua **antes** do ato, e a única que muda o comportamento de quem age. As demais são forenses | §1.6 e §3 do spec |
+| Papel `mavia_admin`, só `SELECT` nominal por coluna nas tabelas de negócio e `INSERT` em `auditoria`; papel de escrita **separado por autenticação**, não por instrução | O admin não altera nem apaga o **razão** do cliente — por privilégio, não por rota bem escrita. E a conexão que lê não é a conexão que escreve, então `RESET ROLE` numa rota do painel aterrissa num papel sem escrita alguma | §1.2 e §1.3 do spec |
+| As quatro escritas passam por `admin.abrir_espaco_para_escrita`, com **classe de escrita financeira** no log | Fecha o eixo em que a propriedade *"não se toca o espaço sem registrar"* estava construída só para leitura. Divergência entre o que foi auditado e o que foi efetivado deixa de ser expressável também na escrita | §1.6 e §8 do spec |
 | Log imutável contra `mavia_app` **e contra o dono da tabela**, com gatilho e partições pré-criadas | Um operador não apaga o rastro do próprio acesso | §3.1 do spec |
 | `rota` e contagem de `registros` na linha | Responde à natureza dos dados afetados que o art. 48 pede, e não só "abriu o espaço" | §3 do spec |
 | **5 anos de retenção e carve-out da anonimização** | A identidade de quem acessou sobrevive ao desligamento dele | §3.8, §3.5, §4.4 |
@@ -548,7 +620,7 @@ Três pontos onde o balanceamento é apertado, escritos aqui para que não sejam
 2. **DA-2 põe a detecção inteira dentro da Mavia.** Quem descobre o abuso está do mesmo lado de quem pode cometê-lo. A salvaguarda que resta ao titular — pedir a lista de acessos — exige que ele suspeite primeiro, e ninguém suspeita de um acesso que não aparece em lugar nenhum. Com **um único operador** (DP-34), a notificação entre pares é vazia e a autovigilância é a única linha de defesa. **É o ponto mais frágil desta LIA**, e ele é consequência direta de uma decisão do dono do produto, não de uma limitação técnica.
 3. **Sem MFA**, a probabilidade de comprometimento não é a que este balanceamento assume.
 
-**Refazer esta LIA é obrigatório se** qualquer uma destas mudar: o admin ganhar escrita no dado financeiro do cliente; a lista de motivos deixar de ser fechada ou a referência deixar de ser obrigatória; a notificação entre operadores for desligada; o pedido do titular deixar de ser respondido com a lista de acessos; o painel passar a servir finalidade nova; ou o acesso passar a ser feito por terceiro contratado, e não por pessoa da Mavia.
+**Refazer esta LIA é obrigatório se** qualquer uma destas mudar: o admin ganhar escrita no **razão** do cliente (`lancamentos`, `contas`, `faturas`, `transferencias`, `saldo_snapshots`); a escrita do operador alcançar **qualquer tabela além de `assinaturas` e `pagamentos_manuais`**, ou deixar de passar pela função de abertura de escrita; a lista de motivos deixar de ser fechada ou a referência deixar de ser obrigatória; a notificação entre operadores for desligada; o pedido do titular deixar de ser respondido com a lista de acessos; o painel passar a servir finalidade nova; ou o acesso passar a ser feito por terceiro contratado, e não por pessoa da Mavia.
 
 Esta seção é o núcleo do RIPD da entrada *"acesso de operador a espaço de cliente"* no ROPA, e é dela que sai a declaração genérica na política de privacidade.
 
@@ -766,10 +838,13 @@ Redigidos para virar asserção. Cada um tem dono e critério.
 | R-19 | Remover um membro revoga, na mesma transação, sessões, tokens OAuth e chaves de API daquele tenant, com efeito ≤ 60 s, e enfileira a exportação de saída | S2 | B-09 |
 | R-20 | `outbox.payload`, `notificacoes.payload` e `exportacoes` vencidos somem — inclusive o **objeto no storage**, não só a linha | S2 | A-28, B-01 |
 | R-21 | **O carve-out da anonimização.** Rodar `retencao.aplicar` sobre linhas de `auditoria` com 91 dias: as de `ator_tipo = 'operador'` mantêm `usuario_id` intacto; as demais viram `membro_removido:<hash>`. O teste afirma as **duas** metades — só a segunda passaria com um `WHERE` errado | S1 + S2 | §3.5, §3.8, §4.4 |
-| R-22 | **`pagamentos_manuais` sobrevive à eliminação do espaço.** Depois de `DELETE /tenants/:id`, as linhas continuam lá com `tenant_id`, valor, moeda, competência, meio e `registrado_por`; e nenhuma outra tabela além das **cinco** da §5.3 tem linha com aquele `tenant_id` | S2 | §3.6, §5.3, R-08 |
+| R-22 | **`pagamentos_manuais` sobrevive à eliminação do espaço.** Depois de `DELETE /tenants/:id`, as linhas continuam lá com `tenant_id`, valor, moeda, competência, meio e `registrado_por`; **e `observacao` está nula** (R-30); e nenhuma outra tabela além das **cinco** da §5.3 tem linha com aquele `tenant_id` | S2 | §3.6, §5.3, R-08 |
 | R-23 | **Os textos de consentimento estão na v2.** `packages/contracts/consentimentos/textos/` contém a v2 de §10.5 e de §10.6; nenhum caminho de código grava `consentimentos.versao_texto` ou `tenant_usuarios.termo_versao` apontando para a v1, e o teste da §10.4.1 falha se a versão referenciada não existir em disco | S1 + S2 | §10.5, §10.6 |
 | R-24 | **Nenhuma leitura de operador sem hipótese.** `abrirEspacoComoAdmin` exige `motivo` da lista fechada e `referencia` não vazia; o enum recusa valor fora da lista no banco; e nenhuma linha de `auditoria` com `ator_tipo = 'operador'` existe com `motivo` ou `referencia` nulos | S2 | §8.1.1 |
 | R-25 | **A partição não cai antes dos 5 anos.** O procedimento de `DROP PARTITION` recusa partição que contenha linha de `ator_tipo = 'operador'` com menos de 5 anos; e nenhum caminho de `DELETE` seletivo em `auditoria` alcança essas linhas aos 12 meses da classe "leitura em massa" | S2 | §3.8, §8.3 |
 | R-26 | **`concessoes_de_admin` é append-only e sobrevive ao desligamento.** Revogar preenche `revogada_em` sem apagar a concessão; conceder de novo cria linha nova; e apagar a linha correspondente em `usuarios` não derruba nem esvazia o registro — `email_no_ato` continua identificando. `DELETE /auth/eu` recusa quem é ou foi admin nos últimos 5 anos | S2 | §3.8, §5.2 |
 | R-27 | **`pagamentos_manuais.observacao` é nula aos 12 meses**, com a linha preservada; e a exportação do titular contém a linha com a `observacao` enquanto ela existir | S1 + S2 | §3.6, §6.1 |
 | R-28 | **O termo de busca do painel nunca é gravado em claro** — um teste de propriedade gera e-mails e nomes, executa a busca, e afirma que nenhuma linha de `auditoria` contém o termo, só hash e contagem | S1 + S2 | §3.8, §8.2 |
+| R-29 | **A purga da `observacao` tem executor com privilégio.** A migration que cria `pagamentos_manuais` cria o papel `mavia_retencao` — que **hoje não existe** — e concede `UPDATE (observacao)` nominal por coluna. O teste de esquema lê `information_schema.column_privileges` e afirma as duas metades: o papel **tem** `UPDATE` em `observacao` e **não tem** em `valor_centavos`, `moeda`, `competencia`, `meio` nem `registrado_por`. Só a primeira metade passaria com um `GRANT` de tabela, e é a segunda que protege a escrituração | S2 | §3.6, §4.3 |
+| R-30 | **`observacao` não sobrevive à eliminação do espaço.** Registrar uma baixa manual **hoje** e eliminar o espaço **amanhã** deixa a linha com valor, moeda, competência, meio e `registrado_por`, e com `observacao` **nula** — sem esperar os 12 meses. A base da coluna é legítimo interesse e não integra a escrituração; a da linha é obrigação legal | S2 | §3.6, §5.3, R-22 |
+| R-31 | **O gêmeo anonimizado do acesso de operador.** Depois de `DELETE /tenants/:id` num espaço que teve acesso de operador: **(a)** nenhuma linha de `auditoria` com aquele `tenant_id` — a R-08 continua valendo sem emenda; **(b)** existe, para cada acesso, uma linha com `usuario_id` do operador **intacto**, `motivo`, `rota`, `registros` e `ocorrido_em` preservados, `tenant_id` como token irrecuperável e `referencia` **hasheada** — um teste de propriedade gera referências contendo e-mail e afirma que nenhuma sai em claro; **(c)** o gêmeo é gravado por `INSERT` **antes** do `DELETE`, na mesma transação e sob as mesmas três condições simultâneas da isenção, e **nenhum passo deste caminho executa `UPDATE` em `auditoria`**, para papel nenhum; **(d)** a exportação final entregue ao titular contém a lista de acessos daquele espaço, sem `ip_hash` nem `user_agent_hash`. **Bloqueia o deploy** de qualquer um dos dois caminhos — painel em produção ou `DELETE /tenants/:id` — que subir por último | S2 | §3.8, §4.4.1, §5.3, §6.3 |
