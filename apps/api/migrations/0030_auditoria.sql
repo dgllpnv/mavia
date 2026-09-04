@@ -148,8 +148,19 @@ CREATE TABLE auditoria (
 
   -- Todo acesso de operador declara hipótese. É o que separa este painel do
   -- `psql` na VPS com uma tela na frente.
+  --
+  -- **Ou aponta para a linha que a declarou.** A hipótese é declarada uma vez
+  -- por **ato**, não uma vez por linha: uma escrita financeira produz duas —
+  -- a de intenção, gravada por `admin.abrir_espaco_para_escrita` com o motivo,
+  -- e a de efeito, gravada pela função de contrato com o `de → para`. Exigir o
+  -- motivo nas duas duplicaria o campo e criaria a chance de as cópias
+  -- divergirem.
+  --
+  -- `correlacao IS NOT NULL` é o que liga a segunda à primeira. Uma linha de
+  -- operador sem motivo **e** sem correlação continua impossível — que é a
+  -- propriedade que interessa.
   CONSTRAINT operador_declara_motivo CHECK (
-    ator_tipo <> 'operador' OR motivo IS NOT NULL
+    ator_tipo <> 'operador' OR motivo IS NOT NULL OR correlacao IS NOT NULL
   ),
 
   PRIMARY KEY (id, ocorrido_em)

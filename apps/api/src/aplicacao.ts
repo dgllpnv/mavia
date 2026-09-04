@@ -29,9 +29,11 @@ export async function criarAplicacao(
   estadoDoOauth?: EstadoDoOauth,
   /** A conexão do painel. Ausente, o painel não é registrado — ver o módulo. */
   poolDoPainel?: Pool,
+  /** A conexão de escrita do painel. Ver o módulo. */
+  poolDeEscrita?: Pool,
 ): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule.comPool(pool, cofre, limite, mensageiro, estadoDoOauth, poolDoPainel),
+    AppModule.comPool(pool, cofre, limite, mensageiro, estadoDoOauth, poolDoPainel, poolDeEscrita),
     new FastifyAdapter(),
     { logger: false },
   )

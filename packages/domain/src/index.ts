@@ -148,21 +148,4 @@ export {
   type TipoDeRegra,
 } from './classificacao.js'
 
-export {
-  cotasVigentes,
-  jobsAtivos,
-  plano,
-  podeEscrever,
-  preco,
-  transicao,
-  COTAS_DO_TESTE,
-  DIAS_DE_GRACA,
-  DIAS_DE_TESTE,
-  PLANOS,
-  type CodigoDoPlano,
-  type Cotas,
-  type EstadoDaAssinatura,
-  type EventoDaAssinatura,
-  type Intervalo,
-  type Plano,
-} from './catalogo.js'
+export { cotasVigentes, jobsAtivos, plano, podeEscrever, preco, transicao, COTAS_DO_TESTE, DIAS_DE_GRACA, DIAS_DE_TESTE, PLANOS, type CodigoDoPlano, type Cotas, type EstadoDaAssinatura, type EventoDaAssinatura, type Intervalo, type Plano, fimEfetivo } from './catalogo.js'

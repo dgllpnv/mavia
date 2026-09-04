@@ -3,6 +3,7 @@ import fc from 'fast-check'
 import {
   COTAS_DO_TESTE,
   cotasVigentes,
+  fimEfetivo,
   jobsAtivos,
   PLANOS,
   plano,
@@ -174,5 +175,25 @@ describe('propriedades', () => {
         expect(valor).toBeGreaterThanOrEqual(0)
       }
     }
+  })
+})
+
+describe('fimEfetivo — a leitura normativa do fim do direito de uso', () => {
+  const emJaneiro = new Date('2026-01-31T03:00:00.000Z')
+  const emMarco = new Date('2026-03-31T03:00:00.000Z')
+
+  it('sem cortesia, é o próprio fim do período', () => {
+    expect(fimEfetivo(emJaneiro, null)).toBe(emJaneiro)
+  })
+
+  it('**a cortesia estende**, quando vai além do período', () => {
+    expect(fimEfetivo(emJaneiro, emMarco)).toBe(emMarco)
+  })
+
+  it('**a fatura seguinte não encurta o cliente**', () => {
+    // Se o webhook empurrar `periodo_fim` para além da cortesia, o cliente não
+    // perde nada: ele deixou de precisar dela. `greatest`, e não soma — senão
+    // cada leitura acumularia sobre a anterior.
+    expect(fimEfetivo(emMarco, emJaneiro)).toBe(emMarco)
   })
 })

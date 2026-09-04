@@ -38,12 +38,18 @@ let painel: Pool
  * As funções de `admin` que existem **hoje**, com o dono de cada família.
  * Cada ticket seguinte acrescenta a sua linha aqui, junto com a função.
  */
-const FUNCOES_DE_ADMIN: ReadonlyMap<string, 'mavia_admin_definer' | 'mavia_migrate'> = new Map([
+const FUNCOES_DE_ADMIN: ReadonlyMap<
+  string,
+  'mavia_admin_definer' | 'mavia_admin_contrato' | 'mavia_migrate'
+> = new Map([
   // Família de leitura — dono `mavia_admin_definer`.
   ['listar_clientes', 'mavia_admin_definer'],
   ['abrir_espaco', 'mavia_admin_definer'],
   ['abrir_espaco_para_escrita', 'mavia_admin_definer'],
   ['tem_concessao_ativa', 'mavia_migrate'],
+  // Família de contrato — dono `mavia_admin_contrato` (ticket 08).
+  ['prorrogar_teste', 'mavia_admin_contrato'],
+  ['conceder_cortesia', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

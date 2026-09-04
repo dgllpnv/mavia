@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   ForbiddenException,
   Get,
@@ -17,11 +18,14 @@ import { z } from 'zod'
 import {
   comAdmin,
   comTenantDeAdmin,
+  comTenantDeAdminEscrita,
   contextoDeAdmin,
+  contextoDeAdminEscrita,
   contextoDeOperador,
 } from '../tenancy/tenancy.js'
 
 export const POOL_DO_PAINEL = Symbol('POOL_DO_PAINEL')
+export const POOL_DE_ESCRITA = Symbol('POOL_DE_ESCRITA')
 
 /**
  * O painel de administração — rotas de leitura.
@@ -54,6 +58,18 @@ export const POOL_DO_PAINEL = Symbol('POOL_DO_PAINEL')
  * no painel.
  */
 
+/** As recusas nomeadas das funções de contrato, e o que elas dizem a quem opera. */
+const RECUSAS: readonly (readonly [string, string])[] = [
+  ['PRORROGACAO_ALEM_DO_TETO', 'A prorrogação do teste vai no máximo a sete dias.'],
+  ['CORTESIA_ALEM_DO_TETO', 'A cortesia vai no máximo a trinta dias por vez.'],
+  ['CORTESIA_ACUMULADA_ALEM_DO_TETO', 'Este espaço já acumulou sessenta dias de cortesia no período.'],
+  ['TESTE_JA_PRORROGADO', 'O teste deste espaço já foi prorrogado uma vez.'],
+  ['ESTADO_NAO_PERMITE_PRORROGACAO', 'Só um espaço em teste tem teste a prorrogar.'],
+  ['ESTADO_NAO_PERMITE_CORTESIA', 'Este estado da assinatura não recebe cortesia.'],
+  ['ASSINATURA_INEXISTENTE', 'Este espaço não tem assinatura.'],
+  ['RAZAO_AUSENTE', 'Escreva a razão: ela vai para o registro.'],
+]
+
 const zBusca = z.object({
   q: z.string().trim().min(1).max(140).optional(),
   limite: z.coerce.number().int().min(1).max(200).default(50),
@@ -78,9 +94,29 @@ const zAbertura = z.object({
 
 type Abertura = z.infer<typeof zAbertura>
 
+/**
+ * O corpo das duas escritas de tempo. `razao` é **obrigatória** e vai para a
+ * linha de auditoria: uma cortesia sem motivo escrito é indistinguível de um
+ * favor, e o teto de dias é conferido no banco — aqui a validação só evita uma
+ * ida ao Postgres para recusar o óbvio.
+ */
+const zTempoConcedido = z.object({
+  dias: z.number().int().min(1).max(30),
+  razao: z.string().trim().min(3).max(280),
+})
+
 @Controller('v1/admin')
 export class AdminController {
-  constructor(@Inject(POOL_DO_PAINEL) private readonly pool: Pool) {}
+  constructor(
+    @Inject(POOL_DO_PAINEL) private readonly pool: Pool,
+    /**
+     * **Terceira pool, e não a segunda.** `mavia_admin` não é membro de
+     * `mavia_admin_escrita` (não-relação da §1.2), então a conexão de leitura
+     * morre no `SET LOCAL ROLE` do caminho de escrita. A separação é por
+     * autenticação, não por instrução — ADR 0024 D3.
+     */
+    @Inject(POOL_DE_ESCRITA) private readonly poolDeEscrita: Pool,
+  ) {}
 
   /**
    * O operador da requisição.
@@ -183,7 +219,68 @@ export class AdminController {
     )
   }
 
+  @Post('clientes/:tenantId/teste/prorrogar')
+  @HttpCode(201)
+  async prorrogarTeste(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string, @Body() corpo: unknown) {
+    return this.escrevendoContrato(req, tenantId, corpo, 'prorrogou_teste', async (c, dados, correlacao) => {
+      const r = await c.query<{ fim: string }>(
+        'SELECT admin.prorrogar_teste($1, $2, $3, $4) AS fim',
+        [tenantId, dados.dias, dados.razao, correlacao],
+      )
+      return { cortesiaAte: r.rows[0]!.fim }
+    })
+  }
+
+  @Post('clientes/:tenantId/cortesia')
+  @HttpCode(201)
+  async concederCortesia(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string, @Body() corpo: unknown) {
+    return this.escrevendoContrato(req, tenantId, corpo, 'concedeu_cortesia', async (c, dados, correlacao) => {
+      const r = await c.query<{ fim: string }>(
+        'SELECT admin.conceder_cortesia($1, $2, $3, $4) AS fim',
+        [tenantId, dados.dias, dados.razao, correlacao],
+      )
+      return { cortesiaAte: r.rows[0]!.fim }
+    })
+  }
+
   // -------------------------------------------------------------------------
+
+  /**
+   * Uma escrita de contrato, com o **par de linhas** que a regra 18 exige.
+   *
+   * `abrir_espaco_para_escrita` grava a linha de **intenção** e devolve a
+   * correlação; a função de contrato grava a de **efeito**, com `de → para`, e
+   * carrega a mesma correlação. São duas linhas porque `auditoria` não aceita
+   * `UPDATE` de ninguém: a linha da intenção existe **antes** de o valor novo
+   * existir, e nunca pode ser completada depois. Achado F-14.
+   */
+  private async escrevendoContrato<T>(
+    req: FastifyRequest,
+    tenantId: string,
+    corpo: unknown,
+    acao: string,
+    trabalho: (c: PoolClient, dados: { dias: number; razao: string }, correlacao: string) => Promise<T>,
+  ): Promise<T> {
+    const { motivo, referencia } = this.hipotese(req)
+    const operador = this.operador(req)
+
+    const analise = zTempoConcedido.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return this.traduzindoRecusa(async () =>
+      comTenantDeAdminEscrita(
+        this.poolDeEscrita,
+        contextoDeAdminEscrita(operador, tenantId),
+        async (c) => {
+          const r = await c.query<{ correlacao: string }>(
+            `SELECT admin.abrir_espaco_para_escrita($1, $2::motivo_de_acesso, $3, $4, $5) AS correlacao`,
+            [tenantId, motivo, referencia, acao, `/v1/admin/${acao}`],
+          )
+          return trabalho(c, analise.data, r.rows[0]!.correlacao)
+        },
+      ),
+    )
+  }
 
   /**
    * Abre o espaço e roda a leitura, **numa transação só**.
@@ -244,6 +341,13 @@ export class AdminController {
       const texto = String((erro as { message?: string }).message ?? '')
       if (texto.includes('SEM_CONCESSAO_DE_ADMIN')) {
         throw new ForbiddenException('Esta conta não tem concessão de administrador ativa.')
+      }
+      // As recusas das funções de contrato são **regra de negócio**, não falha:
+      // teto excedido, estado que não permite, teste já prorrogado. Devolver
+      // 500 faria o operador achar que o sistema quebrou quando ele apenas
+      // pediu algo que a regra não autoriza.
+      for (const [marca, frase] of RECUSAS) {
+        if (texto.includes(marca)) throw new BadRequestException(frase)
       }
       throw erro
     }

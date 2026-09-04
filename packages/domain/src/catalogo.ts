@@ -215,3 +215,27 @@ export function podeEscrever(estado: EstadoDaAssinatura): boolean {
 export function jobsAtivos(estado: EstadoDaAssinatura): boolean {
   return estado !== 'expirada'
 }
+
+/**
+ * O fim **efetivo** do direito de uso.
+ *
+ * `periodo_fim` é do ciclo de cobrança e pertence ao provedor de pagamento: o
+ * webhook o sobrescreve a cada fatura, com `coalesce(p_periodo_fim,
+ * periodo_fim)`. `cortesia_ate` é o tempo que o operador concedeu, e ele vive
+ * em coluna própria justamente para não ser apagado por esse caminho.
+ *
+ * **Toda leitura de "até quando este cliente pode usar" passa por aqui.** Ler
+ * `periodo_fim` direto é o defeito F-12: o operador concede sessenta dias por
+ * uma indisponibilidade, a fatura seguinte chega, e os sessenta dias somem sem
+ * uma linha de auditoria — porque quem escreveu foi o webhook, e ninguém
+ * compara. O cliente vê uma data encolher sozinha na tela dele.
+ *
+ * `greatest` e não soma: cortesia **estende**, não acumula sobre si mesma a
+ * cada leitura. Se a fatura seguinte empurrar `periodo_fim` para além da
+ * cortesia, o cliente não perde nada — ele simplesmente deixou de precisar
+ * dela.
+ */
+export function fimEfetivo(periodoFim: Date, cortesiaAte: Date | null): Date {
+  if (!cortesiaAte) return periodoFim
+  return cortesiaAte.getTime() > periodoFim.getTime() ? cortesiaAte : periodoFim
+}

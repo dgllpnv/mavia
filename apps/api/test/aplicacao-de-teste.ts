@@ -91,6 +91,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
   // sempre: uma aplicação de teste sem painel esconderia justamente as rotas
   // que este épico existe para provar.
   const poolDoPainel = await banco.poolComo('mavia_admin')
+  const poolDeEscrita = await banco.poolComo('mavia_admin_escrita')
 
   const app = await criarAplicacao(
     pool,
@@ -100,6 +101,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
     mensageiro,
     new EstadoDoOauth(redis),
     poolDoPainel,
+    poolDeEscrita,
   )
   await app.init()
 

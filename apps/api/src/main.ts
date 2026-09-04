@@ -54,9 +54,16 @@ async function principal(): Promise<void> {
    * varredura acidental não consuma o pool do produto.
    */
   const urlDoPainel = process.env['DATABASE_URL_PAINEL']
+  const urlDeEscrita = process.env['DATABASE_URL_PAINEL_ESCRITA']
   const poolDoPainel = urlDoPainel ? new Pool({ connectionString: urlDoPainel, max: 4 }) : undefined
-  if (!poolDoPainel) {
-    console.log('painel de administração desligado — defina DATABASE_URL_PAINEL para ligá-lo')
+  const poolDeEscrita = urlDeEscrita
+    ? new Pool({ connectionString: urlDeEscrita, max: 2 })
+    : undefined
+  if (!poolDoPainel || !poolDeEscrita) {
+    console.log(
+      'painel de administração desligado — defina DATABASE_URL_PAINEL e ' +
+        'DATABASE_URL_PAINEL_ESCRITA para ligá-lo',
+    )
   }
 
   // Bloco 47xx, como o Postgres. `maxRetriesPerRequest: null` é exigência do
@@ -82,6 +89,7 @@ async function principal(): Promise<void> {
     undefined,
     new EstadoDoOauth(redis),
     poolDoPainel,
+    poolDeEscrita,
   )
 
   // O horizonte da recorrência passa a andar sozinho — pendência P-8.

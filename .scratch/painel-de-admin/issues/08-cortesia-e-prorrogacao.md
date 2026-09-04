@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05
 
 # 08 · `cortesia_ate`, `origem_da_ultima_escrita` e o tempo concedido pelo operador
@@ -93,3 +93,23 @@ Depois deste ticket o operador concede tempo a um cliente sem tocar `periodo_fim
 - Não cria job de expiração nenhum — não existe nenhum, e continua não existindo.
 - Não implementa o job de reconciliação do épico 11, que também não existe. F-15 é uma colisão **marcada**, não um incidente de hoje.
 - Não cria `pagamentos_manuais` (ticket 07) nem `cadastrar_cliente` (09).
+
+## Comments
+
+**2026-09-04 · entregue. 12 asserções, mais 3 de domínio.**
+
+`0033`: `cortesia_ate`, `origem_da_ultima_escrita`, o gatilho `atualizado_em`, o `CREATE OR REPLACE` do webhook marcando `stripe`, e as duas funções de contrato com teto e razão. `fimEfetivo` no domínio. Duas rotas, e a terceira pool.
+
+**A constraint do ticket 03 estava forte demais, e o defeito só apareceu aqui.** `operador_declara_motivo` exigia motivo em **toda** linha de operador — mas a linha de **efeito** não tem motivo: ele foi declarado na linha de **intenção**, e as duas são o mesmo ato.
+
+Uma `CHECK` não consegue consultar outra linha, então a correção é a forma: `motivo IS NOT NULL OR correlacao IS NOT NULL`. **A hipótese é declarada uma vez por ato, não uma vez por linha.** Exigir o motivo nas duas duplicaria o campo e criaria a chance de as cópias divergirem — e uma linha de operador sem motivo **e** sem correlação continua impossível, que é a propriedade que interessa.
+
+Foi o par de linhas da regra 18 que forçou isso a aparecer. Sem o `de → para`, a segunda linha não existiria e a constraint teria parecido certa por mais tempo.
+
+**Três decisões de teto, todas do banco e não da aplicação:** prorrogação uma vez por espaço e no máximo sete dias — o mesmo prazo da DP-15, e não mais que ele; cortesia de trinta por chamada e sessenta acumulados; `expirada` recusada nas duas. A recusa vem com frase, não com 500: teto excedido é regra de negócio, e devolver 500 faria o operador achar que o sistema quebrou quando ele apenas pediu algo que a regra não autoriza.
+
+**A cortesia acumula sobre a cortesia, não sobre `periodo_fim`.** Sem isso, duas chamadas de trinta dias dariam trinta — e o operador repetiria a operação achando que a primeira não pegou.
+
+**`origem_da_ultima_escrita` entra agora mesmo sem o job existir**, e é por isso que ela entra agora: acrescentá-la depois exigiria **adivinhar a origem das linhas já escritas**. O que o job faz com cada origem depende da **DP-39**, a única das cinco decisões comerciais sem padrão vigente.
+
+Verde: typecheck 9/9, lint 9/9, API **577** em 39 arquivos, domínio 305.

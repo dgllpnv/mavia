@@ -40,7 +40,7 @@ afterAll(async () => {
   await api?.encerrar()
 })
 
-describe('as cinco rotas estão declaradas, e o boot passou', () => {
+describe('as rotas do painel estão declaradas, e o boot passou', () => {
   it('as chaves conferem, e o boot as aceitou nas duas direções', () => {
     // Se a asserção de prefixo do ticket 02 tivesse falhado — rota registrada
     // fora da lista, ou chave da lista fora do prefixo —, o `subirApi` teria
@@ -51,6 +51,8 @@ describe('as cinco rotas estão declaradas, e o boot passou', () => {
       'GET /v1/admin/clientes/:tenantId/contas',
       'GET /v1/admin/clientes/:tenantId/lancamentos',
       'POST /v1/admin/clientes/:tenantId/abrir',
+      'POST /v1/admin/clientes/:tenantId/cortesia',
+      'POST /v1/admin/clientes/:tenantId/teste/prorrogar',
     ])
   })
 })

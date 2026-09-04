@@ -136,7 +136,12 @@ export class CobrancaController {
       }
 
       await c.query(
+        // `origem_da_ultima_escrita`: toda escrita em `assinaturas` diz quem a
+        // fez. O job de reconciliação com a Stripe trata divergência como
+        // incidente e corrige **pela Stripe** — sem esta marca ele desfaria a
+        // troca que o próprio cliente pediu. Achado F-15.
         `UPDATE assinaturas SET plano = $2, intervalo = $3::intervalo_de_cobranca,
+                                origem_da_ultima_escrita = 'cliente',
                                 atualizado_em = now()
           WHERE tenant_id = $1`,
         [ctx.tenantId, d.plano, d.intervalo],

@@ -1,7 +1,7 @@
 import { Module, type DynamicModule } from '@nestjs/common'
 import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core'
 import { AutorizacaoGuard } from './autorizacao/autorizacao.guard.js'
-import { AdminController, POOL_DO_PAINEL } from './admin/admin.controller.js'
+import { AdminController, POOL_DE_ESCRITA, POOL_DO_PAINEL } from './admin/admin.controller.js'
 import type { Pool } from 'pg'
 import type { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import type { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
@@ -53,12 +53,20 @@ export class AppModule {
      * seria pior que ausente.
      */
     poolDoPainel?: Pool,
+    /**
+     * A conexão de **escrita** do painel, como `mavia_admin_escrita`.
+     *
+     * Terceira pool, e não a segunda: `mavia_admin` não é membro de
+     * `mavia_admin_escrita`, então a de leitura morre no `SET LOCAL ROLE` do
+     * caminho de escrita. A separação é por autenticação — ADR 0024 D3.
+     */
+    poolDeEscrita?: Pool,
   ): DynamicModule {
     return {
       module: AppModule,
       controllers: [
         // Só entra no roteador se houver pool própria — ver o parâmetro.
-        ...(poolDoPainel ? [AdminController] : []),
+        ...(poolDoPainel && poolDeEscrita ? [AdminController] : []),
         SessoesController,
         CadastroController,
         GoogleController,
@@ -91,7 +99,12 @@ export class AppModule {
         { provide: GUARDIAO, useValue: new ClienteDoGuardiao() },
         { provide: MENSAGEIRO, useValue: mensageiro ?? mensageiroDoAmbiente() },
         { provide: ESTADO_OAUTH, useValue: estadoDoOauth },
-        ...(poolDoPainel ? [{ provide: POOL_DO_PAINEL, useValue: poolDoPainel }] : []),
+        ...(poolDoPainel && poolDeEscrita
+          ? [
+              { provide: POOL_DO_PAINEL, useValue: poolDoPainel },
+              { provide: POOL_DE_ESCRITA, useValue: poolDeEscrita },
+            ]
+          : []),
 
         // **Global, e nega por padrão** — achado S-4 do gate de segurança.
         //
