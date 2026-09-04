@@ -86,6 +86,20 @@ set -a
 set +a
 
 # ---------------------------------------------------------------------------
+# 1b · a configuração do Redis, renderizada do modelo
+# ---------------------------------------------------------------------------
+# O Redis **não** interpola variável de ambiente em arquivo de configuração:
+# `${SENHA_REDIS}` chegaria literal ao servidor, e a senha viraria a string
+# `${SENHA_REDIS}` — pior que senha nenhuma, porque pareceria ter uma.
+#
+# Daí o modelo e esta renderização. O resultado fica fora do repositório
+# (`.gitignore`) e é montado no container em vez de a senha ir na linha de
+# comando, onde `docker inspect` a mostraria.
+echo "==> renderizando redis.conf"
+sed "s|\${SENHA_REDIS}|${SENHA_REDIS}|g" redis.conf.modelo > redis.conf
+chmod 600 redis.conf
+
+# ---------------------------------------------------------------------------
 # 2 · dados
 # ---------------------------------------------------------------------------
 echo "==> subindo Postgres e Redis"

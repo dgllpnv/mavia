@@ -1,0 +1,69 @@
+# Redis de produção da Mavia — **modelo**, condição de deploy C-7
+#
+# ⚠️ **O Redis não interpola variável de ambiente em arquivo de configuração.**
+# O nome da variável entre chaves chegaria literal ao servidor, e a senha
+# viraria essa própria string — pior que não ter senha, porque pareceria ter.
+#
+# (O placeholder não é escrito aqui de propósito: a renderização é um `sed`
+# global, e ele trocaria também esta linha, gravando a senha real dentro de um
+# comentário. Duas linhas abaixo do aviso sobre não vazar a senha.)
+#
+# Este arquivo é um **modelo**: o `implantar.sh` o renderiza para `redis.conf`
+# com o valor do `.env`, e o `.gitignore` mantém o resultado fora do
+# repositório.
+#
+# ## Por que um arquivo, e não `--requirepass` na linha de comando
+#
+# A senha em `command:` do compose aparece em `docker inspect`, na lista de
+# processos dentro do namespace, e em qualquer ferramenta que serialize a
+# configuração do container. Quem lê `docker inspect` já está no host — o
+# impacto é baixo —, mas o arquivo montado custa o mesmo e não deixa o rastro.
+#
+# ## A ACL, e a versão dela que teria quebrado um controle de segurança
+#
+# O parecer de segurança propôs uma ACL cobrindo três prefixos:
+#
+#     user mavia on ~sess:* ~acessos:* ~bull:* +@read +@write -@admin -@dangerous
+#
+# **Estão em uso cinco.** Faltavam `oauth:` e `tentativas:`, e aplicá-la como
+# escrita desligaria o contador de tentativas de login — a **única** defesa das
+# quatro rotas públicas de credencial. Uma mitigação de segurança que quebra um
+# controle de segurança.
+#
+# Os cinco, com o arquivo que os produz:
+#
+#   sess:        cofre-de-acesso.ts:47      o access token
+#   acessos:     cofre-de-acesso.ts:48      as sessões de um usuário
+#   oauth:       estado-do-oauth.ts:44      o `state` da entrada pelo Google
+#   tentativas:  limite-de-tentativas.ts:65 o contador por endereço e origem
+#   bull:        agendador.ts:32,42         a fila do BullMQ (prefixo padrão)
+#
+# Um sexto virá com `RL-ADMIN-ABERTURA` (C-8) e precisa entrar aqui junto.
+#
+# ## O que o usuário `default` perde
+#
+# `CONFIG SET`, `FLUSHALL`, `KEYS`, `DEBUG` e o resto de `@admin`/`@dangerous`.
+# Quem tem a senha do Redis passa a poder ler e escrever as chaves da aplicação
+# — e não a reconfigurar o servidor nem a varrer o keyspace inteiro.
+#
+# **Isto não é defesa contra quem lê o cofre.** O access token é gravado como
+# JSON em claro (`cofre-de-acesso.ts:59-72`): quem alcança o Redis com a senha
+# lê `{sessaoId, usuarioId}` e pode forjar. A ACL reduz o alcance de uma
+# credencial vazada; ela não torna o cofre opaco. Contra o cofre valem o
+# isolamento de rede, a senha, e a revalidação de sessão no Postgres sob
+# `/admin` — que fecha a janela de **revogação**, não a de comprometimento.
+
+appendonly yes
+appendfsync everysec
+
+# A senha vem por variável de ambiente, substituída na geração deste arquivo
+# pelo `implantar.sh`. Nunca escreva o valor literal aqui.
+requirepass ${SENHA_REDIS}
+
+# ---------------------------------------------------------------------------
+# ACL
+# ---------------------------------------------------------------------------
+# `default` mantém a senha e perde os comandos perigosos. A aplicação continua
+# usando `default` — criar um segundo usuário exigiria mudar a `REDIS_URL` e o
+# ganho seria marginal frente ao custo de uma credencial a mais para girar.
+user default on >${SENHA_REDIS} ~sess:* ~acessos:* ~oauth:* ~tentativas:* ~bull:* +@read +@write +@keyspace +@connection -@admin -@dangerous

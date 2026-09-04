@@ -17,3 +17,4 @@ coverage/
 # com o volume do Postgres vivo torna o banco inacessível — as senhas estão
 # dentro dele, e só dentro dele.
 infra/producao/.env
+infra/producao/redis.conf

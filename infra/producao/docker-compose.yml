@@ -80,12 +80,11 @@ services:
     # perímetro — a API está nela, e uma requisição forjada de dentro da API
     # (SSRF) chega aqui sem sair do host. Uma senha transforma "estar na rede"
     # em "ter a credencial".
-    command:
-      - redis-server
-      - --appendonly
-      - 'yes'
-      - --requirepass
-      - ${SENHA_REDIS:?defina SENHA_REDIS}
+    # O arquivo, e **não** `--requirepass` na linha de comando: ali a senha
+    # aparece em `docker inspect` e na lista de processos do namespace. O
+    # arquivo é renderizado pelo `implantar.sh` a partir de `redis.conf.modelo`,
+    # e traz junto a ACL dos cinco prefixos em uso (condição C-7).
+    command: ['redis-server', '/etc/redis/redis.conf']
     environment:
       # O `redis-cli` lê esta variável sozinho. É o que faz o healthcheck
       # autenticar sem repetir a senha na linha de comando dele — e sem ela o
@@ -93,6 +92,7 @@ services:
       REDISCLI_AUTH: ${SENHA_REDIS:?defina SENHA_REDIS}
     volumes:
       - redis-dados:/data
+      - ./redis.conf:/etc/redis/redis.conf:ro
     networks: [dados]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
