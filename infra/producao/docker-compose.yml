@@ -73,7 +73,24 @@ services:
     # `appendonly`: perder o Redis não desloga ninguém — os clientes renovam
     # pelo refresh, que vive no Postgres. Mas perder a fila do BullMQ perderia
     # jobs de materialização de recorrência, e esses não se recuperam sozinhos.
-    command: ['redis-server', '--appendonly', 'yes']
+    #
+    # `requirepass` porque **quem alcança este Redis sem senha é qualquer
+    # usuário**: o access token vive aqui como JSON, e escrever um `usuario_id`
+    # à mão vale por um login. A rede `dados` é interna, mas ela não é o
+    # perímetro — a API está nela, e uma requisição forjada de dentro da API
+    # (SSRF) chega aqui sem sair do host. Uma senha transforma "estar na rede"
+    # em "ter a credencial".
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --requirepass
+      - ${SENHA_REDIS:?defina SENHA_REDIS}
+    environment:
+      # O `redis-cli` lê esta variável sozinho. É o que faz o healthcheck
+      # autenticar sem repetir a senha na linha de comando dele — e sem ela o
+      # `ping` responde NOAUTH e o container nunca fica saudável.
+      REDISCLI_AUTH: ${SENHA_REDIS:?defina SENHA_REDIS}
     volumes:
       - redis-dados:/data
     networks: [dados]
@@ -91,7 +108,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://mavia_app:${SENHA_APP:?}@postgres:5432/mavia
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${SENHA_REDIS:?defina SENHA_REDIS}@redis:6379
       MAVIA_PEPPER_TENTATIVAS: ${PEPPER_TENTATIVAS:?defina PEPPER_TENTATIVAS}
       MAVIA_URL_PUBLICA: ${URL_PUBLICA:?defina URL_PUBLICA}
       # Sem SMTP, cadastro e recuperação respondem 503 em vez de fingir. Sem

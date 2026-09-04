@@ -202,6 +202,7 @@ Antes de dizer que algo está pronto: `pnpm typecheck && pnpm test`. Sem exceç�
 
 | Arquivo | Papel |
 |---|---|
+| `docs/o-que-depende-de-voce.md` | As pendências que só o dono do produto resolve — contas de terceiros, preços, decisões. Consulte antes de dizer que algo está bloqueado |
 | `CONTEXT.md` | Glossário do domínio, a linguagem ubíqua. Leia antes de nomear qualquer coisa |
 | `docs/adr/` | Decisões arquiteturais. Não re-litigue uma ADR aceita — proponha uma nova que a substitua |
 | `docs/design.md` | Direção de design. **Obrigatório antes de qualquer tela** — define a identidade e o que é proibido |

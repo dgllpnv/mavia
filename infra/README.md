@@ -53,6 +53,16 @@ Nunca reutilize esta senha fora daqui.
 
 ---
 
+## Por que o Redis local não tem senha e o de produção tem
+
+Em produção o Redis exige `requirepass`, e a razão é específica: o access token vive nele como JSON, então **escrever um `usuario_id` à mão ali vale por um login**. A rede `dados` é interna, mas ela não é o perímetro — a API está dentro dela, e uma requisição forjada de dentro da API (SSRF) alcança o Redis sem sair do host. A senha transforma "estar na rede" em "ter a credencial".
+
+Aqui não, e a assimetria é deliberada. O Redis local escuta em `127.0.0.1`, guarda sessão de conta de demonstração e é apagado pelo `mavia reset`. Pôr senha aqui obrigaria a `REDIS_URL` do `pnpm dev` a carregá-la, criando uma diferença entre o que o desenvolvedor roda e o que o `main.ts` assume por padrão — e diferença de configuração entre ambientes é como se descobre um defeito só em produção.
+
+O que a assimetria **não** pode virar: alguém copiar o compose local para um servidor. Por isso o de produção exige `SENHA_REDIS` com `:?` — sem a variável, ele se recusa a subir em vez de subir aberto.
+
+---
+
 ## Fuso
 
 Os containers rodam em **UTC**, com `TZ` e `PGTZ` fixados. É deliberado: a conversão para `America/Sao_Paulo` é responsabilidade do domínio, e um banco em horário local mascararia todo bug de fuso durante o desenvolvimento — para reaparecer em produção.

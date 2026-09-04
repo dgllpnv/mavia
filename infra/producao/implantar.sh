@@ -42,6 +42,7 @@ VERSAO=mais-recente
 SENHA_POSTGRES=$(segredo)
 SENHA_MIGRATE=$(segredo)
 SENHA_APP=$(segredo)
+SENHA_REDIS=$(segredo)
 PEPPER_TENTATIVAS=$(segredo)
 
 # Sem estas, cadastro e recuperação respondem 503 em vez de fingir — ver P-3.
@@ -60,6 +61,24 @@ FIM
 else
   echo "==> $AMBIENTE já existe; mantendo os segredos"
 fi
+
+# Segredos acrescentados depois da primeira instalação.
+#
+# Sem este bloco, um segredo novo só existiria em instalação nova — e a que está
+# no ar, que é justamente a que precisa dele, subiria quebrada no `:?` do
+# compose. Cada chave é acrescentada **uma vez**, e nunca sobrescrita: quem já
+# tem valor definido continua com o dele.
+acrescentar_segredo() {
+  if ! grep -q "^$1=" "$AMBIENTE"; then
+    echo "==> acrescentando $1 a $AMBIENTE"
+    printf '%s=%s
+' "$1" "$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-40)" >> "$AMBIENTE"
+  fi
+}
+# Ligar a senha reinicia o Redis, e o `appendonly` faz os dados voltarem — nem
+# as sessões ativas nem a fila do BullMQ se perdem. O que muda é só quem
+# consegue falar com ele.
+acrescentar_segredo SENHA_REDIS
 
 set -a
 # shellcheck disable=SC1090
