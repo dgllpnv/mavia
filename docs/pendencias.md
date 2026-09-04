@@ -521,3 +521,35 @@ custa uma tarde, contra descobrir a ausência com credencial bancária de gente 
 verdade no banco.
 
 ---
+
+## P-17 · O downgrade de plano promete e não cumpre — **defeito vivo**
+
+**Onde:** `apps/api/src/cobranca/cobranca.controller.ts:127-131`
+**Descoberto por:** o gate financeiro do épico do painel de administração, 2026-09-04
+**Severidade:** o cliente pede uma coisa, a tela confirma, e nada acontece — para sempre
+
+```ts
+if (!subindo && atual.estado !== 'teste') {
+  // Downgrade não corta no meio. Registra a intenção para o fim do
+  // período — e a tela diz a data exata.
+  return { aplicadoEm: 'fim_do_periodo' as const, plano: d.plano }
+}
+```
+
+**O comentário descreve o que deveria acontecer. O código não faz nada disso.** O `return` acontece antes de qualquer escrita; a transação fecha sem gravar linha nenhuma. Não existe tabela de troca agendada em migration nenhuma, e não existe job que a aplicasse.
+
+A regra que o código tenta cumprir está certa e é do `spec-planos-e-assinatura.md` §7: downgrade não corta no meio do ciclo, porque *"o cliente comprou aquele período inteiro"*. O que falta é a outra metade — persistir a intenção e aplicá-la quando o período virar.
+
+**O que o cliente vive hoje:** ele pede para descer de `Negócio` para `Pessoal`, a resposta diz `fim_do_periodo`, a tela mostra a data. No dia seguinte à data, ele continua no `Negócio` e continua sendo cobrado por ele. Nada no sistema lembra que ele pediu.
+
+**Por que só apareceu agora.** O painel de administração ia oferecer "trocar plano" ao operador, e o desenho mandava chamar *"o mesmo caminho de aplicação que a rota do cliente usa"*. Ao procurar esse caminho para reusá-lo, ele não existia. É o valor de um gate que exige abrir o arquivo em vez de acreditar no comentário.
+
+**Bloqueia:** a ação "trocar plano" do painel, que por isso saiu do escopo daquele épico.
+
+**Condição de saída:** três peças, todas do épico 11 e não do painel:
+
+1. Uma tabela de troca agendada — `tenant_id`, plano e intervalo alvo, a data efetiva, quem pediu, e a marca de aplicada.
+2. Um job que a aplique na virada do período, e que rode a resolução de excesso de cota do `spec-planos-e-assinatura.md` §8.1 quando o plano novo comportar menos que o uso atual.
+3. O aviso de sete dias antes da data efetiva, que o §8.1 exige e que hoje não tem de onde sair.
+
+Enquanto não existirem, a rota deveria **recusar** o downgrade com uma frase honesta em vez de confirmar um agendamento que ninguém guarda. Recusar é ruim; confirmar e esquecer é pior, porque o cliente para de acompanhar.

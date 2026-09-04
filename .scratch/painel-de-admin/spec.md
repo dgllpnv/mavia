@@ -30,9 +30,11 @@ Então: o spec fica onde a skill o pôs, os tickets ficam aqui, e este arquivo c
 
 _A seção definitiva vive no próprio spec, sob o heading `## Gate de risco`. Esta é a cópia curta que o tracker lê._
 
-- especialista-seguranca-appsec: **aprovado com condições** — C-1 a C-5 (ticket) fechadas na v3.1; C-6 a C-10 bloqueiam o **deploy**, não o ticket
-- especialista-lgpd-compliance: _aguardando parecer sobre a v3.1_
-- validador-financeiro: _aguardando primeiro parecer_
+- especialista-seguranca-appsec: **aprovado com condições** — C-1 a C-5 (ticket) fechadas na v3.1; C-6 a C-10 bloqueiam o **deploy**
+- especialista-lgpd-compliance: **objeções** — O-1/O-3/O-4/O-9 fechadas em `retencao-e-eliminacao.md`; **O-2 fechada na v3.2**; O-5 a O-9 bloqueiam o deploy
+- validador-financeiro: **objeções** — **F-1 a F-14 fechadas na v3.2**; F-15 bloqueia o deploy (C-11, depende de DP-39); F-8 a F-11 fechados retirando a troca de plano do escopo (ver **P-17**)
+
+**Nenhuma objeção de ticket permanece aberta.** As de deploy estão listadas em *Condições de deploy* no spec e não impedem os tickets.
 
 ## Comments
 

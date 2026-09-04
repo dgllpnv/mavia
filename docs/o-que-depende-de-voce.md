@@ -299,6 +299,12 @@ Eu recomendo **(a)**. Ela é a única que não cria uma segunda verdade sobre qu
 
 ### DP-40 · O operador pode rebaixar o plano no meio de um ciclo pago?
 
+> **Enquanto eu escrevia isto, a revisão encontrou um defeito vivo em produção** e a resposta a esta pergunta mudou de natureza. A rota que o cliente usa para descer de plano **confirma o agendamento e não guarda nada** — o comentário no código diz "registra a intenção para o fim do período", e o `return` acontece antes de qualquer escrita. Não existe tabela de troca agendada nem job que a aplicasse.
+>
+> Ou seja: hoje um cliente que pede downgrade é informado da data, e no dia seguinte continua no plano caro, sendo cobrado por ele. Está registrado como **P-17**, e é do épico de cobrança, não do painel.
+>
+> Por isso a troca de plano **saiu do escopo do painel**: o desenho mandava chamar o mesmo caminho da rota do cliente, e ao procurá-lo para reusar, ele não existia. Sua resposta abaixo continua valendo — ela decide o que construir —, mas ela agora governa as duas rotas, não só a do operador.
+
 A rota do cliente **recusa** isso hoje, com um comentário no código dizendo o porquê: *"o cliente comprou aquele período inteiro"*. Um downgrade fica agendado para o fim do período.
 
 O painel passaria por cima. Cliente Negócio que pagou R$ 99,00 no dia 1º e é rebaixado no dia 10 perde 21 dias de plano pago — **R$ 69,00 que já estão no caixa da Mavia**, sem crédito e sem devolução.
