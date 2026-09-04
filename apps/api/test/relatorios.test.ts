@@ -248,14 +248,26 @@ describe('exportação — o direito de portabilidade', () => {
     // precisa decidir se ela é dado do titular. Esquecer produziria uma
     // exportação que parece completa e não é — e o titular só descobriria
     // exercendo o direito.
+    //
+    // **Partição não é tabela nova.** No PostgreSQL, cada partição aparece em
+    // `information_schema.tables` como `BASE TABLE` e herda as colunas do pai —
+    // então `auditoria_2026_09` entraria aqui como "tabela com `tenant_id` não
+    // classificada", e o teste passaria a falhar **todo mês**, quando a partição
+    // seguinte nascesse.
+    //
+    // Um teste que falha por calendário é um teste que alguém desliga na
+    // terceira vez. O `relispartition` exclui as filhas e deixa só o pai, que é
+    // quem de fato precisa ser classificado.
     const r = await api.banco.cliente.query<{ table_name: string }>(
       `SELECT DISTINCT c.table_name
          FROM information_schema.columns c
-         JOIN information_schema.tables t
-           ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+         JOIN pg_class      pc ON pc.relname   = c.table_name
+         JOIN pg_namespace  pn ON pn.oid       = pc.relnamespace
+                              AND pn.nspname   = c.table_schema
         WHERE c.table_schema = 'public'
-          AND c.column_name = 'tenant_id'
-          AND t.table_type = 'BASE TABLE'`,
+          AND c.column_name  = 'tenant_id'
+          AND pc.relkind IN ('r', 'p')
+          AND NOT pc.relispartition`,
     )
 
     const classificadas = new Set([
