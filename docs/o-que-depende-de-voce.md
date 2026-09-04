@@ -1,6 +1,6 @@
 # O que depende de você
 
-Seis pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, um valor comercial e decisões de produto.
+Sete pendências que o time não pode resolver sozinho, porque nenhuma delas é uma questão técnica: são contas em serviços de terceiros, valores comerciais e decisões de produto.
 
 As cinco primeiras **bloqueiam** alguma coisa. A sexta reúne três escolhas que **não** bloqueiam — todas têm um padrão que eu sigo se você não disser nada —, mas uma delas decide quando o painel de administração pode ver cliente real.
 
@@ -232,6 +232,68 @@ Se você responder **não**, o balanceamento perde a única salvaguarda de detec
 
 ---
 
+## 7 · Cinco decisões comerciais sobre o painel
+
+Vieram do **validador financeiro**, que revisou o painel pela primeira vez e reprovou o épico para tickets. O veredito dele, na íntegra: *"Este é um dos melhores specs de banco de dados que já li neste repositório. A parte de dinheiro dele não existe."*
+
+Ele achou catorze coisas que um operador **bem-intencionado**, atendendo um chamado, produziria sem má-fé nem erro de digitação. Estou consertando todas. Cinco dependem de uma escolha sua sobre como o negócio funciona — não sobre como o código funciona.
+
+**Quatro têm padrão vigente e eu já sigo por ele.** Só a DP-39 não tem.
+
+### DP-36 · Um pagamento por fora libera o cliente?
+
+Cliente com cartão recusado entra em atraso, com 14 dias de graça. Ele liga, paga por Pix, o operador dá baixa. **Hoje isso não libera nada** — a tabela de pagamentos manuais não tem coluna que se ligue à assinatura. No 15º dia o cliente que pagou fica bloqueado, e o operador já tinha dito a ele que estava resolvido.
+
+**Padrão vigente:** a baixa aplica a transição de pagamento recuperado na mesma transação e limpa a graça. É a única escrita em `estado` que o painel tem, e ela é nomeada.
+
+Se você preferir que a baixa seja **só registro fiscal**, diga — mas então precisa existir outra ação que libere o cliente, senão o problema fica de pé.
+
+### DP-37 · Qual competência a baixa registra?
+
+Um Pix em 28 de setembro quitando o ciclo de outubro tem duas respostas legítimas: a competência do **dinheiro recebido** (setembro) ou a do **período coberto** (outubro). Elas divergem de um mês na escrituração.
+
+**Padrão vigente:** competência do recebimento, uma linha por pagamento.
+
+Há uma armadilha aritmética atrás disso, e é por ela que eu recomendo esse padrão: um pagamento anual cobre doze competências, e R$ 590,00 ÷ 12 e R$ 790,00 ÷ 12 **não são exatos**. Uma linha por competência reintroduziria uma divisão no caminho do dinheiro, que é justamente o que a fórmula de reembolso foi desenhada para não ter.
+
+### DP-38 · Cortesia é receita?
+
+O meio de pagamento é uma lista: Pix, transferência, boleto, dinheiro, **cortesia** e ajuste. Os quatro primeiros são dinheiro que entrou. Cortesia é dinheiro que **não** entrou — e hoje ela mora na mesma coluna de valor.
+
+Uma cortesia de R$ 99,00 para compensar uma indisponibilidade faz a receita crescer R$ 99,00 sem um centavo ter se movido, e sai na exportação do cliente como um pagamento que ele nunca fez. Se a nota fiscal um dia existir, ela nasce sobre um valor inexistente.
+
+**Padrão vigente:** cortesia tem valor zero, e o valor dispensado vai para um campo próprio. Aparece na listagem, não entra no total — que é exatamente o que a regra de transferência já faz no produto.
+
+### DP-39 · **Esta não tem padrão. Preciso de você.**
+
+Quando o operador troca o plano de um cliente, **o que acontece na Stripe?**
+
+O problema é que existe um job diário comparando a nossa tabela de assinaturas com a Stripe, e a regra dele já está escrita: divergência é incidente, a correção segue a Stripe, e quando o acesso é reduzido o cliente recebe um e-mail.
+
+Toda escrita legítima do painel é, por construção, uma divergência. Sem uma resposta aqui, no dia do deploy: cada atendimento gera um incidente; o job **desfaz** o que o operador fez; e o cliente recebe um e-mail dizendo que o acesso dele foi reduzido, por uma mudança que a Mavia fez e desfez sozinha.
+
+As três saídas:
+
+| | |
+|---|---|
+| **(a)** | O painel escreve na Stripe e espera o webhook voltar. Mais lento, mais correto, e a Stripe continua sendo a fonte única |
+| **(b)** | A nossa linha ganha uma marca de origem que o job reconhece e respeita. Mais rápido, e cria uma segunda fonte de verdade |
+| **(c)** | Trocar plano pelo painel fica **proibido** enquanto houver assinatura ativa na Stripe; o operador orienta o cliente a trocar sozinho |
+
+Eu recomendo **(a)**. Ela é a única que não cria uma segunda verdade sobre quanto o cliente paga.
+
+### DP-40 · O operador pode rebaixar o plano no meio de um ciclo pago?
+
+A rota do cliente **recusa** isso hoje, com um comentário no código dizendo o porquê: *"o cliente comprou aquele período inteiro"*. Um downgrade fica agendado para o fim do período.
+
+O painel passaria por cima. Cliente Negócio que pagou R$ 99,00 no dia 1º e é rebaixado no dia 10 perde 21 dias de plano pago — **R$ 69,00 que já estão no caixa da Mavia**, sem crédito e sem devolução.
+
+**Padrão vigente:** não pode. O painel agenda para o fim do período, chamando o mesmo caminho que a rota do cliente usa.
+
+Se você quiser que o operador possa furar a regra — e há casos em que faz sentido, como um cliente insatisfeito que você quer acomodar —, diga como o cliente é compensado pelos dias que comprou e não vai usar.
+
+---
+
 ## Ordem que eu sugiro
 
 ```
@@ -243,6 +305,9 @@ Se você responder **não**, o balanceamento perde a única salvaguarda de detec
 4. Stripe            (comece a abertura da conta agora, em paralelo — é o que mais demora)
 
 6. DP-32/33/34       (não bloqueiam; a DP-32 decide quando o painel vê cliente real)
+
+7. DP-36 a DP-40     (quatro têm padrão e eu sigo; a **DP-39** não tem, e sem ela
+                      o painel e o job da Stripe se desfazem todo dia)
 ```
 
 Se você fizer só duas coisas desta lista, faça o **domínio** e o **provedor de e-mail**. Sem elas a Mavia está instalada, mas ninguém de fora consegue entrar nela.
