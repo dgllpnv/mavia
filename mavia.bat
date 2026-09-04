@@ -112,6 +112,13 @@ set "SMTP_PORTA=%PORTA_MAILPIT_SMTP%"
 set "SMTP_REMETENTE=Mavia <ola@mavia.local>"
 set "MAVIA_URL_PUBLICA=http://127.0.0.1:%PORTA_WEB%"
 
+REM O painel de administracao. Sem estas duas, ele nao e registrado e
+REM nenhuma rota /v1/admin/ existe - o mesmo padrao do SMTP: recusar e
+REM melhor que fingir. As credenciais sao as mesmas do ambiente local,
+REM provisionadas pela semente.
+set "DATABASE_URL_PAINEL=postgresql://mavia_admin:mavia_local_dev@127.0.0.1:%PORTA_PG%/mavia"
+set "DATABASE_URL_PAINEL_ESCRITA=postgresql://mavia_admin_escrita:mavia_local_dev@127.0.0.1:%PORTA_PG%/mavia"
+
 echo   Subindo API e web. Os logs dos dois aparecem abaixo.
 echo   Ctrl+C encerra os dois e devolve o prompt.
 echo.
@@ -200,6 +207,8 @@ echo    API         http://127.0.0.1:%PORTA_API%
 echo    Mailpit     http://127.0.0.1:%PORTA_MAILPIT%   (a caixa de entrada local)
 echo    Postgres    127.0.0.1:%PORTA_PG%    usuario: mavia   senha: mavia_local_dev
 echo    Redis       127.0.0.1:%PORTA_REDIS%
+echo.
+echo    Painel      http://127.0.0.1:%PORTA_WEB%/admin   (operador: demo@mavia.local)
 echo.
 echo    Entre com:  demo@mavia.local
 echo    Senha:      mavia-demonstracao

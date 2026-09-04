@@ -132,6 +132,32 @@ async function principal(): Promise<void> {
       await c.query(`ALTER ROLE mavia_admin_escrita LOGIN PASSWORD 'mavia_local_dev'`)
     }
 
+    // A conta de demonstração também é **operadora** do painel, aqui.
+    //
+    // Sem concessão ativa, `/v1/admin/` responde 403 a tudo e o painel não pode
+    // ser exercitado no ambiente local — o privilégio é resolvido por
+    // requisição contra `concessoes_de_admin`, nunca carimbado no token.
+    //
+    // **Antes do atalho abaixo**, e é o ponto: a semente sai cedo quando o
+    // espaço já existe, e a concessão precisa ser concedida também em banco que
+    // já foi semeado antes de o painel existir.
+    //
+    // Só no ambiente local. Em produção, conceder admin é ato do
+    // provisionamento, com o registro que `admin.conceder` grava.
+    if (ehLocal) {
+      const existe = await c.query('SELECT 1 FROM usuarios WHERE id = $1', [USUARIO])
+      if (existe.rowCount) {
+        const jaEhAdmin = await c.query(
+          'SELECT 1 FROM concessoes_de_admin WHERE usuario_id = $1 AND revogada_em IS NULL',
+          [USUARIO],
+        )
+        if (jaEhAdmin.rowCount === 0) {
+          await c.query('SELECT admin.conceder($1, $2)', [USUARIO, USUARIO])
+          console.log('conta de demonstração recebeu concessão de administrador')
+        }
+      }
+    }
+
     const jaTem = await c.query('SELECT 1 FROM tenants WHERE id = $1', [TENANT])
     if (jaTem.rowCount) {
       console.log(`espaço de demonstração já existe — entre com ${EMAIL} / ${SENHA}`)
