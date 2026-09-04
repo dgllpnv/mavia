@@ -15,6 +15,7 @@ import {
 import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { z } from 'zod'
+import { MENSAGEIRO, type Mensageiro } from '../mensageiro/mensageiro.js'
 import {
   comAdmin,
   comTenantDeAdmin,
@@ -37,6 +38,9 @@ export const POOL_DE_ESCRITA = Symbol('POOL_DE_ESCRITA')
  * abertura, que deixaria a única escrita do painel sem hipótese declarada.
  */
 const ESPACO_A_CRIAR = '00000000-0000-0000-0000-000000000000'
+
+/** Quebra de linha no corpo do aviso, nomeada para não virar `\n` solto. */
+const NOVA_LINHA = String.fromCharCode(10)
 
 /**
  * O painel de administração — rotas de leitura.
@@ -156,6 +160,13 @@ const zBaixa = z.object({
   observacao: z.string().trim().max(1000).optional(),
 })
 
+/** A consulta ao registro de auditoria. */
+const zRegistro = z.object({
+  desde: z.string().datetime().optional(),
+  tenantId: z.string().uuid().optional(),
+  limite: z.coerce.number().int().min(1).max(500).default(100),
+})
+
 /**
  * O cadastro de um cliente novo.
  *
@@ -191,6 +202,7 @@ export class AdminController {
      * autenticação, não por instrução — ADR 0024 D3.
      */
     @Inject(POOL_DE_ESCRITA) private readonly poolDeEscrita: Pool,
+    @Inject(MENSAGEIRO) private readonly mensageiro: Mensageiro,
   ) {}
 
   /**
@@ -327,6 +339,45 @@ export class AdminController {
     )
   }
 
+  /**
+   * O registro — e **lê-lo é evento**.
+   *
+   * A projeção é fixa e vive na função: `ip_hash` e `user_agent_hash` **não têm
+   * como** sair porque não estão no tipo de retorno. Não é uma lista que alguém
+   * precisa lembrar de manter — acrescentá-las exigiria mudar a assinatura.
+   *
+   * E a leitura **notifica os outros operadores**, por um destino fora do
+   * painel. Um log que ninguém lê descobre o incidente quando o cliente
+   * reclama; um log cuja leitura é silenciosa descobre na mesma hora.
+   */
+  @Get('registro')
+  async registro(@Req() req: FastifyRequest, @Query() consulta: unknown) {
+    const analise = zRegistro.safeParse(consulta)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const operador = this.operador(req)
+
+    const itens = await this.traduzindoRecusa(async () =>
+      comAdmin(this.pool, contextoDeOperador(operador), async (c) => {
+        const r = await c.query('SELECT * FROM admin.ler_registro($1, $2, $3)', [
+          analise.data.desde ?? null,
+          analise.data.tenantId ?? null,
+          analise.data.limite,
+        ])
+        return r.rows
+      }),
+    )
+
+    // **Depois do `COMMIT`, e sem `await` no caminho da resposta.**
+    //
+    // A notificação é detecção, não autorização: falhar em enviá-la não pode
+    // impedir a leitura nem derrubar a requisição. Ela é disparada e registrada;
+    // a entrega garantida é a fila do épico de alertas, e está registrada como
+    // dívida no ticket.
+    void this.avisarPares(operador, itens.length)
+
+    return { itens }
+  }
+
   @Post('clientes')
   @HttpCode(201)
   async cadastrar(@Req() req: FastifyRequest, @Body() corpo: unknown) {
@@ -425,6 +476,48 @@ export class AdminController {
       )
       return { cortesiaAte: r.rows[0]!.fim }
     })
+  }
+
+  /**
+   * O aviso entre pares — a única salvaguarda de **detecção** do épico.
+   *
+   * As demais são prevenção (a hipótese declarada antes do ato) ou forense (o
+   * log). Esta é a que faz alguém **saber** que algo aconteceu sem precisar
+   * procurar.
+   *
+   * **O destino é fora do painel** (DP-34, padrão vigente): uma notificação que
+   * só existe dentro do sistema que ela vigia não detecta o comprometimento
+   * desse sistema. Com um único operador ela é o conjunto vazio — e é
+   * exatamente por isso que o destino é um endereço externo, e não a lista de
+   * operadores.
+   *
+   * Sem `MAVIA_ALERTA_OPERACAO`, ela **não é enviada**, e o processo diz isso em
+   * voz alta. É condição de deploy (C-11): o painel não vai a produção com a
+   * detecção desligada.
+   */
+  private async avisarPares(operador: string, quantos: number): Promise<void> {
+    const destino = process.env['MAVIA_ALERTA_OPERACAO']
+    if (!destino) {
+      console.warn(
+        'registro de auditoria lido sem destino de alerta configurado — ' +
+          'defina MAVIA_ALERTA_OPERACAO. A detecção entre pares está desligada.',
+      )
+      return
+    }
+    try {
+      await this.mensageiro.enviar({
+        para: destino,
+        assunto: 'Mavia · alguém leu o registro de auditoria',
+        corpo:
+          `O operador ${operador} leu o registro de auditoria e recebeu ${quantos} linhas.` +
+          NOVA_LINHA +
+          NOVA_LINHA +
+          'Se não foi você, e você não sabia disso, investigue agora.',
+      })
+    } catch (erro) {
+      // Falhar em avisar não pode derrubar a leitura — mas precisa aparecer.
+      console.error('falha ao avisar os pares sobre leitura do registro', erro)
+    }
   }
 
   // -------------------------------------------------------------------------

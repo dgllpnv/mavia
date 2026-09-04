@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03, 05
 
 # 10 · `GET /v1/admin/registro`, a notificação entre pares e `RL-ADMIN-ABERTURA`

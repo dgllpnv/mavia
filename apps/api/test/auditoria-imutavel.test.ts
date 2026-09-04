@@ -128,13 +128,37 @@ describe('quem pode gravar, e quem não pode alterar', () => {
     expect(r.rows[0]!.le).toBe(false)
   })
 
-  it('**nenhum papel do painel lê `auditoria`** — a leitura do registro é por projeção', async () => {
-    for (const papel of OS_CINCO.filter((p) => p !== 'mavia_app')) {
+  it('**nenhum papel de conexão do painel lê `auditoria`**', async () => {
+    // `mavia_admin` e `mavia_admin_escrita` são conexões: uma rota alcança as
+    // duas. Elas gravam e não leem — a leitura do registro é por projeção.
+    for (const papel of ['mavia_admin', 'mavia_admin_escrita', 'mavia_admin_contrato']) {
       const r = await banco.cliente.query<{ ok: boolean }>(
-        `SELECT has_table_privilege($1, 'auditoria', 'SELECT') AS ok`,
+        `SELECT has_any_column_privilege($1, 'auditoria', 'SELECT') AS ok`,
         [papel],
       )
       expect(r.rows[0]!.ok, `SELECT de ${papel}`).toBe(false)
+    }
+  })
+
+  it('**o dono da projeção lê, e por coluna** — sem os dois campos vetados', async () => {
+    // `mavia_admin_definer` é dono de função, não conexão: ele não é alcançável
+    // por `SET ROLE` a partir de papel nenhum de rota. Ele **precisa** ler para
+    // projetar — e lê por coluna, sem `ip_hash` nem `user_agent_hash`.
+    //
+    // A projeção sozinha não bastaria: *poder ler* e *devolver* são coisas
+    // diferentes, e a distância entre elas é o espaço onde a próxima versão da
+    // função os incluiria sem que nenhuma trava reclamasse.
+    const podeAlgo = await banco.cliente.query<{ ok: boolean }>(
+      `SELECT has_any_column_privilege('mavia_admin_definer','auditoria','SELECT') AS ok`,
+    )
+    expect(podeAlgo.rows[0]!.ok).toBe(true)
+
+    for (const coluna of ['ip_hash', 'user_agent_hash']) {
+      const r = await banco.cliente.query<{ ok: boolean }>(
+        `SELECT has_column_privilege('mavia_admin_definer','auditoria',$1,'SELECT') AS ok`,
+        [coluna],
+      )
+      expect(r.rows[0]!.ok, coluna).toBe(false)
     }
   })
 })

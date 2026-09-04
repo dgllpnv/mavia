@@ -46,6 +46,7 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   ['listar_clientes', 'mavia_admin_definer'],
   ['abrir_espaco', 'mavia_admin_definer'],
   ['abrir_espaco_para_escrita', 'mavia_admin_definer'],
+  ['ler_registro', 'mavia_admin_definer'],
   ['tem_concessao_ativa', 'mavia_migrate'],
   // Família de contrato — dono `mavia_admin_contrato` (ticket 08).
   ['prorrogar_teste', 'mavia_admin_contrato'],

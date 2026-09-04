@@ -56,6 +56,7 @@ describe('as rotas do painel estão declaradas, e o boot passou', () => {
       'GET /v1/admin/clientes/:tenantId/lancamentos',
       'GET /v1/admin/clientes/:tenantId/pagamentos',
       'POST /v1/admin/clientes',
+      'GET /v1/admin/registro',
       'POST /v1/admin/clientes/:tenantId/abrir',
       'POST /v1/admin/clientes/:tenantId/cortesia',
       'POST /v1/admin/clientes/:tenantId/pagamentos',
