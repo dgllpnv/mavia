@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, createVerify, randomBytes, type JsonWebKey } from 'node:crypto'
+import { createHash, createPublicKey, createVerify, type JsonWebKey } from 'node:crypto'
 
 /**
  * OpenID Connect com o Google — `spec-autenticacao.md` §1 e §2. Pendência P-4.
@@ -66,27 +66,42 @@ export function googleDoAmbiente(): ConfiguracaoDoGoogle | null {
 // PKCE
 // ---------------------------------------------------------------------------
 
-export interface Pkce {
-  readonly verifier: string
-  readonly challenge: string
-}
-
 /**
- * PKCE **S256**, e nunca `plain`.
+ * O desafio PKCE de um verificador — **S256**, e nunca `plain`.
  *
- * `plain` manda o verificador na própria URL de autorização — que vai para o
+ * `plain` manda o verificador na própria URL de autorização, que vai para o
  * histórico do navegador, para o `Referer` e para o log de qualquer proxy no
  * caminho. Com S256 o que trafega é o hash, e quem o intercepta não consegue
  * trocar o código por token.
+ *
+ * ## Por que não existe mais um `gerarPkce()`
+ *
+ * Existia, e devolvia o par `(verifier, challenge)` de uma vez. A forma era
+ * inocente e o uso não: o controlador chamava `gerarPkce()`, mandava o
+ * `challenge` ao Google e **descartava o `verifier`** — porque quem guardava um
+ * verificador era outro módulo, que gerava o dele. Dois verificadores, e o
+ * Google recusava toda troca com `Invalid code verifier`.
+ *
+ * Uma função que devolve duas coisas convida a usar uma e esquecer a outra.
+ * Esta recebe o verificador que **já existe** e devolve o desafio dele, então
+ * não há segundo verificador para esquecer. Ver `google-pkce.test.ts`.
  */
-export function gerarPkce(): Pkce {
-  const verifier = base64url(randomBytes(32))
-  return { verifier, challenge: base64url(createHash('sha256').update(verifier).digest()) }
+export function desafioDe(verifier: string): string {
+  return base64url(createHash('sha256').update(verifier).digest())
 }
 
+/**
+ * A URL de autorização.
+ *
+ * **Recebe o `verifier`, não o `challenge`** — e é a trava que impede o defeito
+ * acima de voltar. Enquanto o desafio era um parâmetro, era possível passar um
+ * que não correspondia ao verificador guardado, e nada além do Google reclamava.
+ * Calculando-o aqui dentro, a única forma de errar é guardar um verificador
+ * diferente do que se passou, e é isso que o teste afirma.
+ */
 export function urlDeAutorizacao(
   cfg: ConfiguracaoDoGoogle,
-  p: { state: string; nonce: string; challenge: string },
+  p: { state: string; nonce: string; verifier: string },
 ): string {
   const url = new URL(AUTORIZACAO)
   url.searchParams.set('client_id', cfg.clientId)
@@ -97,7 +112,7 @@ export function urlDeAutorizacao(
   url.searchParams.set('scope', 'openid email profile')
   url.searchParams.set('state', p.state)
   url.searchParams.set('nonce', p.nonce)
-  url.searchParams.set('code_challenge', p.challenge)
+  url.searchParams.set('code_challenge', desafioDe(p.verifier))
   url.searchParams.set('code_challenge_method', 'S256')
   return url.toString()
 }

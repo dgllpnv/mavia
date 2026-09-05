@@ -30,7 +30,6 @@ import {
 } from './cookie.js'
 import {
   EntradaFederadaInvalida,
-  gerarPkce,
   googleDoAmbiente,
   trocarCodigo,
   urlDeAutorizacao,
@@ -138,7 +137,12 @@ export class GoogleController {
 
     const cfg = this.exigirConfiguracao()
 
-    const pkce = gerarPkce()
+    // **Um verificador só.** A versão anterior gerava um par PKCE aqui e
+    // guardava outro dentro de `abrir()`, mandando ao Google o desafio do par
+    // descartado. Toda troca de código morria em `Invalid code verifier`, e a
+    // entrada pelo Google nunca funcionou. `urlDeAutorizacao` agora deriva o
+    // desafio do verificador que **fica guardado**, e não há segundo para
+    // divergir.
     const tentativa = await this.estado.abrir(analise.data.destino ?? '/')
 
     // **O vínculo com o navegador, e é ele que impede o CSRF de login.** O
@@ -152,7 +156,7 @@ export class GoogleController {
       url: urlDeAutorizacao(cfg, {
         state: tentativa.state,
         nonce: tentativa.nonce,
-        challenge: pkce.challenge,
+        verifier: tentativa.verifier,
       }),
     }
   }

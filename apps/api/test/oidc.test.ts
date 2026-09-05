@@ -1,9 +1,9 @@
-import { createHash, createSign, generateKeyPairSync, type KeyObject } from 'node:crypto'
+import { createHash, createSign, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   EntradaFederadaInvalida,
   esquecerJwks,
-  gerarPkce,
+  desafioDe,
   ISSUER_DO_GOOGLE,
   urlDeAutorizacao,
   verificarIdToken,
@@ -284,22 +284,32 @@ describe('PKCE', () => {
   it('**o desafio é o SHA-256 do verificador, e não o verificador**', () => {
     // `plain` mandaria o verificador na própria URL de autorização — que vai
     // para o histórico, para o `Referer` e para o log de qualquer proxy.
-    const { verifier, challenge } = gerarPkce()
+    const verifier = randomBytes(32).toString('base64url')
 
-    expect(challenge).toBe(createHash('sha256').update(verifier).digest('base64url'))
-    expect(challenge).not.toBe(verifier)
+    expect(desafioDe(verifier)).toBe(
+      createHash('sha256').update(verifier).digest('base64url'),
+    )
+    expect(desafioDe(verifier)).not.toBe(verifier)
   })
 
-  it('cada tentativa tem um verificador diferente', () => {
-    const vistos = new Set(Array.from({ length: 50 }, () => gerarPkce().verifier))
-    expect(vistos.size).toBe(50)
+  it('o mesmo verificador dá sempre o mesmo desafio', () => {
+    // Antes existia um `gerarPkce()` que devolvia o par de uma vez, e este
+    // teste conferia que 50 chamadas davam 50 verificadores. A propriedade
+    // mudou de dono: quem sorteia o verificador agora é `EstadoDoOauth`, e
+    // `google-pkce.test.ts` afirma que duas entradas não o compartilham.
+    //
+    // O que sobra aqui é o que esta função promete: ser uma função. Um desafio
+    // que variasse entre a URL de autorização e a troca do código produziria
+    // exatamente o defeito que ela foi reescrita para impedir.
+    const verifier = randomBytes(32).toString('base64url')
+    expect(desafioDe(verifier)).toBe(desafioDe(verifier))
   })
 
   it('a URL de autorização exige S256 e pede o mínimo', () => {
     const url = new URL(
       urlDeAutorizacao(
         { clientId: CLIENT_ID, clientSecret: 's', redirectUri: 'https://mavia.test/entrar/google' },
-        { state: 'e', nonce: 'n', challenge: 'd' },
+        { state: 'e', nonce: 'n', verifier: 'v' },
       ),
     )
 
