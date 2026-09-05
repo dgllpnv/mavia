@@ -10,7 +10,9 @@ As pendências que o time não pode resolver sozinho.
 > - **Stripe:** variáveis pré-configuradas. Vazias, o checkout responde 503 e o webhook recusa com 400. Basta colar as chaves quando a conta existir.
 > - **Google OAuth:** cliente criado, credenciais na VPS, rota `/v1/auth/google` devolvendo `200` com os escopos certos (`openid email profile`), PKCE e nonce. App em **Testes** com `davilopesg@gmail.com` como usuário de teste — publicar exige domínio verificado.
 > - **Encarregado de dados (art. 41):** **Davi Gonçalves Lopes**, `davilopesg@gmail.com`. Fecha metade da **O-6**; a outra metade é a política de privacidade em si, que ainda não existe.
+> - **Painel de administração no ar** em `/admin`, com a operadora concedida a `davilopesg@gmail.com`. **Sem MFA, por decisão sua de 2026-09-05** — ver a DP-32 revista.
 > - ⚠️ **A chave do Resend e o secret do Google passaram pelo chat.** Gire os dois quando estiver tudo funcionando.
+> - ⚠️ **Duas dívidas com prazo, e o prazo é o primeiro cliente que se cadastrar:** o **MFA** (o painel vê dado de terceiro a partir daí) e um **segundo operador** (com um só, perder o seu acesso tranca o painel, e o aviso entre pares não tem para quem ir).
 >
 > **Atualizado em 2026-09-04.** As **oito decisões** do painel de administração (DP-32 a DP-40) foram **todas respondidas** e estão em `docs/decisoes-do-produto.md`. O que resta aqui são **ações**, não escolhas: coisas que exigem a sua mão num serviço de terceiro ou um dado que só você tem.
 

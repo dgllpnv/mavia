@@ -108,6 +108,21 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://mavia_app:${SENHA_APP:?}@postgres:5432/mavia
+
+      # As duas pools do painel de administração — ADR 0024 D3.
+      #
+      # **Vazias por padrão, e ligar o painel é preenchê-las.** `main.ts` sobe
+      # dizendo "painel de administração desligado" quando faltam, que é a
+      # resposta certa para uma instalação que não o quer. Quem as escreve é
+      # `./provisionar-painel.sh`, junto com a senha dos dois papéis.
+      #
+      # São **duas** e não uma porque `mavia_admin` não é membro de
+      # `mavia_admin_escrita`: a separação é por autenticação, não por
+      # instrução. Uma conexão só, que trocasse de papel com `SET ROLE`, seria
+      # reversível com `RESET ROLE` dentro da mesma transação — e a leitura
+      # viraria escrita sem que nada além da disciplina impedisse.
+      DATABASE_URL_PAINEL: ${DATABASE_URL_PAINEL:-}
+      DATABASE_URL_PAINEL_ESCRITA: ${DATABASE_URL_PAINEL_ESCRITA:-}
       REDIS_URL: redis://:${SENHA_REDIS:?defina SENHA_REDIS}@redis:6379
       MAVIA_PEPPER_TENTATIVAS: ${PEPPER_TENTATIVAS:?defina PEPPER_TENTATIVAS}
       MAVIA_URL_PUBLICA: ${URL_PUBLICA:?defina URL_PUBLICA}
