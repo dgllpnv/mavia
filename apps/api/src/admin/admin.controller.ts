@@ -79,7 +79,20 @@ const NOVA_LINHA = String.fromCharCode(10)
 
 /** As recusas nomeadas das funções de contrato, e o que elas dizem a quem opera. */
 const RECUSAS: readonly (readonly [string, string])[] = [
-  ['PRORROGACAO_ALEM_DO_TETO', 'A prorrogação do teste vai no máximo a sete dias.'],
+  // O teto de sete dias caiu por decisão do dono (2026-09-05). O que sobrou é
+  // guarda de digitação, e a mensagem diz isso — para o operador não procurar
+  // uma política que não existe mais.
+  ['PRORROGACAO_IMPLAUSIVEL', 'Dias entre 1 e 3650. Acima disso é engano de digitação.'],
+  ['JA_E_OPERADOR', 'Essa pessoa já é operadora.'],
+  ['NAO_E_OPERADOR', 'Essa pessoa não é operadora.'],
+  ['USUARIO_INEXISTENTE', 'Ninguém com esse endereço tem conta. Ela precisa se cadastrar antes.'],
+  [
+    'ADMINS_ATIVOS_INSUFICIENTES',
+    // A invariante da migration 0031. A mensagem nomeia o motivo, porque
+    // "operação recusada" faria o operador tentar de novo.
+    'Não dá para ficar com menos de dois operadores ativos: perder o acesso do ' +
+      'único trancaria o painel, e o aviso entre pares não teria para quem ir.',
+  ],
   ['CORTESIA_ALEM_DO_TETO', 'A cortesia vai no máximo a trinta dias por vez.'],
   ['CORTESIA_ACUMULADA_ALEM_DO_TETO', 'Este espaço já acumulou sessenta dias de cortesia no período.'],
   ['TESTE_JA_PRORROGADO', 'O teste deste espaço já foi prorrogado uma vez.'],
@@ -197,6 +210,38 @@ const zCadastro = z.object({
 const zTempoConcedido = z.object({
   dias: z.number().int().min(1).max(30),
   razao: z.string().trim().min(3).max(280),
+})
+
+/**
+ * Prorrogar teste — **sem teto de política desde 2026-09-05**.
+ *
+ * O `max` de 3650 é guarda de digitação e não política: é a diferença entre
+ * "trinta dias" e "trinta mil porque o zero grudou". A função no banco repete a
+ * mesma faixa, e é ela que vale — esta validação existe para a mensagem chegar
+ * ao operador em português em vez de como exceção do Postgres.
+ */
+const zProrrogacao = z.object({
+  // A mensagem é escrita à mão porque a padrão do Zod — "Number must be less
+  // than or equal to 3650" — descreve a regra e não o motivo dela. O operador
+  // que a lê procura uma política de 3650 dias; o que existe é um limite contra
+  // engano de digitação.
+  dias: z
+    .number()
+    .int()
+    .min(1)
+    .max(3650, 'Dias entre 1 e 3650. Acima disso é engano de digitação.'),
+  razao: z.string().trim().min(3).max(280),
+})
+
+/**
+ * Conceder ou revogar operadora — **por e-mail, nunca por id**.
+ *
+ * Um UUID vindo do corpo de uma requisição é um identificador que o operador
+ * não confere a olho: colar o errado torna administrador alguém que ele nem
+ * sabe quem é. Um e-mail ele lê antes de clicar.
+ */
+const zOperador = z.object({
+  email: z.string().trim().email().max(320),
 })
 
 /**
@@ -508,16 +553,113 @@ export class AdminController {
     )
   }
 
+  /**
+   * Prorrogar o teste. **Sem teto e repetível** desde 2026-09-05.
+   *
+   * Não usa `escrevendoContrato` porque aquele helper carrega o schema de
+   * `{ dias: 1..30 }`, que é o da cortesia — e a cortesia **continua** com teto
+   * (30 por vez, 60 acumulados). São políticas diferentes sobre coisas
+   * diferentes: uma estende um teste grátis, a outra compensa um cliente
+   * pagante. Compartilhar o schema faria a mudança de uma mexer na outra.
+   */
   @Post('clientes/:tenantId/teste/prorrogar')
   @HttpCode(201)
   async prorrogarTeste(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string, @Body() corpo: unknown) {
-    return this.escrevendoContrato(req, tenantId, corpo, 'prorrogou_teste', async (c, dados, correlacao) => {
+    const analise = zProrrogacao.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const d = analise.data
+
+    return this.escrevendoNoEspaco(req, tenantId, 'prorrogou_teste', async (c, correlacao) => {
       const r = await c.query<{ fim: string }>(
         'SELECT admin.prorrogar_teste($1, $2, $3, $4) AS fim',
-        [tenantId, dados.dias, dados.razao, correlacao],
+        [tenantId, d.dias, d.razao, correlacao],
       )
       return { cortesiaAte: r.rows[0]!.fim }
     })
+  }
+
+  // -------------------------------------------------------------------------
+  // Operadores — quem tem acesso ao painel
+  // -------------------------------------------------------------------------
+
+  /**
+   * **Não existe rota que liste operadores, e a ausência é a decisão.**
+   *
+   * A migration `0031` restringe `mavia_admin` a enxergar a **própria**
+   * concessão, com a razão escrita nela: *"uma policy ampla entregaria, numa
+   * conexão sem segundo fator, a lista de todos os operadores da Mavia com nome
+   * e e-mail — que é exatamente o alvo de quem já comprometeu um deles."*
+   *
+   * A DP-32 revista pôs o painel em produção **sem MFA**, o que torna esse
+   * argumento mais forte e não menos: hoje a conexão é literalmente sem segundo
+   * fator. Uma tela de "operadores" seria a lista pronta para quem entrasse com
+   * uma sessão roubada.
+   *
+   * O que se perde é conveniência, e ela tem substituto: conceder e revogar
+   * funcionam **por e-mail**, e as recusas `JA_E_OPERADOR` e `NAO_E_OPERADOR`
+   * respondem sobre uma pessoa de cada vez. Dá para conferir alguém; não dá
+   * para enumerar todo mundo. A diferença entre as duas coisas é o ataque.
+   *
+   * Quando o MFA existir, esta decisão pode ser revisitada — e aí ela é uma
+   * ADR, não um `GET` que alguém acrescentou.
+   */
+
+  /**
+   * Tornar alguém operador.
+   *
+   * **Escalada de privilégio por desenho**, e por isso três coisas ficam
+   * explícitas: quem concede é quem pediu (a corrente de responsabilidade na
+   * auditoria), o alvo é resolvido por e-mail, e a pessoa precisa já ter conta.
+   *
+   * Não abre espaço de cliente: uma concessão não pertence a espaço nenhum, e
+   * `admin.conceder` grava a auditoria com `tenant_id` nulo desde a `0031`.
+   */
+  @Post('operadores')
+  @HttpCode(201)
+  async concederOperador(@Req() req: FastifyRequest, @Body() corpo: unknown) {
+    const operador = this.operador(req)
+    const analise = zOperador.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return this.traduzindoRecusa(async () =>
+      comAdminEscrita(this.poolDeEscrita, contextoDeOperadorEscrita(operador), async (c) => {
+        const r = await c.query<{ id_da_concessao: string; usuario: string; ativos: number }>(
+          'SELECT * FROM admin.conceder_operador($1, $2)',
+          [analise.data.email, randomUUID()],
+        )
+        return {
+          id: r.rows[0]!.id_da_concessao,
+          usuarioId: r.rows[0]!.usuario,
+          operadoresAtivos: r.rows[0]!.ativos,
+        }
+      }),
+    )
+  }
+
+  /**
+   * Desligar um operador.
+   *
+   * `exigir_dois_admins_ativos` (migration `0031`) recusa qualquer revogação
+   * que deixe menos de dois ativos — **inclusive a de si mesmo**, que é
+   * permitida de propósito: quem percebe que a própria conta foi comprometida
+   * precisa poder se desligar sem esperar por outra pessoa.
+   */
+  @Delete('operadores')
+  @HttpCode(200)
+  async revogarOperador(@Req() req: FastifyRequest, @Body() corpo: unknown) {
+    const operador = this.operador(req)
+    const analise = zOperador.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return this.traduzindoRecusa(async () =>
+      comAdminEscrita(this.poolDeEscrita, contextoDeOperadorEscrita(operador), async (c) => {
+        const r = await c.query<{ usuario: string; ativos: number }>(
+          'SELECT * FROM admin.revogar_operador($1, $2)',
+          [analise.data.email, randomUUID()],
+        )
+        return { usuarioId: r.rows[0]!.usuario, operadoresAtivos: r.rows[0]!.ativos }
+      }),
+    )
   }
 
   // -------------------------------------------------------------------------

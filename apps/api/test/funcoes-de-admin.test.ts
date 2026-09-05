@@ -59,6 +59,11 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   ['criar_preco', 'mavia_admin_contrato'],
   ['conceder_desconto', 'mavia_admin_contrato'],
   ['revogar_desconto', 'mavia_admin_contrato'],
+  // Invólucros de `conceder`/`revogar` (2026-09-05). **Não substituem** as
+  // originais: `mavia_migrate` continua dono delas, e o painel executa estes,
+  // que exigem concessão ativa e resolvem o alvo por e-mail.
+  ['conceder_operador', 'mavia_admin_contrato'],
+  ['revogar_operador', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

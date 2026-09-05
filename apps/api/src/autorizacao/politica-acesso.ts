@@ -269,6 +269,14 @@ export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([
   'GET /v1/admin/clientes/:tenantId/descontos',
   'POST /v1/admin/clientes/:tenantId/descontos',
   'DELETE /v1/admin/clientes/:tenantId/descontos',
+  // Operadores — quem entra no painel. Sem `:tenantId`: uma concessão não
+  // pertence a espaço nenhum.
+  //
+  // **Não há `GET`**, e é deliberado: a `0031` restringe `mavia_admin` à
+  // própria concessão para que uma sessão comprometida não devolva a lista de
+  // todos os operadores. Ver o comentário no controlador.
+  'POST /v1/admin/operadores',
+  'DELETE /v1/admin/operadores',
   'GET /v1/admin/registro',
 ])
 

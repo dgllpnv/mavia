@@ -176,7 +176,15 @@ describe('conceder cortesia', () => {
 })
 
 describe('prorrogar o teste', () => {
-  it('**uma vez por espaço, no máximo sete dias**', async () => {
+  it('**repetir acumula** — o uso único caiu em 2026-09-05', async () => {
+    // Este teste afirmava o contrário: "uma vez por espaço, no máximo sete
+    // dias". O dono derrubou as duas travas, e ele foi invertido em vez de
+    // apagado — o que mudou é política de produto, e a política anterior é
+    // informação sobre por que a regra existia.
+    //
+    // O que a inversão exige de novo: a segunda chamada tem de **somar**. Com
+    // uso único, `cortesia_ate = periodo_fim + dias` bastava; permitindo
+    // repetir, essa fórmula daria 30 para duas chamadas de 30.
     await estado(TENANT_B, 'teste')
     await api.banco.cliente.query(`UPDATE assinaturas SET cortesia_ate = NULL WHERE tenant_id = $1`, [
       TENANT_B,
@@ -198,20 +206,38 @@ describe('prorrogar o teste', () => {
       cabecalhos: HIPOTESE,
       corpo: { dias: 3, razao: 'de novo' },
     })
-    expect(segunda.statusCode).toBe(400)
-    expect(segunda.body).toContain('já foi prorrogado')
+    expect(segunda.statusCode).toBe(201)
+
+    const a = new Date(String(primeira.json().cortesiaAte)).getTime()
+    const b = new Date(String(segunda.json().cortesiaAte)).getTime()
+    expect(Math.round((b - a) / 86_400_000)).toBe(3)
   })
 
-  it('**mais de sete dias é recusado** — é o prazo da DP-15, e não mais que ele', async () => {
+  it('**trinta dias passam** — o teto de sete era política, e o dono a mudou', async () => {
     await estado(TENANT_A, 'teste')
     const r = await api.pedir({
       metodo: 'POST',
       url: `/v1/admin/clientes/${TENANT_A}/teste/prorrogar`,
       usuario: USUARIO_A,
       cabecalhos: HIPOTESE,
-      corpo: { dias: 30, razao: 'muito tempo' },
+      corpo: { dias: 30, razao: 'avaliacao longa combinada' },
+    })
+    expect(r.statusCode).toBe(201)
+  })
+
+  it('o guarda de digitação continua, e é outra coisa que um teto', async () => {
+    // Trinta mil dias não é uma política generosa: é um zero que grudou. A
+    // recusa protege contra a mão, não contra a decisão.
+    await estado(TENANT_A, 'teste')
+    const r = await api.pedir({
+      metodo: 'POST',
+      url: `/v1/admin/clientes/${TENANT_A}/teste/prorrogar`,
+      usuario: USUARIO_A,
+      cabecalhos: HIPOTESE,
+      corpo: { dias: 36_500, razao: 'zero grudado no teclado' },
     })
     expect(r.statusCode).toBe(400)
+    expect(r.body).toContain('digitação')
   })
 
   it('**quem não está em teste não tem teste a prorrogar**', async () => {

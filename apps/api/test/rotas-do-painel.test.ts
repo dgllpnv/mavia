@@ -68,6 +68,10 @@ describe('as rotas do painel estão declaradas, e o boot passou', () => {
       'GET /v1/admin/clientes/:tenantId/descontos',
       'POST /v1/admin/clientes/:tenantId/descontos',
       'DELETE /v1/admin/clientes/:tenantId/descontos',
+      // Operadores — sem `:tenantId`, como as de preço. **Sem `GET`**: a 0031
+      // proíbe enumerar operadores, e sem MFA a razão dela é mais forte.
+      'POST /v1/admin/operadores',
+      'DELETE /v1/admin/operadores',
     ]
     expect([...ROTAS_DE_ADMIN].sort()).toEqual([...esperadas].sort())
   })

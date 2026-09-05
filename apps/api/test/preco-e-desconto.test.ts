@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { TENANT_A, TENANT_B, USUARIO_A } from './postgres.js'
+import { TENANT_A, TENANT_B, USUARIO_A, USUARIO_B } from './postgres.js'
 import { subirApi, type ApiDeTeste } from './aplicacao-de-teste.js'
 
 /**
@@ -293,5 +293,146 @@ describe('o que o cliente vê do próprio desconto', () => {
     expect(colunas).not.toContain('motivo')
     expect(colunas).not.toContain('concedido_por')
     expect(colunas).not.toContain('revogado_por')
+  })
+})
+
+describe('prorrogar teste — sem teto desde 2026-09-05', () => {
+  /** Põe o espaço em teste, com o período terminando em N dias. */
+  async function emTeste(dias: number, tenant = TENANT_B): Promise<void> {
+    await api.banco.cliente.query(
+      `UPDATE assinaturas
+          SET estado = 'teste', cortesia_ate = NULL,
+              periodo_inicio = now(),
+              periodo_fim = now() + ($2 || ' days')::interval
+        WHERE tenant_id = $1`,
+      [tenant, dias],
+    )
+  }
+
+  const prorrogar = (dias: number, tenant = TENANT_B) =>
+    comoOperador('POST', `/v1/admin/clientes/${tenant}/teste/prorrogar`, {
+      dias,
+      razao: 'cliente pediu mais tempo para avaliar',
+    })
+
+  it('**noventa dias passam — o teto de sete caiu**', async () => {
+    await emTeste(7)
+    const r = await prorrogar(90)
+    expect(r.statusCode).toBe(201)
+  })
+
+  it('**prorrogar de novo acumula, e não substitui**', async () => {
+    // Com o uso único, `cortesia_ate = periodo_fim + dias` bastava. Permitindo
+    // repetir, essa fórmula daria 30 para duas chamadas de 30 — e o operador
+    // concluiria que a segunda não funcionou.
+    await emTeste(7)
+    const primeira = await prorrogar(30)
+    const segunda = await prorrogar(30)
+
+    expect(segunda.statusCode).toBe(201)
+    const a = new Date(String(primeira.json().cortesiaAte)).getTime()
+    const b = new Date(String(segunda.json().cortesiaAte)).getTime()
+    const dias = Math.round((b - a) / 86_400_000)
+    expect(dias).toBe(30)
+  })
+
+  it('o guarda de digitação continua, e a mensagem diz que é digitação', async () => {
+    await emTeste(7)
+    const r = await prorrogar(36_500)
+    expect(r.statusCode).toBe(400)
+    expect(String(r.json().message)).toContain('digitação')
+  })
+
+  it('**a cortesia continua com teto** — são políticas diferentes', async () => {
+    // Prorrogar teste estende um produto grátis; conceder cortesia compensa um
+    // cliente pagante. A decisão do dono foi sobre a primeira.
+    await api.banco.cliente.query(
+      `UPDATE assinaturas SET estado = 'ativa', cortesia_ate = NULL WHERE tenant_id = $1`,
+      [TENANT_B],
+    )
+    const r = await comoOperador('POST', `/v1/admin/clientes/${TENANT_B}/cortesia`, {
+      dias: 90,
+      razao: 'tentando passar do teto da cortesia',
+    })
+    expect(r.statusCode).toBe(400)
+  })
+})
+
+describe('conceder e revogar operadora pelo painel', () => {
+  const conceder = (email: string) => comoOperador('POST', '/v1/admin/operadores', { email })
+  const revogar = (email: string) => comoOperador('DELETE', '/v1/admin/operadores', { email })
+
+  async function emailDe(usuario: string): Promise<string> {
+    const r = await api.banco.cliente.query<{ email: string }>(
+      'SELECT email FROM usuarios WHERE id = $1',
+      [usuario],
+    )
+    return r.rows[0]!.email
+  }
+
+  it('**concede por e-mail, e quem concede é quem pediu**', async () => {
+    const alvo = await emailDe(USUARIO_B)
+    const r = await conceder(alvo)
+
+    expect(r.statusCode).toBe(201)
+    expect(r.json().operadoresAtivos).toBe(2)
+
+    const c = await api.banco.cliente.query<{ concedida_por: string; email_no_ato: string }>(
+      `SELECT concedida_por, email_no_ato FROM concessoes_de_admin
+        WHERE usuario_id = $1 AND revogada_em IS NULL`,
+      [USUARIO_B],
+    )
+    // A corrente de responsabilidade: cada operador tem um concedente nominal.
+    expect(c.rows[0]?.concedida_por).toBe(USUARIO_A)
+    expect(c.rows[0]?.email_no_ato).toBe(alvo)
+  })
+
+  it('conceder duas vezes é recusa legível, e não `23505`', async () => {
+    const alvo = await emailDe(USUARIO_B)
+    const r = await conceder(alvo)
+    expect(r.statusCode).toBe(400)
+    expect(String(r.json().message)).toContain('já é operadora')
+  })
+
+  it('e-mail sem conta é recusado, e a mensagem diz o que fazer', async () => {
+    const r = await conceder('ninguem@exemplo.test')
+    expect(r.statusCode).toBe(400)
+    expect(String(r.json().message)).toContain('cadastrar')
+  })
+
+  it('id em vez de e-mail não passa pela validação da borda', async () => {
+    const r = await comoOperador('POST', '/v1/admin/operadores', { email: USUARIO_B })
+    expect(r.statusCode).toBe(400)
+  })
+
+  it('**a invariante barra descer para menos de dois**', async () => {
+    // Com dois ativos, revogar um deixaria um. A migration 0031 recusa: perder
+    // o acesso do único trancaria o painel, e o aviso entre pares não teria
+    // para quem ir.
+    const alvo = await emailDe(USUARIO_B)
+    const r = await revogar(alvo)
+
+    expect(r.statusCode).toBe(400)
+    const ativos = await api.banco.cliente.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM concessoes_de_admin WHERE revogada_em IS NULL',
+    )
+    expect(ativos.rows[0]?.n).toBe('2')
+  })
+
+  it('**não existe rota para listar operadores** — a 0031 proíbe enumerar', async () => {
+    // A migration diz por quê: uma policy ampla entregaria, numa conexão sem
+    // segundo fator, a lista de todos os operadores com nome e e-mail. O painel
+    // roda hoje sem MFA (DP-32 revista), então a conexão é literalmente essa.
+    //
+    // A asserção é sobre o **corpo**, e não sobre o código: a rota não está em
+    // `ROTAS_DE_ADMIN`, então ela cai no caminho do cliente e morre pedindo
+    // `X-Mavia-Tenant` — que o painel nunca manda. O status é consequência de
+    // um detalhe de roteamento; o que precisa valer é que nenhuma lista sai.
+    //
+    // Conferir uma pessoa por vez continua possível pelas recusas de conceder;
+    // enumerar, não. A diferença entre as duas coisas é o ataque.
+    const r = await comoOperador('GET', '/v1/admin/operadores')
+    expect(r.statusCode).not.toBe(200)
+    expect(JSON.stringify(r.json())).not.toContain('email_no_ato')
   })
 })
