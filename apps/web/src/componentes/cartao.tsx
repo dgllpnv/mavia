@@ -41,8 +41,32 @@ export function Cartao({
     <section className={`cartao ${className}`}>
       {(titulo || acoes) && (
         <header className="cartao__cabecalho">
-          {titulo && <h2 className="cartao__titulo truncate">{titulo}</h2>}
-          {acoes && <div className="ml-auto flex items-center gap-8">{acoes}</div>}
+          {/* `min-w-0` não é enfeite, e sem ele o `truncate` acima é decorativo.
+              `.cartao__cabecalho` é `display:flex`, e um item flex com
+              `white-space: nowrap` **não encolhe abaixo da largura do próprio
+              texto** enquanto seu `min-width` for `auto` — que é o padrão. O
+              título então empurra o cabeçalho para além do card, e a página
+              inteira passa a rolar de lado num telefone. O `truncate` só começa
+              a funcionar quando o item tem permissão de encolher. */}
+          {titulo && <h2 className="cartao__titulo min-w-0 truncate">{titulo}</h2>}
+          {/* As ações **quebram linha entre si**, e não encolhem cada uma. Um
+              botão com o rótulo cortado é pior do que um botão numa linha
+              abaixo.
+
+              `shrink-0` aqui estava errado e a medição mostrou: em
+              `/lancamentos` o grupo é um item flex só, com navegador de período
+              mais duas ações — 440px de largura própria. Impedido de encolher,
+              ele descia inteiro para a segunda linha e continuava estourando os
+              390px da tela. Sem `shrink-0` e com `flex-wrap`, quem quebra são as
+              ações **entre si**, que é onde há folga de verdade.
+
+              `justify-end` para que, quebradas, elas continuem alinhadas à
+              direita como no desktop, em vez de deslizarem para a esquerda. */}
+          {acoes && (
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-8">
+              {acoes}
+            </div>
+          )}
         </header>
       )}
 

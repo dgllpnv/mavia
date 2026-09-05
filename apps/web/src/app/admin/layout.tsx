@@ -83,11 +83,20 @@ export default function LayoutDoPainel({ children }: { children: ReactNode }) {
   return (
     <ProvedorDoPainel>
       <div className="min-h-dvh bg-paper">
-        <header className="painel-barra sticky top-0 z-20">
-          <span className="painel-barra__marca">mavia</span>
-          <span className="painel-barra__lugar">painel de operação</span>
+        {/*
+          **Grudada só a partir de `lg`.** No celular a barra embrulha em duas ou
+          três faixas, e uma barra dessas presa no alto come um oitavo de uma tela
+          de 844px em toda rolagem de tabela — justamente onde a altura é o que
+          falta. Quem opera o painel chega ao topo com um toque na barra de status;
+          quem lê a tabela não recupera o espaço de jeito nenhum.
+        */}
+        <header className="painel-barra lg:sticky lg:top-0 lg:z-20">
+          <div className="painel-barra__identidade">
+            <span className="painel-barra__marca">mavia</span>
+            <span className="painel-barra__lugar">painel de operação</span>
+          </div>
 
-          <nav className="flex items-center gap-20" aria-label="Navegação do painel">
+          <nav className="painel-barra__nav" aria-label="Navegação do painel">
             {destinos.map((d) => {
               const ativo =
                 d.href === '/admin' ? caminho === '/admin' || caminho.startsWith('/admin/clientes') : caminho.startsWith(d.href)
@@ -104,7 +113,10 @@ export default function LayoutDoPainel({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="ml-auto flex items-center gap-16">
+          <div className="painel-barra__acoes">
+            {/* O e-mail já saía abaixo de `sm`, e continua saindo: numa faixa de
+                390px ele empurraria o seletor de tema para uma quarta linha, e
+                quem está no painel sabe com que conta entrou. */}
             <span className="hidden text-sm text-ink-3 sm:inline">{eu.usuario.email}</span>
             <SeletorDeTema />
             <button className="botao botao--discreto text-sm" onClick={() => void sair()}>
@@ -115,8 +127,12 @@ export default function LayoutDoPainel({ children }: { children: ReactNode }) {
 
         {/* Coluna estreita, e não a largura do produto: aqui se lê tabela, e
             linha de tabela com 1240px de comprimento perde o olho entre a
-            primeira coluna e a última. */}
-        <main className="mx-auto max-w-[1080px] px-24 py-24">{children}</main>
+            primeira coluna e a última.
+
+            O respiro é mobile-first: 16px no celular, os 24px de sempre a partir
+            de `lg`. Numa faixa de 390px, 24px de cada lado são 12% da largura
+            gastos em margem, e o que sobra é a tabela que precisava deles. */}
+        <main className="mx-auto max-w-[1080px] px-16 py-16 lg:px-24 lg:py-24">{children}</main>
       </div>
     </ProvedorDoPainel>
   )

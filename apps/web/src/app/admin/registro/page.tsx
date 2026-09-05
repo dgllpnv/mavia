@@ -7,6 +7,7 @@ import { painel } from '../../../painel/api'
 import { dataEHoraNaTela } from '../../../painel/formatos'
 import { MOTIVOS } from '../../../painel/hipotese'
 import { CabecalhoDeLeitura, Estado } from '../../../painel/pecas'
+import { TabelaRolavel } from '../tabela-rolavel'
 
 /**
  * O registro de auditoria.
@@ -104,57 +105,59 @@ export default function Registro() {
             </>
           }
         >
-          <table className="tabela">
-            <caption className="sr-only">
-              Linhas do registro de auditoria, da mais recente para a mais antiga
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col" className="numero">
-                  Quando
-                </th>
-                <th scope="col">Ação</th>
-                <th scope="col">Motivo</th>
-                <th scope="col">Referência</th>
-                <th scope="col">Rota</th>
-                <th scope="col" className="numero">
-                  Registros
-                </th>
-                <th scope="col">De → para</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/*
-                **A chave inclui a posição, e é o único jeito correto aqui.**
-
-                As duas linhas de uma escrita de contrato — a intenção e o
-                efeito — compartilham `correlacao`, `acao` **e** `ocorrido_em`:
-                elas são gravadas na mesma transação, e `now()` no Postgres é o
-                instante do início da transação, igual para as duas. Não existe
-                campo que as distinga, porque `auditoria` não tem chave primária
-                na projeção de `ler_registro`.
-
-                A posição é chave legítima porque esta lista é um retrato
-                ordenado pelo servidor: nada aqui reordena, filtra no cliente,
-                nem guarda estado por linha.
-              */}
-              {itens.map((l, posicao) => (
-                <tr key={`${l.correlacao ?? l.ocorrido_em}-${posicao}`}>
-                  <td className="numero text-ink-2">{dataEHoraNaTela(l.ocorrido_em)}</td>
-                  <td className="curta text-ink-1">{l.acao.replace(/_/g, ' ')}</td>
-                  <td className="curta text-ink-2">
-                    {l.motivo ? (MOTIVOS.find(([v]) => v === l.motivo)?.[1] ?? l.motivo) : '—'}
-                  </td>
-                  <td className="curta identificador">{l.referencia ?? '—'}</td>
-                  <td className="text-ink-3">{l.rota ?? '—'}</td>
-                  <td className="numero text-ink-2">{l.registros ?? '—'}</td>
-                  <td>
-                    <DeParaAoLado linha={l} />
-                  </td>
+          <TabelaRolavel rotulo="Linhas do registro">
+            <table className="tabela">
+              <caption className="sr-only">
+                Linhas do registro de auditoria, da mais recente para a mais antiga
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="numero">
+                    Quando
+                  </th>
+                  <th scope="col">Ação</th>
+                  <th scope="col">Motivo</th>
+                  <th scope="col">Referência</th>
+                  <th scope="col">Rota</th>
+                  <th scope="col" className="numero">
+                    Registros
+                  </th>
+                  <th scope="col">De → para</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {/*
+                  **A chave inclui a posição, e é o único jeito correto aqui.**
+
+                  As duas linhas de uma escrita de contrato — a intenção e o
+                  efeito — compartilham `correlacao`, `acao` **e** `ocorrido_em`:
+                  elas são gravadas na mesma transação, e `now()` no Postgres é o
+                  instante do início da transação, igual para as duas. Não existe
+                  campo que as distinga, porque `auditoria` não tem chave primária
+                  na projeção de `ler_registro`.
+
+                  A posição é chave legítima porque esta lista é um retrato
+                  ordenado pelo servidor: nada aqui reordena, filtra no cliente,
+                  nem guarda estado por linha.
+                */}
+                {itens.map((l, posicao) => (
+                  <tr key={`${l.correlacao ?? l.ocorrido_em}-${posicao}`}>
+                    <td className="numero text-ink-2">{dataEHoraNaTela(l.ocorrido_em)}</td>
+                    <td className="curta text-ink-1">{l.acao.replace(/_/g, ' ')}</td>
+                    <td className="curta text-ink-2">
+                      {l.motivo ? (MOTIVOS.find(([v]) => v === l.motivo)?.[1] ?? l.motivo) : '—'}
+                    </td>
+                    <td className="curta identificador">{l.referencia ?? '—'}</td>
+                    <td className="text-ink-3">{l.rota ?? '—'}</td>
+                    <td className="numero text-ink-2">{l.registros ?? '—'}</td>
+                    <td>
+                      <DeParaAoLado linha={l} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TabelaRolavel>
         </Estado>
       </div>
     </>

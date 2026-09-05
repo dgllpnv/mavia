@@ -136,9 +136,22 @@ export default function Cartoes() {
               {outras.length > 0 && (
                 <div className="border-t border-line">
                   <p className="rotulo px-20 pt-16">Demais faturas</p>
+                  {/* `minmax(0,1fr)` e não `1fr` nas linhas abaixo: a faixa
+                      `1fr` tem `min-width: auto`, então o `truncate` da
+                      descrição **não** limita nada e o `min-content` da linha
+                      vira a largura do texto inteiro. Um item de grade não
+                      encolhe abaixo do próprio `min-content`, e era isso que
+                      fazia este card medir 420px numa tela de 390.
+
+                      As larguras fixas só valem de `lg` para cima: 92 + 150 + 88
+                      são 330px de colunas fixas, e num telefone sobrariam ~20px
+                      para a descrição. */}
                   <ul className="mt-8">
                     {outras.map((f) => (
-                      <li key={f.id} className="linha grid-cols-[92px_1fr_150px_88px]">
+                      <li
+                        key={f.id}
+                        className="linha grid-cols-[72px_minmax(0,1fr)_auto_auto] lg:grid-cols-[92px_1fr_150px_88px]"
+                      >
                         <span className="valor text-1">{f.competencia.slice(0, 7)}</span>
                         <span className="truncate text-sm text-ink-3">
                           {f.estado.replace('_', ' ')} · vence {f.dataVencimento}

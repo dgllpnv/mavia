@@ -3,11 +3,19 @@
 import type { Categoria, Conta } from '@mavia/contracts'
 import { dataCivilDe, fimDoDiaCivil, formatarDataCivil } from '@mavia/domain'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { chamar, ErroDaApi } from '../api/cliente'
 import { CampoDeValor } from './campo-de-valor'
 import { Interruptor } from './interruptor'
-import { Modal } from './modal'
+import { MolduraEmSobreposicao, type MolduraDeLancamento } from './moldura-de-lancamento'
 import { PrevisaoDoRateio } from './previsao-do-rateio'
 
 /**
@@ -41,10 +49,44 @@ export interface FormularioDeLancamentoProps {
   readonly cartoes: readonly { id: string; nome: string }[]
   readonly categorias: readonly Categoria[]
   readonly naturezaInicial?: Natureza
+  /**
+   * A moldura que envolve os campos.
+   *
+   * `MolduraEmSobreposicao` (o padrão) é o diálogo do computador;
+   * `MolduraEmTelaCheia` é a rota do celular. Trocar a moldura **não** troca o
+   * formulário: quem monta decide a caixa, nunca o conteúdo dela.
+   */
+  readonly moldura?: MolduraDeLancamento
+  /**
+   * Um aviso de quem montou o formulário, acima dos campos.
+   *
+   * Existe porque quem carrega contas e categorias é a tela de fora, e numa
+   * moldura de tela cheia não sobra lugar visível para ela dizer que a carga
+   * falhou: a rota cobre a página inteira.
+   */
+  readonly aviso?: ReactNode
+  /**
+   * Avisa que a natureza mudou, para quem precisa refletir isso fora do
+   * formulário — a rota `/lancar` reescreve o `?tipo=` para que recarregar a
+   * página no meio do preenchimento não caia de volta em `despesa`.
+   */
+  aoMudarNatureza?(natureza: Natureza): void
   aoFechar(): void
 }
 
-type Natureza = 'despesa' | 'receita' | 'transferencia'
+export type Natureza = 'despesa' | 'receita' | 'transferencia'
+
+const NATUREZAS = ['despesa', 'receita', 'transferencia'] as const
+
+/**
+ * Lê a natureza vinda do endereço, com `despesa` como queda.
+ *
+ * O endereço é entrada de fora — alguém digita, alguém guarda nos favoritos —
+ * e nada que não esteja na lista entra no formulário.
+ */
+export function naturezaDe(valor: string | null | undefined): Natureza {
+  return NATUREZAS.find((n) => n === valor) ?? 'despesa'
+}
 
 const TITULOS: Record<Natureza, string> = {
   despesa: 'Nova despesa',
@@ -62,9 +104,14 @@ export function FormularioDeLancamento({
   cartoes,
   categorias,
   naturezaInicial = 'despesa',
+  moldura: Moldura = MolduraEmSobreposicao,
+  aviso,
+  aoMudarNatureza,
   aoFechar,
 }: FormularioDeLancamentoProps) {
   const fila = useQueryClient()
+  // O `<form>` precisa de `id` porque o `salvar` da moldura vive fora dele.
+  const formId = useId()
 
   const [natureza, setNatureza] = useState<Natureza>(naturezaInicial)
   const [descricao, setDescricao] = useState('')
@@ -79,6 +126,23 @@ export function FormularioDeLancamento({
   const [observacao, setObservacao] = useState('')
   const [mostrarObservacao, setMostrarObservacao] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const avisoDeErro = useRef<HTMLParagraphElement>(null)
+
+  /**
+   * O erro de salvamento vai para dentro do campo de visão.
+   *
+   * Ele fica no fim do formulário, e na moldura de tela cheia o `salvar` está
+   * na barra do topo: quem toca em salvar com o teclado aberto pode receber
+   * "Informe um valor" a duas rolagens de distância e concluir que o botão não
+   * funciona. `block: 'nearest'` é rolagem mínima — não faz nada quando o aviso
+   * já está visível, que é o caso do diálogo do computador.
+   *
+   * Sem `behavior: 'smooth'`: o movimento aqui não explica nada, só atrasa a
+   * leitura de uma mensagem de erro.
+   */
+  useEffect(() => {
+    if (erro) avisoDeErro.current?.scrollIntoView({ block: 'nearest' })
+  }, [erro])
 
   const ehCartao = cartoes.some((c) => c.id === origem)
   const ehTransferencia = natureza === 'transferencia'
@@ -235,8 +299,15 @@ export function FormularioDeLancamento({
     },
   })
 
-  async function enviar(evento: FormEvent, criarOutro: boolean) {
-    evento.preventDefault()
+  /**
+   * O único caminho de envio do formulário, chamado pelas três ações — e por
+   * `Enter` num campo, que o navegador transforma em `submit`.
+   *
+   * Ele não recebe mais o evento: `salvar` e `salvar e novo` agora vivem na
+   * moldura, e um `<button form="…">` não tem um evento de formulário para
+   * cancelar. O `preventDefault` ficou onde ele de fato pertence, no `onSubmit`.
+   */
+  async function enviar(criarOutro: boolean) {
     setErro(null)
     try {
       await salvar.mutateAsync()
@@ -257,15 +328,38 @@ export function FormularioDeLancamento({
   }
 
   return (
-    <Modal titulo={TITULOS[natureza]} aoFechar={aoFechar}>
-      <div className="mt-16 flex gap-2">
-        {(['despesa', 'receita', 'transferencia'] as const).map((v) => (
+    <Moldura
+      titulo={TITULOS[natureza]}
+      formId={formId}
+      salvando={salvar.isPending}
+      aoCancelar={aoFechar}
+      aoSalvarENovo={() => void enviar(true)}
+    >
+      {aviso}
+
+      {/*
+        `role="radiogroup"` **é obrigatório aqui**, e a razão mudou de peso neste
+        épico. `role="radio"` fora de um grupo é ARIA inválida: o leitor de tela
+        anuncia "botão de opção, não marcado" sem grupo, sem "1 de 3" e sem
+        navegação por seta.
+
+        O defeito é anterior a este trabalho; a **severidade** não é. Com a ação
+        de lançar fora do cabeçalho no celular, a barra de abas abre sempre em
+        `?tipo=despesa` — e estes três botões passaram a ser o **único** caminho
+        para lançar receita ou transferência num telefone. Achado do
+        `revisor-codigo`.
+      */}
+      <div role="radiogroup" aria-label="Tipo de lançamento" className="mt-16 flex flex-wrap gap-2">
+        {NATUREZAS.map((v) => (
           <button
             key={v}
             type="button"
             role="radio"
             aria-checked={v === natureza}
-            onClick={() => setNatureza(v)}
+            onClick={() => {
+              setNatureza(v)
+              aoMudarNatureza?.(v)
+            }}
             className={
               v === natureza
                 ? 'rounded-2 border border-primaria bg-primaria-sutil px-12 py-6 text-sm font-medium text-primaria'
@@ -277,7 +371,14 @@ export function FormularioDeLancamento({
         ))}
       </div>
 
-      <form className="mt-20 flex flex-col gap-16" onSubmit={(e) => void enviar(e, false)}>
+      <form
+        id={formId}
+        className="mt-20 flex flex-col gap-16"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault()
+          void enviar(false)
+        }}
+      >
         <label className="flex flex-col gap-6">
           <span className="rotulo">Descrição</span>
           <input
@@ -319,7 +420,7 @@ export function FormularioDeLancamento({
         )}
 
         {ehTransferencia ? (
-          <div className="grid grid-cols-2 gap-12">
+          <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
             <label className="flex flex-col gap-6">
               <span className="rotulo">De</span>
               <select className="campo" value={origem} onChange={(e) => setOrigem(e.target.value)}>
@@ -344,7 +445,7 @@ export function FormularioDeLancamento({
             </label>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-12">
+          <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
             <label className="flex flex-col gap-6">
               <span className="rotulo">Conta ou cartão</span>
               <select className="campo" value={origem} onChange={(e) => setOrigem(e.target.value)}>
@@ -452,28 +553,11 @@ export function FormularioDeLancamento({
         )}
 
         {erro && (
-          <p role="alert" className="text-corpo text-despesa">
+          <p ref={avisoDeErro} role="alert" className="text-corpo text-despesa">
             {erro}
           </p>
         )}
-
-        <div className="flex items-center justify-end gap-12 border-t border-line pt-16">
-          <button className="botao" type="button" onClick={aoFechar}>
-            cancelar
-          </button>
-          <button
-            className="botao botao--discreto"
-            type="button"
-            disabled={salvar.isPending}
-            onClick={(e) => void enviar(e, true)}
-          >
-            salvar e novo
-          </button>
-          <button className="botao botao--primario" type="submit" disabled={salvar.isPending}>
-            {salvar.isPending ? 'salvando…' : 'salvar'}
-          </button>
-        </div>
       </form>
-    </Modal>
+    </Moldura>
   )
 }

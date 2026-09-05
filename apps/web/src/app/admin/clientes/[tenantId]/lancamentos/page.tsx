@@ -6,6 +6,7 @@ import { Valor } from '../../../../../componentes/valor'
 import { painel } from '../../../../../painel/api'
 import { usePainel } from '../../../../../painel/contexto'
 import { CabecalhoDeLeitura, Estado, Instante } from '../../../../../painel/pecas'
+import { TabelaRolavel } from '../../../tabela-rolavel'
 
 /**
  * Os lançamentos do cliente.
@@ -66,54 +67,56 @@ export default function LancamentosDoCliente() {
             </>
           }
         >
-          <table className="tabela">
-            <caption className="sr-only">
-              Lançamentos do cliente, com competência, compensação e valor
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Descrição</th>
-                <th scope="col">Origem</th>
-                <th scope="col" className="numero">
-                  Competência
-                </th>
-                <th scope="col" className="numero">
-                  Compensação
-                </th>
-                <th scope="col" className="numero">
-                  Valor
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((l) => (
-                <tr key={l.id}>
-                  <td className="text-ink-1">
-                    {l.descricao || <span className="text-ink-3">sem descrição</span>}
-                  </td>
-                  <td className="text-ink-3">{l.origem ?? '—'}</td>
-                  <td className="numero text-ink-2">
-                    <Instante iso={l.posted_at} />
-                  </td>
-                  <td className="numero text-ink-2">
-                    <Instante iso={l.settled_at} />
-                  </td>
-                  <td className="numero">
-                    {/*
-                      Sinal, peso e cor — três canais, e dois deles funcionam em
-                      escala de cinza. `previsto` quando o dinheiro ainda não se
-                      moveu: peso 400 contra 600 separa a certeza sem gastar cor.
-                    */}
-                    <Valor
-                      centavos={l.valor_centavos}
-                      moeda={l.moeda}
-                      previsto={l.settled_at === null}
-                    />
-                  </td>
+          <TabelaRolavel rotulo="Lançamentos do cliente">
+            <table className="tabela">
+              <caption className="sr-only">
+                Lançamentos do cliente, com competência, compensação e valor
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Descrição</th>
+                  <th scope="col">Origem</th>
+                  <th scope="col" className="numero">
+                    Competência
+                  </th>
+                  <th scope="col" className="numero">
+                    Compensação
+                  </th>
+                  <th scope="col" className="numero">
+                    Valor
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {itens.map((l) => (
+                  <tr key={l.id}>
+                    <td className="text-ink-1">
+                      {l.descricao || <span className="text-ink-3">sem descrição</span>}
+                    </td>
+                    <td className="text-ink-3">{l.origem ?? '—'}</td>
+                    <td className="numero text-ink-2">
+                      <Instante iso={l.posted_at} />
+                    </td>
+                    <td className="numero text-ink-2">
+                      <Instante iso={l.settled_at} />
+                    </td>
+                    <td className="numero">
+                      {/*
+                        Sinal, peso e cor — três canais, e dois deles funcionam em
+                        escala de cinza. `previsto` quando o dinheiro ainda não se
+                        moveu: peso 400 contra 600 separa a certeza sem gastar cor.
+                      */}
+                      <Valor
+                        centavos={l.valor_centavos}
+                        moeda={l.moeda}
+                        previsto={l.settled_at === null}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TabelaRolavel>
         </Estado>
       </div>
 

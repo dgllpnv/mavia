@@ -22,15 +22,100 @@
  * na cor da marca; a do painel é papel com uma régua grossa de tinta embaixo —
  * a mesma gramática do trilho, no papel de cabeçalho.
  * ----------------------------------------------------------------------- */
+/**
+ * **Mobile-first: a classe-base descreve o celular, o `min-width` reconstrói o
+ * desktop.** Não há `max-width` aqui de propósito — sob a política inversa,
+ * esquecer a variante devolve o que o dono viu no telefone.
+ *
+ * No celular a barra **embrulha**. Não há largura calculada à mão para caber em
+ * 390px: a régua de destinos toma a linha inteira (`flex-basis: 100%`, e ela é
+ * sempre a última), e identidade e ações se acomodam acima dela — juntas
+ * quando cabem, em duas linhas quando não. O que se garante não é o número de
+ * linhas, é que **nada estoura para o lado**, que é o sintoma que o épico
+ * existe para matar.
+ */
 .painel-barra {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-24);
-  min-height: var(--altura-nav);
-  padding: 0 var(--s-24);
+  gap: var(--s-8) var(--s-12);
+  padding: var(--s-8) var(--s-16);
   background: var(--paper-0);
   color: var(--ink-1);
   border-bottom: 3px solid var(--ink-1);
+}
+
+/**
+ * Marca e lugar viram um bloco só para embrulharem juntos: sem ele, "painel de
+ * operação" desceria sozinho e ficaria ao lado do seletor de tema, dizendo que
+ * é um controle.
+ *
+ * **Continuam na mesma linha no celular**, e a diferença é uma faixa inteira:
+ * empilhados, os dois custam 26px que a barra não tem para dar. Os dois juntos
+ * medem cerca de 190px numa faixa de 358px úteis — cabem com folga, e o
+ * `flex-wrap` só entra em ação num aparelho mais estreito do que os que existem.
+ * No desktop o bloco é uma linha com o mesmo `--s-24` de antes, e o resultado é
+ * o de hoje, pixel a pixel.
+ */
+.painel-barra__identidade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2) var(--s-12);
+  min-width: 0;
+}
+
+.painel-barra__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-12);
+  margin-left: auto;
+}
+
+/**
+ * A régua de destinos ocupa a linha inteira no celular.
+ *
+ * Ela **não** rola de lado: quatro destinos cabem em 390px, e uma navegação que
+ * rola esconde para onde se pode ir. Rolagem lateral aqui seria a mesma deriva
+ * de oito destinos que a barra de abas do produto existe para conter.
+ */
+.painel-barra__nav {
+  order: 1;
+  flex-basis: 100%;
+  display: flex;
+  /* Rede, não layout: os quatro destinos cabem em 390px. Se um quinto nascer,
+     ele desce uma linha em vez de empurrar a página para o lado. */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-8) var(--s-16);
+}
+
+@media (min-width: 1024px) {
+  .painel-barra {
+    flex-wrap: nowrap;
+    gap: var(--s-24);
+    min-height: var(--altura-nav);
+    padding: 0 var(--s-24);
+  }
+
+  /* `center` e `--s-24`: é assim que marca e lugar se alinhavam quando eram
+     filhos diretos da barra, e é assim que continuam. */
+  .painel-barra__identidade {
+    align-items: center;
+    gap: var(--s-24);
+  }
+
+  .painel-barra__nav {
+    order: 0;
+    flex-basis: auto;
+    gap: var(--s-20);
+  }
+
+  .painel-barra__acoes {
+    gap: var(--s-16);
+  }
 }
 
 .painel-barra__marca {
@@ -78,6 +163,39 @@
  * linhas, o cabeçalho é o `.rotulo` do produto, e a densidade é a feature —
  * 36px de linha contra os 56px do extrato do cliente.
  * ----------------------------------------------------------------------- */
+/**
+ * O contêiner de rolagem — e por que a tabela **não** vira lista no celular.
+ *
+ * `docs/design.md` §2.3: densidade é a feature, e a referência é a página de
+ * cotações. Uma tabela de operador é uma matriz de verdade — ele varre trinta
+ * linhas atrás da que está fora do padrão, e isso depende de as colunas ficarem
+ * empilhadas verticalmente. Quebrar cada linha em um bloco rotulado destruiria
+ * exatamente a leitura que motiva a tela.
+ *
+ * O que não se aceita é a **página** deslizar de lado: o sintoma é o mesmo, a
+ * causa não. Rolagem lateral dentro de um bloco delimitado é uma escolha; a
+ * página inteira escorregando é um vazamento.
+ */
+.tabela-rolagem {
+  overflow-x: auto;
+  /* Chegar ao fim da rolagem da tabela não pode virar o gesto de voltar página
+     do navegador. */
+  overscroll-behavior-x: contain;
+}
+
+/**
+ * Sem isto a rolagem existiria e nunca teria o que rolar: `width: 100%` faria a
+ * tabela obedecer ao contêiner e se espremer até a ilegibilidade em vez de
+ * transbordar.
+ *
+ * 44rem é a largura abaixo da qual a densidade se perde, e ela **nunca prende no
+ * desktop** — a coluna do painel tem 1032px úteis, contra os 704px daqui. Acima
+ * de `lg` o `width: 100%` continua vencendo, e a tabela é a mesma de hoje.
+ */
+.tabela-rolagem .tabela {
+  min-width: 44rem;
+}
+
 .tabela {
   width: 100%;
   border-collapse: collapse;

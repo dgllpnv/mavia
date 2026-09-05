@@ -122,7 +122,7 @@ function FaturaDetalhada({
 
       {itens.length > 0 && (
         <div className="mt-24">
-          <div className="linha h-[var(--altura-colunas)] grid-cols-[72px_1fr_180px_150px] border-b border-line-forte bg-surface-2">
+          <div className="linha h-[var(--altura-colunas)] grid-cols-[56px_minmax(0,1fr)_auto_auto] border-b border-line-forte bg-surface-2 lg:grid-cols-[72px_1fr_180px_150px]">
             <span className="rotulo">Data</span>
             <span className="rotulo">Descrição</span>
             <span className="rotulo">Categoria</span>
@@ -132,7 +132,7 @@ function FaturaDetalhada({
           {itens.map((l) => {
             const cor = corDaCategoria(l.categoriaId)
             return (
-              <div key={l.id} className="linha grid-cols-[72px_1fr_180px_150px]">
+              <div key={l.id} className="linha grid-cols-[56px_minmax(0,1fr)_auto_auto] lg:grid-cols-[72px_1fr_180px_150px]">
                 <span className="valor text-sm text-ink-3">{diaCurto(l.postedAt)}</span>
                 <span className="truncate text-1">{l.descricao}</span>
                 <span className="flex items-center gap-6 truncate text-sm text-ink-3">

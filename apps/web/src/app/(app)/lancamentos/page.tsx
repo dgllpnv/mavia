@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { api } from '../../../api/cliente'
 import { montarDicionarios, type Dicionarios } from '../../../api/dicionarios'
 import { mesAnterior, mesSeguinte, periodoDe } from '../../../api/periodo'
+import { AcaoDeLancar } from '../../../componentes/acao-de-lancar'
 import { Cartao } from '../../../componentes/cartao'
 import { DetalheDoLancamento } from '../../../componentes/detalhe-do-lancamento'
 import { FormularioDeLancamento } from '../../../componentes/formulario-de-lancamento'
@@ -109,7 +110,7 @@ export default function Lancamentos() {
             <button className="botao" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
               ‹
             </button>
-            <span className="min-w-[15ch] text-center text-corpo">{periodo.rotulo}</span>
+            <span className="text-center text-corpo lg:min-w-[15ch]"><span className="lg:hidden">{periodo.rotuloCurto}</span><span className="hidden lg:inline">{periodo.rotulo}</span></span>
             <button className="botao" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
               ›
             </button>
@@ -119,9 +120,9 @@ export default function Lancamentos() {
             <Link href="/lancamentos/recorrencias" className="botao botao--discreto">
               recorrências
             </Link>
-            <button className="botao botao--primario" onClick={() => setLancando(true)}>
-              lançar
-            </button>
+            {/* No celular leva à rota `/lancar`; no computador abre a
+                sobreposição. A escolha é da consulta de mídia. */}
+            <AcaoDeLancar rotulo="lançar" aoAbrir={() => setLancando(true)} />
           </>
         }
       >
@@ -226,7 +227,7 @@ export default function Lancamentos() {
         <section
           role="region"
           aria-label="Resumo do mês"
-          className="cartao sticky bottom-0 z-10 mt-24"
+          className="cartao rodape-sobre-as-abas sticky z-10 mt-24"
         >
           <div className="flex flex-wrap items-center gap-24 px-20 py-12">
             <div>
@@ -292,15 +293,19 @@ export default function Lancamentos() {
         />
       )}
 
-      {lancando && (
-        <FormularioDeLancamento
-          tenantId={espaco.id}
-          contas={contas.data?.itens ?? []}
-          cartoes={cartoes.data?.itens ?? []}
-          categorias={categorias.data?.itens ?? []}
-          aoFechar={() => setLancando(false)}
-        />
-      )}
+      {/* A sobreposição é do computador, e o `hidden lg:contents` garante isso
+          mesmo se a janela encolher com ela aberta. */}
+      <div className="hidden lg:contents">
+        {lancando && (
+          <FormularioDeLancamento
+            tenantId={espaco.id}
+            contas={contas.data?.itens ?? []}
+            cartoes={cartoes.data?.itens ?? []}
+            categorias={categorias.data?.itens ?? []}
+            aoFechar={() => setLancando(false)}
+          />
+        )}
+      </div>
     </>
   )
 }

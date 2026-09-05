@@ -9,6 +9,7 @@ import { dataNaTela } from '../../painel/formatos'
 import type { Hipotese } from '../../painel/hipotese'
 import { CabecalhoDeLeitura, Estado, mensagemDoErro } from '../../painel/pecas'
 import { Portao } from '../../painel/portao'
+import { TabelaRolavel } from './tabela-rolavel'
 
 /**
  * A lista de clientes.
@@ -106,50 +107,52 @@ export default function ListaDeClientes() {
             )
           }
         >
-          <table className="tabela">
-            <caption className="sr-only">
-              Espaços encontrados, com titular, plano, estado e data de criação
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Espaço</th>
-                <th scope="col">Titular</th>
-                <th scope="col">Plano</th>
-                <th scope="col">Estado</th>
-                <th scope="col" className="numero">
-                  Criado em
-                </th>
-                <th scope="col" />
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((c) => (
-                <tr key={c.tenant_id}>
-                  <td className="text-ink-1">{c.nome}</td>
-                  <td className="text-ink-2">{c.titular ?? <span className="text-ink-3">sem titular ativo</span>}</td>
-                  <td className="text-ink-2">{c.plano ?? '—'}</td>
-                  <td>
-                    <EstadoDaAssinatura estado={c.estado} />
-                  </td>
-                  <td className="numero text-ink-2">{dataNaTela(c.criado_em)}</td>
-                  <td className="numero">
-                    {/*
-                      O nome viaja na URL **só para o portão poder dizer de quem
-                      é o espaço** antes de qualquer consulta. Ele é texto de
-                      tela: nenhuma decisão o lê, e o que a API recebe é o
-                      identificador do caminho.
-                    */}
-                    <Link
-                      className="botao botao--discreto text-sm"
-                      href={`/admin/clientes/${c.tenant_id}?nome=${encodeURIComponent(c.nome)}`}
-                    >
-                      abrir
-                    </Link>
-                  </td>
+          <TabelaRolavel rotulo="Espaços encontrados">
+            <table className="tabela">
+              <caption className="sr-only">
+                Espaços encontrados, com titular, plano, estado e data de criação
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Espaço</th>
+                  <th scope="col">Titular</th>
+                  <th scope="col">Plano</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col" className="numero">
+                    Criado em
+                  </th>
+                  <th scope="col" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {itens.map((c) => (
+                  <tr key={c.tenant_id}>
+                    <td className="text-ink-1">{c.nome}</td>
+                    <td className="text-ink-2">{c.titular ?? <span className="text-ink-3">sem titular ativo</span>}</td>
+                    <td className="text-ink-2">{c.plano ?? '—'}</td>
+                    <td>
+                      <EstadoDaAssinatura estado={c.estado} />
+                    </td>
+                    <td className="numero text-ink-2">{dataNaTela(c.criado_em)}</td>
+                    <td className="numero">
+                      {/*
+                        O nome viaja na URL **só para o portão poder dizer de quem
+                        é o espaço** antes de qualquer consulta. Ele é texto de
+                        tela: nenhuma decisão o lê, e o que a API recebe é o
+                        identificador do caminho.
+                      */}
+                      <Link
+                        className="botao botao--discreto text-sm"
+                        href={`/admin/clientes/${c.tenant_id}?nome=${encodeURIComponent(c.nome)}`}
+                      >
+                        abrir
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TabelaRolavel>
         </Estado>
       </div>
 
