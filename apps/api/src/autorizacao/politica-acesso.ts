@@ -275,6 +275,9 @@ export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([
   // **Não há `GET`**, e é deliberado: a `0031` restringe `mavia_admin` à
   // própria concessão para que uma sessão comprometida não devolva a lista de
   // todos os operadores. Ver o comentário no controlador.
+  // Sobre **si mesmo**, e só. É o que a policy `concessao_propria` da 0031
+  // autoriza, e o que a tela usa para decidir se mostra a seção de operadores.
+  'GET /v1/admin/eu',
   'POST /v1/admin/operadores',
   'DELETE /v1/admin/operadores',
   'GET /v1/admin/registro',

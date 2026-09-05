@@ -64,6 +64,10 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   // que exigem concessão ativa e resolvem o alvo por e-mail.
   ['conceder_operador', 'mavia_admin_contrato'],
   ['revogar_operador', 'mavia_admin_contrato'],
+  // A pergunta do nível — dona `mavia_migrate`, como `tem_concessao_ativa`:
+  // as duas são consultadas de dentro de policies, e uma função de policy
+  // precisa atravessar a RLS da tabela que consulta.
+  ['tem_concessao_super', 'mavia_migrate'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

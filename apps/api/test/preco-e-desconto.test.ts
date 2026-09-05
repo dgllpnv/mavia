@@ -61,6 +61,11 @@ const conceder = (tenant = TENANT_A, corpo: Record<string, unknown> = {}) =>
 beforeAll(async () => {
   api = await subirApi()
   await api.banco.cliente.query('SELECT admin.conceder($1, $2)', [USUARIO_A, USUARIO_A])
+  // O dono do painel é `super` — é ele que concede acesso a outros.
+  await api.banco.cliente.query(
+    "UPDATE concessoes_de_admin SET nivel = 'super' WHERE usuario_id = $1",
+    [USUARIO_A],
+  )
   for (const t of [TENANT_A, TENANT_B]) {
     await api.banco.cliente.query(
       `INSERT INTO assinaturas (tenant_id, estado, plano, intervalo, periodo_inicio, periodo_fim)
@@ -434,5 +439,102 @@ describe('conceder e revogar operadora pelo painel', () => {
     const r = await comoOperador('GET', '/v1/admin/operadores')
     expect(r.statusCode).not.toBe(200)
     expect(JSON.stringify(r.json())).not.toContain('email_no_ato')
+  })
+})
+
+describe('superadministrador — a única diferença entre os dois níveis', () => {
+  /**
+   * Uma sessão de `USUARIO_B`, que os testes anteriores tornaram **operador**
+   * comum. Tudo o que ele faz aqui, o super também faz; o que ele **não** faz
+   * é a diferença inteira.
+   */
+  const comoOperadorComum = (metodo: 'GET' | 'POST' | 'DELETE', url: string, corpo?: unknown) =>
+    api.pedir({
+      metodo,
+      url,
+      usuario: USUARIO_B,
+      cabecalhos: HIPOTESE,
+      ...(corpo === undefined ? {} : { corpo }),
+    })
+
+  it('**o operador comum não concede acesso** — é para isso que o nível existe', async () => {
+    const r = await comoOperadorComum('POST', '/v1/admin/operadores', {
+      email: 'alguem@exemplo.test',
+    })
+    expect(r.statusCode).toBe(400)
+    expect(String(r.json().message)).toContain('superadministrador')
+  })
+
+  it('o operador comum não revoga acesso', async () => {
+    const r = await comoOperadorComum('DELETE', '/v1/admin/operadores', {
+      email: 'alguem@exemplo.test',
+    })
+    expect(r.statusCode).toBe(400)
+    expect(String(r.json().message)).toContain('superadministrador')
+  })
+
+  it('**e faz todo o resto igual** — o nível não toca em mais nada', async () => {
+    // A tentação, ao criar um nível novo, é pendurar mais poderes nele. É assim
+    // que um papel administrativo vira o papel que faz tudo, e aí ninguém
+    // consegue mais dizer o que ele faz.
+    const clientes = await comoOperadorComum('GET', '/v1/admin/clientes')
+    expect(clientes.statusCode).toBe(200)
+
+    const precos = await comoOperadorComum('GET', '/v1/admin/precos')
+    expect(precos.statusCode).toBe(200)
+
+    const desconto = await comoOperadorComum('POST', `/v1/admin/clientes/${TENANT_A}/descontos`, {
+      especie: 'percentual',
+      pontosBase: 500,
+      duracao: 'sempre',
+      motivo: 'operador comum concedendo desconto normalmente',
+    })
+    expect(desconto.statusCode).toBe(201)
+  })
+
+  it('cada um lê o próprio nível, e só o próprio', async () => {
+    expect((await comoOperador('GET', '/v1/admin/eu')).json().nivel).toBe('super')
+    expect((await comoOperadorComum('GET', '/v1/admin/eu')).json().nivel).toBe('operador')
+  })
+
+  it('**o último super não pode ser tirado** — senão ninguém mais concede', async () => {
+    // O risco que o dono aceitou ao pedir um super só. O gatilho é o que o
+    // contém: para tirar o super de alguém, promova outro antes.
+    const r = await api.banco.cliente
+      .query(
+        `UPDATE concessoes_de_admin SET nivel = 'operador'
+          WHERE usuario_id = $1 AND revogada_em IS NULL`,
+        [USUARIO_A],
+      )
+      .then(() => null)
+      .catch((e: Error) => e)
+
+    expect(r).not.toBeNull()
+    expect(String(r)).toContain('SUPER_ATIVO_INSUFICIENTE')
+  })
+
+  it('**super promove outro super, e aí o primeiro pode sair**', async () => {
+    // A saída sancionada do super único, e ela existe dentro do painel.
+    await api.banco.cliente.query(
+      `UPDATE concessoes_de_admin SET nivel = 'super' WHERE usuario_id = $1 AND revogada_em IS NULL`,
+      [USUARIO_B],
+    )
+
+    const r = await api.banco.cliente
+      .query(
+        `UPDATE concessoes_de_admin SET nivel = 'operador'
+          WHERE usuario_id = $1 AND revogada_em IS NULL`,
+        [USUARIO_A],
+      )
+      .then(() => null)
+      .catch((e: Error) => e)
+
+    expect(r).toBeNull()
+
+    // Devolve o estado para os testes seguintes não herdarem a troca.
+    await api.banco.cliente.query(
+      `UPDATE concessoes_de_admin SET nivel = 'super' WHERE usuario_id = $1 AND revogada_em IS NULL`,
+      [USUARIO_A],
+    )
   })
 })

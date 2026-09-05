@@ -24,8 +24,15 @@
 set -eu
 
 cd "$(dirname "$0")"
-[ $# -eq 1 ] || { echo "uso: $0 <email-do-usuario>" >&2; exit 1; }
-EMAIL="$1"
+case $# in
+  1) EMAIL="$1"; NIVEL=operador ;;
+  2) EMAIL="$1"; NIVEL="$2" ;;
+  *) echo "uso: $0 <email-do-usuario> [operador|super]" >&2; exit 1 ;;
+esac
+case "$NIVEL" in
+  operador|super) ;;
+  *) echo "nivel invalido: $NIVEL (use operador ou super)" >&2; exit 1 ;;
+esac
 
 AMBIENTE=.env
 [ -f "$AMBIENTE" ] || { echo "ERRO: $AMBIENTE não existe." >&2; exit 1; }
@@ -34,7 +41,7 @@ SENHA_POSTGRES=$(grep '^SENHA_POSTGRES=' "$AMBIENTE" | cut -d= -f2-)
 
 # `--set` e não interpolação de shell: assim o e-mail não aparece na lista de
 # processos, e um endereço com aspas não vira injeção.
-docker compose exec -T -e PGPASSWORD="$SENHA_POSTGRES" postgres   psql --username mavia --dbname mavia --single-transaction --set ON_ERROR_STOP=1        --set email="$EMAIL" <<'SQL'
+docker compose exec -T -e PGPASSWORD="$SENHA_POSTGRES" postgres   psql --username mavia --dbname mavia --single-transaction --set ON_ERROR_STOP=1        --set email="$EMAIL" --set nivel="$NIVEL" <<'SQL'
 
 -- **Sem bloco `DO`, e a razão é uma pegadinha do psql.**
 --
@@ -54,9 +61,35 @@ SELECT id AS uid FROM usuarios
  WHERE lower(email) = lower(:'email') AND deleted_at IS NULL
 \gset
 
--- O primeiro operador se concede: não há quem o conceda antes dele. Do segundo
--- em diante, quem concede é quem já era — e a auditoria mostra a corrente.
-SELECT admin.conceder(:'uid'::uuid, :'uid'::uuid) AS concessao;
+-- **Este script é a saída de emergência do superadministrador único.**
+--
+-- Dentro do painel, `conceder_operador` exige `super`, e o gatilho
+-- `manter_um_super_ativo` impede tirar o último. Se aquela conta se perder, o
+-- painel não tem mais como criar administrador — e é aqui que se destrava, com
+-- acesso ao servidor, que é uma credencial diferente e num lugar diferente.
+--
+-- Por isso ele roda como `mavia_migrate` e **não** passa por
+-- `admin.conceder_operador`: se passasse, herdaria a exigência de super e
+-- deixaria de ser saída.
+--
+-- **Sem bloco `DO`, de novo.** O psql não interpola `:'variavel'` dentro de
+-- texto entre cifrões — para ele o corpo é opaco. `\gset` e `\if` fazem o
+-- desvio do lado do cliente, onde as variáveis existem.
+SELECT count(*) = 0 AS precisa_conceder
+  FROM concessoes_de_admin
+ WHERE usuario_id = :'uid'::uuid AND revogada_em IS NULL
+\gset
+
+\if :precisa_conceder
+  SELECT admin.conceder(:'uid'::uuid, :'uid'::uuid) AS nova \gset
+  UPDATE concessoes_de_admin SET nivel = :'nivel'::nivel_de_admin WHERE id = :'nova'::uuid;
+\else
+  -- Já era operador: ajusta o nível. Rebaixar o último super é barrado aqui
+  -- pelo mesmo gatilho que barra no painel — a saída de emergência serve para
+  -- **criar** acesso, não para destruir o último que existe.
+  UPDATE concessoes_de_admin SET nivel = :'nivel'::nivel_de_admin
+   WHERE usuario_id = :'uid'::uuid AND revogada_em IS NULL;
+\endif
 
 SELECT count(*) AS operadores_ativos FROM concessoes_de_admin WHERE revogada_em IS NULL;
 

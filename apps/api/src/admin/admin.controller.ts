@@ -84,6 +84,15 @@ const RECUSAS: readonly (readonly [string, string])[] = [
   // uma política que não existe mais.
   ['PRORROGACAO_IMPLAUSIVEL', 'Dias entre 1 e 3650. Acima disso é engano de digitação.'],
   ['JA_E_OPERADOR', 'Essa pessoa já é operadora.'],
+  [
+    'EXIGE_SUPERADMIN',
+    'Só um superadministrador concede ou revoga acesso ao painel.',
+  ],
+  [
+    'SUPER_ATIVO_INSUFICIENTE',
+    'Não dá para tirar o último superadministrador: sem ele, ninguém mais concede ' +
+      'acesso ao painel. Promova outro antes.',
+  ],
   ['NAO_E_OPERADOR', 'Essa pessoa não é operadora.'],
   ['USUARIO_INEXISTENTE', 'Ninguém com esse endereço tem conta. Ela precisa se cadastrar antes.'],
   [
@@ -242,6 +251,9 @@ const zProrrogacao = z.object({
  */
 const zOperador = z.object({
   email: z.string().trim().email().max(320),
+  // `super` cria `super`, e é a saída sancionada do super único: sem ela, o
+  // único caminho para trocar o superadministrador seria o servidor.
+  nivel: z.enum(['operador', 'super']).default('operador'),
 })
 
 /**
@@ -583,6 +595,33 @@ export class AdminController {
   // -------------------------------------------------------------------------
 
   /**
+   * O que **eu** sou no painel.
+   *
+   * A única leitura de `concessoes_de_admin` que o painel faz, e ela é sobre
+   * quem pergunta — exatamente o que a policy `concessao_propria` da `0031`
+   * autoriza. Não há como usá-la para descobrir o nível de outra pessoa: o
+   * `usuario_id` do `WHERE` é o da sessão, e a RLS repete a restrição embaixo.
+   *
+   * Serve para a tela decidir se mostra a seção de operadores. Esconder um
+   * botão não é controle — a função no banco exige `super` de qualquer jeito —,
+   * mas mostrar um botão que sempre recusa é uma interface que mente.
+   */
+  @Get('eu')
+  async euNoPainel(@Req() req: FastifyRequest) {
+    const operador = this.operador(req)
+    return this.traduzindoRecusa(async () =>
+      comAdmin(this.pool, contextoDeOperador(operador), async (c) => {
+        const r = await c.query<{ nivel: string }>(
+          `SELECT nivel FROM concessoes_de_admin
+            WHERE usuario_id = $1 AND revogada_em IS NULL`,
+          [operador],
+        )
+        return { nivel: r.rows[0]?.nivel ?? 'operador' }
+      }),
+    )
+  }
+
+  /**
    * **Não existe rota que liste operadores, e a ausência é a decisão.**
    *
    * A migration `0031` restringe `mavia_admin` a enxergar a **própria**
@@ -624,8 +663,8 @@ export class AdminController {
     return this.traduzindoRecusa(async () =>
       comAdminEscrita(this.poolDeEscrita, contextoDeOperadorEscrita(operador), async (c) => {
         const r = await c.query<{ id_da_concessao: string; usuario: string; ativos: number }>(
-          'SELECT * FROM admin.conceder_operador($1, $2)',
-          [analise.data.email, randomUUID()],
+          'SELECT * FROM admin.conceder_operador($1, $2, $3::nivel_de_admin)',
+          [analise.data.email, randomUUID(), analise.data.nivel],
         )
         return {
           id: r.rows[0]!.id_da_concessao,

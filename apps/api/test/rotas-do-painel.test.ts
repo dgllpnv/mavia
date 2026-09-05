@@ -70,6 +70,7 @@ describe('as rotas do painel estão declaradas, e o boot passou', () => {
       'DELETE /v1/admin/clientes/:tenantId/descontos',
       // Operadores — sem `:tenantId`, como as de preço. **Sem `GET`**: a 0031
       // proíbe enumerar operadores, e sem MFA a razão dela é mais forte.
+      'GET /v1/admin/eu',
       'POST /v1/admin/operadores',
       'DELETE /v1/admin/operadores',
     ]
