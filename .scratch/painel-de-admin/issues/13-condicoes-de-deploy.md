@@ -18,11 +18,29 @@ Reunir as condições que os três revisores classificaram como **bloqueantes de
 
 O raciocínio, na voz do revisor: sem MFA, `/admin` no mesmo host e com o mesmo cookie do produto significa que **um XSS em qualquer tela alcança o painel inteiro**. A allowlist é o único controle do épico que exige do atacante algo que ter a senha não dá.
 
-- Hostname separado (`admin.<domínio>`), com escopo de cookie próprio.
-- Allowlist de IP **ou** mTLS no Traefik, à frente do roteador do painel.
-- **Depende do domínio próprio** — ver `docs/o-que-depende-de-voce.md` §1.
+> **Partida em duas, em 2026-09-05.** A afirmação *"depende do domínio próprio"* valia para uma metade e não para a outra, e mantê-las juntas adiava a barata por causa da cara.
 
-**Aceite:** um E2E que, de fora da allowlist, recebe recusa **antes** de a aplicação ser alcançada — o teste falha se a recusa vier do Nest, porque isso prova que a requisição chegou.
+#### C-6a · Allowlist de IP — ✅ **implementada em 2026-09-05, deploy pendente**
+
+**Não depende do domínio.** O compose já roteia por `Host()`, e o middleware `IPAllowList` é configuração **dinâmica**, declarada por label no nosso próprio container — nada a escrever na configuração do Traefik do EasyPanel.
+
+Desenho, medições e o parecer dos dois revisores em **`docs/superpowers/specs/2026-09-05-allowlist-de-ip-do-painel.md`**. O que importa aqui:
+
+- A regra **não** é `PathPrefix('/v1/admin')`, como o handoff supôs — esse caminho o Traefik nunca vê, porque a API não é publicada. Nem `PathPrefix('/admin') || PathPrefix('/api/v1/admin')`, que foi **contornado contra esta produção** por caixa (`/API/...`) e por normalização (`/api//v1/...`). A regra casa **um segmento igual a `admin`**, insensível à caixa.
+- O roteador do produto **exclui** os mesmos caminhos, para que o controle falhe **fechado** — sem isso, um CIDR mal digitado faz o roteador do painel sumir e o do produto servir `/admin` sem allowlist.
+- mTLS foi descartado por **escopo**, não por qualidade: exige `tls.options`, que é configuração estática do EasyPanel.
+
+**Aceite:** as sondas da §5 do spec, incluindo as negativas por caixa e normalização, e a asserção de **zero linhas no log da API** — que é o critério literal desta condição.
+
+**Ela não fecha a C-6, e não move a DP-32.** Ver abaixo.
+
+#### C-6b · Hostname próprio e escopo de cookie distinto — **aberta, e continua bloqueante**
+
+- Hostname separado (`admin.<domínio>`), com escopo de cookie próprio.
+- **Depende do domínio próprio** — ver `docs/o-que-depende-de-voce.md` §1.
+- **Item obrigatório de conferência:** a allowlist da C-6a só é válida enquanto o Traefik for o primeiro salto TCP. Um CDN à frente a faz **falhar aberta, sem mudar de cor** — e domínio e CDN chegam no mesmo dia.
+
+É esta metade que responde ao XSS do parágrafo acima: o navegador do operador está num IP permitido por construção, e a allowlist é ortogonal a esse caminho.
 
 ### C-7 · Redis: `requirepass` implantado, e a ACL dos cinco prefixos
 

@@ -190,17 +190,115 @@ services:
       # nada.
       traefik.docker.network: easypanel
 
-      traefik.http.routers.mavia.rule: Host(`${DOMINIO:?defina DOMINIO}`)
+      # -----------------------------------------------------------------------
+      # O produto — tudo que **não** é o painel
+      # -----------------------------------------------------------------------
+      # A negação não é estilo: é o que faz a allowlist do painel **falhar
+      # fechada**. Sem ela, os dois roteadores se sobrepõem e o do produto casa
+      # `/admin` também; no dia em que o middleware não puder ser construído —
+      # `IPS_DO_PAINEL` vazia, um CIDR com erro de digitação — o Traefik
+      # **descarta o roteador do painel** em vez de bloquear, e o produto passa
+      # a servir `/admin` sem allowlist nenhuma. O controle não falharia
+      # fechado: ele sumiria, em silêncio, com uma linha de log num Traefik que
+      # não é nosso.
+      #
+      # E o gatilho mais provável desse erro de digitação é justamente o
+      # procedimento de recuperação de lockout, executado por uma pessoa só,
+      # sob pressão, por SSH.
+      #
+      # Com as regras **disjuntas**, se o painel cai ninguém o serve: 404.
+      # Disjunção também torna `priority` desnecessária — não há empate a
+      # desempatar, e uma label a menos é um acoplamento a menos.
+      traefik.http.routers.mavia.rule: 'Host(`${DOMINIO:?defina DOMINIO}`) && !PathRegexp(`(?i)(^|/)admin(/|$)`)'
       traefik.http.routers.mavia.entrypoints: https
       traefik.http.routers.mavia.tls: 'true'
+      # Explícito nos três roteadores, embora o Traefik resolva sozinho hoje: a
+      # dedução por serviço único **só vale enquanto o serviço for único**. No
+      # dia em que este container declarar um segundo `loadbalancer.server.port`,
+      # todo roteador sem `service` é removido da configuração — inclusive o do
+      # produto, e o site inteiro sai do ar por uma label que ninguém ligou ao
+      # sintoma.
+      traefik.http.routers.mavia.service: mavia
       traefik.http.services.mavia.loadbalancer.server.port: '4710'
+
+      # -----------------------------------------------------------------------
+      # O painel — atrás da allowlist de IP (C-6a)
+      # -----------------------------------------------------------------------
+      # A contrapartida que o gate de segurança pediu ao aceitar o adiamento do
+      # MFA. Ver `docs/superpowers/specs/2026-09-05-allowlist-de-ip-do-painel.md`.
+      #
+      # ## Por que a regra é "um segmento chamado `admin`", e não um prefixo
+      #
+      # O caminho óbvio — `PathPrefix('/admin') || PathPrefix('/api/v1/admin')` —
+      # **é contornável, e foi contornado contra esta produção antes de existir
+      # allowlist**. Duas assimetrias entre o Traefik e o Next se somam:
+      #
+      # 1. `PathPrefix` do Traefik é sensível à caixa; o rewrite do Next não é
+      #    (`caseSensitive: false` no `routes-manifest.json`). `/API/v1/admin/eu`
+      #    não casa a regra e ainda assim alcança o controlador — 401 medido.
+      # 2. O Traefik casa o caminho **cru**; quem normaliza `//`, `/./` e
+      #    `/x/../` é o servidor do Next. `/api//v1/admin/eu` também mediu 401.
+      #
+      # Enumerar grafias num prefixo é jogo perdido — some sempre uma. Casar
+      # **um segmento igual a `admin`** é imune às duas: qualquer grafia que o
+      # Next normalize para uma rota de painel tem esse segmento, em qualquer
+      # caixa e sob qualquer ruído de barra.
+      #
+      # O excesso é deliberado e é para o lado seguro: bloqueia também
+      # `/_next/static/chunks/app/admin/*`, que hoje anuncia a forma do painel a
+      # quem quiser ler. Nenhuma rota de produto tem segmento `admin` — as de
+      # topo são `cartoes, categorias, contas, convite, importar, lancamentos,
+      # membros, objetivos, plano, planejamento, relatorios` —, e os segmentos
+      # variáveis são UUID ou token, que não são a palavra `admin`.
+      traefik.http.routers.mavia-painel.rule: 'Host(`${DOMINIO}`) && PathRegexp(`(?i)(^|/)admin(/|$)`)'
+      # Explícito: um roteador sem `entrypoints` liga-se a **todas** as entradas,
+      # e o painel passaria a ser servido em texto claro no `http` em vez de
+      # redirecionado.
+      traefik.http.routers.mavia-painel.entrypoints: https
+      traefik.http.routers.mavia-painel.tls: 'true'
+      traefik.http.routers.mavia-painel.service: mavia
+      traefik.http.routers.mavia-painel.middlewares: mavia-ips-do-painel
+
+      # `sourcerange` e **nada mais**. Sem `ipstrategy`, sem `depth`, sem
+      # `excludedips` — e isto é a decisão de segurança desta seção, não estilo.
+      #
+      # A estratégia padrão compara contra o endereço do **socket**, que não se
+      # forja. Qualquer `ipstrategy` faria o middleware ler o `X-Forwarded-For`
+      # — e a entrada HTTPS deste Traefik roda com
+      # `TRAEFIK_ENTRYPOINTS_HTTPS_FORWARDEDHEADERS_INSECURE=true`, o que
+      # significa que o cabeçalho **vem do cliente**. Uma allowlist que lê um
+      # cabeçalho que o atacante escreve atravessa-se com uma linha de `curl`.
+      #
+      # ⚠️ **Invariante do primeiro salto.** Isto só é válido enquanto o Traefik
+      # for o primeiro salto TCP — hoje é: as portas 80 e 443 são publicadas em
+      # `PublishMode: host`, verificado no serviço Swarm `easypanel-traefik`.
+      # Um CDN ou proxy à frente faz o `RemoteAddr` virar o do CDN e a allowlist
+      # **falha aberta, sem mudar de cor**. Domínio próprio e CDN chegam no
+      # mesmo dia; item obrigatório de conferência na C-6b.
+      #
+      # `:-` e não `-`: com `:-`, variável ausente **e** vazia caem no padrão
+      # fechado. Com `-`, a string vazia sobrescreveria o padrão, o middleware
+      # não se construiria, e cairíamos no modo de falha que a negação do
+      # roteador do produto existe para conter.
+      traefik.http.middlewares.mavia-ips-do-painel.ipallowlist.sourcerange: '${IPS_DO_PAINEL:-127.0.0.1/32}'
 
       # HTTP existe só para mandar embora. O cookie de sessão tem prefixo
       # `__Host-`, que obriga `Secure` — em `http://` o navegador o descarta e
       # ninguém consegue ficar logado. Servir a Mavia sem TLS não é degradação:
       # é o login não funcionar.
+      # **Ele cobre `/admin` por redirecionar tudo**, e é por isso que o painel
+      # não precisa de um par em `http`: um `GET http://.../admin` de origem não
+      # permitida leva 301 antes de qualquer coisa alcançar a aplicação, refaz
+      # em HTTPS e aí encontra a allowlist. Um segundo roteador aqui só trocaria
+      # o 301 por 403, sem ganho, e criaria uma segunda lista de caminhos para
+      # manter em sincronia com a de cima.
+      #
+      # Se um dia esta entrada passar a **servir** algo em vez de redirecionar,
+      # o painel fica descoberto nela. Esta é a linha que precisa disparar o
+      # alarme nesse dia.
       traefik.http.routers.mavia-http.rule: Host(`${DOMINIO}`)
       traefik.http.routers.mavia-http.entrypoints: http
+      traefik.http.routers.mavia-http.service: mavia
       # `@file` porque o middleware é definido pelo provider de arquivo do
       # EasyPanel, e este router vem do provider Docker. Sem o sufixo, o Traefik
       # procura um middleware do próprio provider e não encontra.

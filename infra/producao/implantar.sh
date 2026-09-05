@@ -102,10 +102,73 @@ acrescentar_vazia STRIPE_SECRET_KEY
 acrescentar_vazia STRIPE_WEBHOOK_SECRET
 acrescentar_vazia STRIPE_PUBLISHABLE_KEY
 
+# Chave que nasce com **valor fechado**, e não vazia — é a terceira categoria, e
+# a diferença é de segurança, não de estilo.
+#
+# `acrescentar_vazia` estaria errado aqui por dois motivos. Uma linha
+# `IPS_DO_PAINEL=` lê-se, para quem abre o `.env`, como "sem restrição" — e é o
+# contrário. E a recuperação de lockout (D4 do spec) reescreve esta linha com
+# `sed`; **sem linha, o `sed` não casa nada e falha em silêncio**, deixando o
+# operador convencido de que se liberou.
+#
+# `127.0.0.1/32` é sintaticamente válido e semanticamente inútil pela internet:
+# ele não é alcançável nem a partir do próprio host, porque uma conexão do host
+# para uma porta publicada chega ao container com o endereço do gateway da
+# bridge, não com `127.0.0.1`. Quem tem shell na VPS já tem root — a allowlist
+# nunca teve como defender contra ele.
+acrescentar_linha() {
+  if ! grep -q "^$1=" "$AMBIENTE"; then
+    echo "==> acrescentando $1=$2 a $AMBIENTE"
+    printf '%s=%s\n' "$1" "$2" >> "$AMBIENTE"
+  fi
+}
+acrescentar_linha IPS_DO_PAINEL 127.0.0.1/32
+
 set -a
 # shellcheck disable=SC1090
 . "./$AMBIENTE"
 set +a
+
+# ---------------------------------------------------------------------------
+# 1c · a guarda da allowlist do painel
+# ---------------------------------------------------------------------------
+# **Falhar aqui é barato; falhar no Traefik é falhar aberto.**
+#
+# Um `sourceRange` vazio ou com CIDR malformado impede o Traefik de construir o
+# middleware, e um roteador cuja cadeia de middlewares falhou **não entra na
+# árvore de roteamento** — ele não passa a bloquear, deixa de existir. A
+# negação na regra do roteador do produto (ver o compose) contém isso: o painel
+# vira 404 em vez de ficar aberto. Esta guarda é a segunda camada, e é a que
+# diz **por que** em vez de devolver um 404 que ninguém sabe ler.
+#
+# O formato aceito é uma lista de CIDRs separados por vírgula. Um IP nu —
+# `203.0.113.7` sem `/32` — é o erro mais comum e é recusado aqui: o Traefik
+# também o recusaria, e três linhas de shell no lugar certo poupam a viagem.
+IPS_DO_PAINEL=${IPS_DO_PAINEL:-127.0.0.1/32}
+if ! printf '%s' "$IPS_DO_PAINEL" \
+   | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}(,[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2})*$'; then
+  echo "ERRO: IPS_DO_PAINEL não é uma lista de CIDRs válida: '$IPS_DO_PAINEL'" >&2
+  echo "      Formato: 203.0.113.7/32  ou  203.0.113.7/32,198.51.100.0/24" >&2
+  echo "      Para fechar o painel para todos: 127.0.0.1/32" >&2
+  exit 1
+fi
+# Faixa larga demais é o erro que **passa no aceite e não filtra nada** — e ele
+# tem um caminho conhecido: o operador vê 403 onde esperava 200, conclui que "o
+# IP não está chegando", e alarga a faixa até funcionar. `10.0.0.0/8` libera os
+# vinte e quatro containers vizinhos; `0.0.0.0/0` libera a internet.
+#
+# Não recusamos: `0.0.0.0/0` é o desligamento deliberado do rollback R1, e um
+# script que impede o rollback é pior que o risco. Avisamos alto.
+for faixa in ${IPS_DO_PAINEL//,/ }; do
+  prefixo=${faixa#*/}
+  if [ "$prefixo" -lt 24 ] 2>/dev/null; then
+    echo "  ATENÇÃO: $faixa é uma faixa larga (/$prefixo)." >&2
+    echo "  Se você chegou a ela porque o teste dava 403, o problema não era a" >&2
+    echo "  faixa: confira se o IP do cliente chega ao Traefik. Uma allowlist" >&2
+    echo "  que passa no aceite e não filtra nada é pior do que nenhuma." >&2
+  fi
+done
+echo "==> allowlist do painel: $IPS_DO_PAINEL"
 
 # ---------------------------------------------------------------------------
 # 1b · a configuração do Redis, renderizada do modelo
@@ -250,6 +313,37 @@ else
   echo "  O Traefik demora alguns segundos para ver um container novo." >&2
   echo "  Confira com: docker logs \$(docker ps -qf name=easypanel-traefik)" >&2
 fi
+
+# A quarta asserção: a allowlist do painel (C-6a).
+#
+# Roda a partir do host da VPS, que **não** está na lista — uma conexão do host
+# para uma porta publicada chega ao container com o endereço do gateway da
+# bridge, não com `127.0.0.1`. Então o esperado aqui é recusa.
+#
+# Os três resultados possíveis significam coisas diferentes, e colapsá-los num
+# "ok/erro" esconderia justamente a falha que importa:
+codigo_painel=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${DOMINIO}" \
+                --resolve "${DOMINIO}:443:127.0.0.1" "https://${DOMINIO}/admin" || echo 000)
+case "$codigo_painel" in
+  403)
+    echo "  ok  o painel recusa origem fora da allowlist (403 do Traefik)"
+    ;;
+  404)
+    echo "  ATENÇÃO: /admin devolveu 404." >&2
+    echo "  O roteador do painel não está na árvore — provavelmente o middleware" >&2
+    echo "  não pôde ser construído. Está **fechado**, que é o modo de falha certo," >&2
+    echo "  mas o painel não sobe assim. Confira IPS_DO_PAINEL e os logs do Traefik." >&2
+    ;;
+  200)
+    echo "  ERRO: /admin respondeu 200 de uma origem fora da allowlist." >&2
+    echo "  O controle da C-6a NÃO está no ar. Não ligue o painel" >&2
+    echo "  (provisionar-painel.sh) até isto responder 403." >&2
+    exit 1
+    ;;
+  *)
+    echo "  ATENÇÃO: /admin devolveu $codigo_painel; esperado 403." >&2
+    ;;
+esac
 
 echo
 echo "Mavia em https://${DOMINIO}"
