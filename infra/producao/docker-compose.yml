@@ -122,6 +122,16 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${URL_PUBLICA}/entrar/google
+
+      # Stripe — épico 11. Vazias por enquanto, e é assim que tem de ser: a
+      # `cobranca.controller` recusa o webhook com 400 quando não há segredo,
+      # em vez de aceitar qualquer corpo assinado por ninguém.
+      #
+      # O endpoint a cadastrar no painel da Stripe é
+      # `${URL_PUBLICA}/v1/cobranca/webhook`.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       # Sem `MAVIA_GUARDIAO_SOCKET`: não há agregador bancário ligado, e o
       # guardião só é necessário quando houver (ADR 0003). Toda operação sobre
       # segredo de conexão lança `GuardiaoIndisponivel` — que é a verdade.

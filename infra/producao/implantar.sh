@@ -56,6 +56,13 @@ SMTP_REMETENTE=
 # e senha — ver P-4.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+
+# Sem estas, o checkout responde 503 e o webhook recusa com 400 — que é o
+# comportamento certo, e não uma degradação. Ver docs/o-que-depende-de-voce.md
+# §4 para onde pegar cada uma.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PUBLISHABLE_KEY=
 FIM
   chmod 600 "$AMBIENTE"
 else
@@ -80,6 +87,21 @@ acrescentar_segredo() {
 # consegue falar com ele.
 acrescentar_segredo SENHA_REDIS
 
+# Chaves de configuração acrescentadas depois da primeira instalação. Diferente
+# de `acrescentar_segredo`: estas nascem **vazias**, porque o valor vem de fora
+# e um valor gerado por nós seria uma credencial que não abre nada — e que
+# pareceria configurada.
+acrescentar_vazia() {
+  if ! grep -q "^$1=" "$AMBIENTE"; then
+    echo "==> acrescentando $1= (vazia) a $AMBIENTE"
+    printf '%s=
+' "$1" >> "$AMBIENTE"
+  fi
+}
+acrescentar_vazia STRIPE_SECRET_KEY
+acrescentar_vazia STRIPE_WEBHOOK_SECRET
+acrescentar_vazia STRIPE_PUBLISHABLE_KEY
+
 set -a
 # shellcheck disable=SC1090
 . "./$AMBIENTE"
@@ -96,14 +118,40 @@ set +a
 # (`.gitignore`) e é montado no container em vez de a senha ir na linha de
 # comando, onde `docker inspect` a mostraria.
 echo "==> renderizando redis.conf"
+# O hash de antes: o Redis lê a configuração **uma vez, ao iniciar**, e o
+# `docker compose up -d` não recria um container cuja *definição* não mudou.
+# Editar o modelo e reimplantar deixava o servidor rodando a ACL velha em
+# silêncio — o arquivo novo montado, e nenhum efeito. Custou uma
+# indisponibilidade para descobrir.
+antes=$(md5sum redis.conf 2>/dev/null | cut -d' ' -f1 || echo vazio)
 sed "s|\${SENHA_REDIS}|${SENHA_REDIS}|g" redis.conf.modelo > redis.conf
-chmod 600 redis.conf
+
+# `600` era o reflexo certo e o resultado errado: o `redis-server` roda como
+# `redis` (uid 999) dentro do container, e um arquivo que só o root do host lê
+# faz o container morrer em laço com `can't open config file: Permission
+# denied` — verificado em produção, não deduzido.
+#
+# `400` com dono `999:1000` é mais restrito que os `644` que a correção óbvia
+# usaria: nem o grupo, nem outros, nem o próprio processo do Redis conseguem
+# **escrever** nele. Os números são os da imagem `redis:7-alpine` (`id redis`),
+# e mudam se a imagem mudar — daí estarem aqui, e não num comentário distante.
+chown 999:1000 redis.conf
+chmod 400 redis.conf
+depois=$(md5sum redis.conf | cut -d' ' -f1)
 
 # ---------------------------------------------------------------------------
 # 2 · dados
 # ---------------------------------------------------------------------------
 echo "==> subindo Postgres e Redis"
 docker compose up -d postgres redis
+
+# `restart` e não `up --force-recreate`: recriar perderia o container e, com
+# ele, o tempo de `appendonly` recarregar. Reiniciar relê a configuração e
+# mantém o volume — as sessões ativas e a fila do BullMQ atravessam.
+if [ "$antes" != "$depois" ]; then
+  echo "==> redis.conf mudou; reiniciando o Redis para relê-lo"
+  docker compose restart redis
+fi
 
 echo "==> esperando ficarem saudáveis"
 for _ in $(seq 1 60); do

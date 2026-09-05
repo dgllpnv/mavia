@@ -46,6 +46,28 @@
 # Quem tem a senha do Redis passa a poder ler e escrever as chaves da aplicação
 # — e não a reconfigurar o servidor nem a varrer o keyspace inteiro.
 #
+# ## A primeira versão desta ACL derrubou a API, e vale registrar como
+#
+# Ela concedia `+@read +@write +@keyspace +@connection`, que **parece** o
+# conjunto do que uma aplicação faz. O BullMQ não subiu:
+#
+#     NOPERM User default has no permissions to run the 'info' command
+#
+# `INFO` está em `@dangerous`, e o BullMQ o chama na abertura da fila para
+# conferir a política de `maxmemory`. Três categorias inteiras faltavam junto —
+# `@scripting` (a fila é Lua), `@stream` e `@blocking`.
+#
+# A correção **inverte a construção**: parte de `+@all`, remove `@admin` e
+# `@dangerous`, e devolve nominalmente as quatro coisas que o BullMQ precisa de
+# volta. Enumerar o que se tira é auditável; enumerar o que se dá exigiria
+# conhecer a lista de comandos de uma biblioteca de terceiros, que muda com a
+# versão dela e não com a nossa.
+#
+# **É a mesma armadilha que o parecer de segurança caiu com `tentativas:`, e
+# desta vez o autor fui eu.** Uma mitigação de segurança que quebra o serviço
+# não é uma mitigação — é uma indisponibilidade com boa intenção. O que a
+# defende é subir e olhar, e não ler e concordar.
+#
 # **Isto não é defesa contra quem lê o cofre.** O access token é gravado como
 # JSON em claro (`cofre-de-acesso.ts:59-72`): quem alcança o Redis com a senha
 # lê `{sessaoId, usuarioId}` e pode forjar. A ACL reduz o alcance de uma
@@ -66,4 +88,7 @@ requirepass ${SENHA_REDIS}
 # `default` mantém a senha e perde os comandos perigosos. A aplicação continua
 # usando `default` — criar um segundo usuário exigiria mudar a `REDIS_URL` e o
 # ganho seria marginal frente ao custo de uma credencial a mais para girar.
-user default on >${SENHA_REDIS} ~sess:* ~acessos:* ~oauth:* ~tentativas:* ~bull:* +@read +@write +@keyspace +@connection -@admin -@dangerous
+#
+# A ordem importa: as regras são aplicadas da esquerda para a direita, e o
+# `+info` no fim é o que devolve o comando que `-@dangerous` tinha tirado.
+user default on >${SENHA_REDIS} ~sess:* ~acessos:* ~oauth:* ~tentativas:* ~bull:* +@all -@admin -@dangerous +info +client|setname +client|info +config|get
