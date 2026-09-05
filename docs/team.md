@@ -135,3 +135,29 @@ Agent(validador-financeiro,          "revise as regras monetárias do spec X")
 ```
 
 Os três na **mesma mensagem**, para rodarem concorrentes. Ver `superpowers:dispatching-parallel-agents`.
+
+### Quando o nome do agente não é reconhecido
+
+Acontece, e não é defeito do repositório: **o registro de subagentes é montado no início da sessão**. Uma sessão que começou antes de os arquivos existirem — ou que simplesmente não os carregou — recusa o nome com `Agent type '...' not found`, e **nenhuma edição em disco a convence**: escrever um agente novo, mínimo e válido durante a sessão também é recusado. Isso foi verificado por experimento em 2026-09-05, não deduzido.
+
+Antes de contornar, confira que o problema é esse e não o arquivo:
+
+```bash
+# nome do arquivo tem de bater com o campo `name`
+for f in .claude/agents/*.md; do
+  arq=$(basename "$f" .md); nome=$(sed -n 's/^name: *//p' "$f" | head -1)
+  [ "$arq" = "$nome" ] || echo "DIVERGE: $f"
+done
+```
+
+Bateram todos e o nome continua recusado? Então é a sessão. **A saída não é desistir do time nem fazer o trabalho no lugar dele** — é despachar um `general-purpose` cujo *primeiro comando* é ler a definição de papel:
+
+```
+Agent(general-purpose, "Você é o `revisor-codigo` do projeto Mavia.
+  Primeiro, leia `.claude/agents/revisor-codigo.md` e siga a definição
+  integralmente, incluindo o seu poder de veto. Depois leia CLAUDE.md …")
+```
+
+O papel mora no arquivo, não no registro. O que se perde é a restrição de ferramentas declarada no `tools:` — um `general-purpose` recebe todas —, e por isso **o pedido precisa dizer o que o agente não deve fazer**. Para um revisor: *"não altere código; seu produto é o parecer."* Para um especialista de risco: *"não implemente a correção; nomeie o achado."*
+
+Essa frase não é formalidade. É ela que impede um revisor de consertar o que deveria reprovar — e um achado consertado pelo próprio revisor é um achado que ninguém mais viu.

@@ -828,6 +828,65 @@ export const zBaixaRegistrada = z.object({
 
 export const zTempoConcedido = z.object({ cortesiaAte: z.string() })
 
+// ---------------------------------------------------------------------------
+// Preço e desconto — ADR 0025
+// ---------------------------------------------------------------------------
+
+/**
+ * Uma linha do histórico de preço.
+ *
+ * `valor_centavos` como **string**, como todo dinheiro que atravessa o fio:
+ * `JSON.parse` de um número vira `double`, e um preço que passa por ponto
+ * flutuante no caminho até a tela é o que a regra 1 proíbe.
+ *
+ * `stripe_price_id` é anulável, e é o caso normal hoje — ver a D3 emendada da
+ * ADR 0025. Uma linha sem ele não é meio-preço: é o preço, porque não existe
+ * outro.
+ */
+export const zPrecoVigente = z.object({
+  id: zUuid,
+  plano: z.string(),
+  intervalo: z.enum(['mensal', 'anual']),
+  valor_centavos: z.string(),
+  moeda: z.string(),
+  stripe_price_id: z.string().nullable(),
+  vigente_desde: z.string(),
+  criado_por: zUuid,
+  motivo: z.string(),
+})
+
+export const zPrecoCriado = z.object({
+  id: zUuid,
+  valorAnterior: z.string().nullable(),
+  /** Sempre zero. A tela é obrigada a mostrá-lo — ADR 0025 D2. */
+  assinaturasAfetadas: z.number(),
+})
+
+export const zDescontoDoCliente = z.object({
+  id: zUuid,
+  especie: z.enum(['percentual', 'valor']),
+  pontos_base: z.number().nullable(),
+  valor_centavos: z.string().nullable(),
+  moeda: z.string(),
+  duracao: z.enum(['uma_vez', 'meses', 'sempre']),
+  meses: z.number().nullable(),
+  stripe_coupon_id: z.string().nullable(),
+  motivo: z.string(),
+  concedido_em: z.string(),
+  revogado_em: z.string().nullable(),
+})
+
+export const zDescontoConcedido = z.object({ id: zUuid })
+
+/** O que **eu** sou no painel. Nunca sobre outra pessoa — ver a policy da 0031. */
+export const zEuNoPainel = z.object({ nivel: z.enum(['operador', 'super']) })
+
+export const zOperadorConcedido = z.object({
+  id: zUuid,
+  usuarioId: zUuid,
+  operadoresAtivos: z.number(),
+})
+
 export type EstadoDaAssinatura = z.infer<typeof zEstadoDaAssinatura>
 export type MotivoDeAcesso = z.infer<typeof zMotivoDeAcesso>
 export type MeioDePagamento = z.infer<typeof zMeioDePagamento>
@@ -840,6 +899,12 @@ export type LinhaDoRegistro = z.infer<typeof zLinhaDoRegistro>
 export type ClienteCadastrado = z.infer<typeof zClienteCadastrado>
 export type BaixaRegistrada = z.infer<typeof zBaixaRegistrada>
 export type TempoConcedido = z.infer<typeof zTempoConcedido>
+export type PrecoVigente = z.infer<typeof zPrecoVigente>
+export type PrecoCriado = z.infer<typeof zPrecoCriado>
+export type DescontoDoCliente = z.infer<typeof zDescontoDoCliente>
+export type EuNoPainel = z.infer<typeof zEuNoPainel>
+export type OperadorConcedido = z.infer<typeof zOperadorConcedido>
+export type NivelDeAdmin = EuNoPainel['nivel']
 
 /**
  * As respostas de lista do painel, embrulhadas.
@@ -855,3 +920,5 @@ export const zListaDeContasDoCliente = z.object({ itens: z.array(zContaDoCliente
 export const zListaDeLancamentosDoCliente = z.object({ itens: z.array(zLancamentoDoCliente) })
 export const zListaDeBaixas = z.object({ itens: z.array(zBaixaAnterior) })
 export const zListaDoRegistro = z.object({ itens: z.array(zLinhaDoRegistro) })
+export const zListaDePrecos = z.object({ itens: z.array(zPrecoVigente) })
+export const zListaDeDescontos = z.object({ itens: z.array(zDescontoDoCliente) })
