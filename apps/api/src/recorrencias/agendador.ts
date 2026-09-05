@@ -3,6 +3,7 @@ import type Redis from 'ioredis'
 import type { Pool } from 'pg'
 import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import { materializarRecorrencia } from './materializar.js'
+import { aplicarTrocasAgendadas } from '../cobranca/trocas-agendadas.js'
 
 /**
  * O job que faz o horizonte da recorrência andar sozinho — pendência P-8.
@@ -32,6 +33,19 @@ import { materializarRecorrencia } from './materializar.js'
 const FILA = 'recorrencias'
 const TAREFA = 'materializar-horizonte'
 
+/**
+ * A troca de plano agendada — **P-17**.
+ *
+ * Mora nesta fila, e não numa própria, porque uma fila a mais é um worker a
+ * mais, uma conexão a mais e um lugar a mais onde uma falha passa em silêncio.
+ * As duas tarefas são do sistema, idempotentes, e disputam nada.
+ *
+ * **De hora em hora, como a outra.** A troca aplica no fim do período pago; um
+ * atraso de até sessenta minutos entrega ao cliente uma hora a mais do plano
+ * que ele pagou, e nunca uma hora a menos. O erro cai para o lado certo.
+ */
+const TAREFA_TROCAS = 'aplicar-trocas-agendadas'
+
 export interface Agendador {
   encerrar(): Promise<void>
 }
@@ -52,9 +66,21 @@ export async function agendarMaterializacao(pool: Pool, redis: Redis): Promise<A
     },
   )
 
+  // Minuto 23 e não 7: as duas escrevem em espaços diferentes e não se
+  // atrapalhariam, mas separá-las faz o log de uma hora ruim dizer qual das
+  // duas demorou, sem precisar cruzar horário.
+  await fila.upsertJobScheduler(
+    TAREFA_TROCAS,
+    { pattern: '23 * * * *' },
+    { name: TAREFA_TROCAS, opts: { removeOnComplete: 24, removeOnFail: 48 } },
+  )
+
   const worker = new Worker(
     FILA,
     async (job: Job) => {
+      if (job.name === TAREFA_TROCAS) {
+        return { trocasAplicadas: await aplicarTrocasAgendadas(pool) }
+      }
       if (job.name !== TAREFA) return { criadas: 0 }
 
       // O job atravessa **todos** os espaços: ele é do sistema, não de um
@@ -85,7 +111,10 @@ export async function agendarMaterializacao(pool: Pool, redis: Redis): Promise<A
   // Falha de job não pode derrubar o processo, e também não pode passar em
   // silêncio: um horizonte que parou de andar é um extrato que some.
   worker.on('failed', (job, erro) => {
-    console.error(`[recorrencias] job ${job?.id ?? '?'} falhou:`, erro.message)
+    console.error(
+      `[recorrencias] job ${job?.name ?? '?'} #${job?.id ?? '?'} falhou:`,
+      erro.message,
+    )
   })
 
   return {

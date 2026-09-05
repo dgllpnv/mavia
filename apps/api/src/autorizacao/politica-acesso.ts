@@ -133,6 +133,10 @@ export const MATRIZ: ReadonlyMap<string, RegraDeAcesso> = new Map<string, RegraD
   ['GET /v1/cobranca', { papeis: TODOS }],
   // Trocar de plano é `billing`, e billing é do dono (matriz §2.3).
   ['POST /v1/cobranca/plano', { papeis: SO_DONO }],
+  // Desistir da troca agendada é o mesmo poder, e por isso o mesmo papel:
+  // quem pode rebaixar o plano pode desfazer o rebaixamento. Dar a um papel
+  // menor o direito de cancelar deixaria um membro anular a decisão do dono.
+  ['DELETE /v1/cobranca/plano/agendado', { papeis: SO_DONO }],
 
   ['GET /v1/alertas', { papeis: TODOS }],
 

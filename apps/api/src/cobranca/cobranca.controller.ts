@@ -3,9 +3,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
+  NotFoundException,
   Post,
   Req,
   UseGuards,
@@ -105,13 +107,22 @@ export class CobrancaController {
    *
    * Sem a Stripe, esta rota registra a intenção e move o estado local. A
    * cobrança em si é a P-14.
+   *
+   * ## P-17 — o que esta rota prometia e não cumpria
+   *
+   * O ramo do downgrade devolvia `{ aplicadoEm: 'fim_do_periodo' }` e **não
+   * escrevia nada**. O comentário dizia "registra a intenção"; a intenção não
+   * ia a lugar nenhum, e a data chegava sem que nada acontecesse. Nunca.
+   *
+   * Agora ela grava em `trocas_agendadas`, devolve a data que gravou, e o job
+   * de `trocas-agendadas.ts` a cumpre.
    */
   @Post('plano')
   @HttpCode(200)
   async trocarPlano(
     @Req() req: FastifyRequest,
     @Body() corpo: unknown,
-  ): Promise<{ aplicadoEm: 'agora' | 'fim_do_periodo'; plano: string }> {
+  ): Promise<{ aplicadoEm: 'agora' | 'fim_do_periodo'; plano: string; aplicadoEmData?: string }> {
     const ctx = this.contexto(req)
 
     const analise = z
@@ -125,12 +136,61 @@ export class CobrancaController {
 
     return comTenant(this.pool, ctx, async (c) => {
       const atual = await lerAssinatura(c, ctx.tenantId)
-      const subindo = ORDEM[d.plano] > ORDEM[atual.plano]
+      // Só `descendo` importa: subir e ficar no mesmo lugar seguem o mesmo
+      // caminho — cancelar a descida agendada e aplicar na hora.
+      const descendo = ORDEM[d.plano] < ORDEM[atual.plano]
 
-      if (!subindo && atual.estado !== 'teste') {
-        // Downgrade não corta no meio. Registra a intenção para o fim do
-        // período — e a tela diz a data exata.
-        return { aplicadoEm: 'fim_do_periodo' as const, plano: d.plano }
+      if (descendo && atual.estado !== 'teste') {
+        // Downgrade não corta no meio: o cliente comprou o período inteiro.
+        //
+        // `atual.periodoFim` **já é** `fimEfetivo(periodo_fim, cortesia_ate)`.
+        // Usar `periodo_fim` cru rebaixaria antes do fim de uma cortesia que
+        // alguém concedeu de propósito — o achado F-12 num caminho novo.
+        //
+        // A data é **congelada aqui**. Recalculá-la no job leria um
+        // `periodo_fim` que o webhook move a cada fatura, e a troca andaria
+        // para frente sozinha, mês após mês, sem nunca chegar.
+        // Pedir de novo substitui: fecha a pendente e agenda a nova. O índice
+        // parcial recusaria a segunda linha de qualquer forma — cancelar antes
+        // é o que transforma a recusa do banco numa substituição intencional.
+        await this.cancelarPendente(c, ctx.tenantId)
+
+        const nova = await c.query<{ aplicar_em: Date }>(
+          `INSERT INTO trocas_agendadas
+             (tenant_id, plano, intervalo, plano_anterior, intervalo_anterior,
+              aplicar_em, pedida_por)
+           VALUES ($1, $2, $3::intervalo_de_cobranca, $4, $5::intervalo_de_cobranca, $6, $7)
+           RETURNING aplicar_em`,
+          [
+            ctx.tenantId,
+            d.plano,
+            d.intervalo,
+            atual.plano,
+            atual.intervalo,
+            atual.periodoFim,
+            ctx.usuarioId,
+          ],
+        )
+        return {
+          aplicadoEm: 'fim_do_periodo' as const,
+          plano: d.plano,
+          aplicadoEmData: nova.rows[0]?.aplicar_em.toISOString() ?? atual.periodoFim,
+        }
+      }
+
+      // Subir de plano — ou voltar para o que já se tem — **desfaz a descida
+      // agendada**. Sem isto, o cliente que se arrepende e sobe é derrubado de
+      // volta pelo job no fim do período, desfazendo uma compra que ele fez
+      // depois. O plano some sozinho e ninguém consegue explicar por quê.
+      await this.cancelarPendente(c, ctx.tenantId)
+
+      if (d.plano === atual.plano && d.intervalo === atual.intervalo) {
+        // Nada a mudar: era só o cancelamento acima. **Comparar plano e
+        // intervalo**, e não `!subindo` — a primeira versão usava `!subindo`,
+        // que também é verdade para uma descida legítima em `teste`, e o
+        // espaço em teste saía daqui respondendo "agora" sem escrever nada.
+        // O mesmo defeito P-17, reintroduzido três linhas abaixo da correção.
+        return { aplicadoEm: 'agora' as const, plano: d.plano }
       }
 
       await c.query(
@@ -146,6 +206,45 @@ export class CobrancaController {
       )
       return { aplicadoEm: 'agora' as const, plano: d.plano }
     })
+  }
+
+  /**
+   * Desistir da troca agendada.
+   *
+   * Sem id no caminho: cancela **a pendente do meu espaço**, e o índice parcial
+   * garante que há no máximo uma. Um id na URL seria uma segunda fonte de
+   * verdade sobre de quem é a linha — exatamente o veto 10 do `sistema.md`.
+   */
+  @Delete('plano/agendado')
+  @HttpCode(200)
+  async cancelarTrocaAgendada(@Req() req: FastifyRequest): Promise<{ cancelada: true }> {
+    const ctx = this.contexto(req)
+    return comTenant(this.pool, ctx, async (c) => {
+      const linhas = await this.cancelarPendente(c, ctx.tenantId)
+      if (linhas === 0) throw new NotFoundException('Não há troca de plano agendada.')
+      return { cancelada: true as const }
+    })
+  }
+
+  /**
+   * Cancela a troca pendente do espaço, se houver. Devolve quantas fechou.
+   *
+   * `cancelada_em` e nunca `DELETE` — regra 17. "Ele já tinha pedido para
+   * descer antes?" é a primeira pergunta de qualquer conversa de cancelamento,
+   * e uma linha apagada não responde.
+   *
+   * O `WHERE` repete `tenant_id` mesmo debaixo da RLS. Não é redundância
+   * defensiva: o `id` não entra aqui, então sem o tenant o `UPDATE` alcançaria
+   * a linha pendente de quem estivesse na mesma transação. A RLS é a rede
+   * embaixo, e a rede não é o piso.
+   */
+  private async cancelarPendente(c: PoolClient, tenantId: string): Promise<number> {
+    const r = await c.query(
+      `UPDATE trocas_agendadas SET cancelada_em = now()
+        WHERE tenant_id = $1 AND aplicada_em IS NULL AND cancelada_em IS NULL`,
+      [tenantId],
+    )
+    return r.rowCount ?? 0
   }
 }
 

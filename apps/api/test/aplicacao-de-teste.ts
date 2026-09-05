@@ -10,6 +10,7 @@ import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
 import { EstadoDoOauth } from '../src/redis/estado-do-oauth.js'
 import type { Mensageiro, Mensagem } from '../src/mensageiro/mensageiro.js'
 import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTeste } from './postgres.js'
+import { aplicarTrocasAgendadas } from '../src/cobranca/trocas-agendadas.js'
 
 /**
  * Sobe a aplicação HTTP real sobre um Postgres real, com dois tenants semeados
@@ -48,6 +49,16 @@ export interface ApiDeTeste {
   }): ReturnType<NestFastifyApplication['inject']>
   /** Abre uma sessão real para um usuário fora dos dois da semente. */
   abrirSessao(usuarioId: string): Promise<void>
+  /**
+   * Roda o job da troca de plano agendada uma vez, e devolve quantas aplicou.
+   *
+   * Exposto como função, e não pelo BullMQ: o que se quer provar é *quando* a
+   * troca acontece e que rodar duas vezes aplica uma. Fazer isso pela fila
+   * provaria que a fila entrega — que é problema do BullMQ, não nosso — e
+   * traria a espera não-determinística junto. O agendamento em si é uma linha
+   * de `upsertJobScheduler`, e ela não é onde os defeitos moram.
+   */
+  aplicarTrocasAgendadas(): Promise<number>
   encerrar(): Promise<void>
 }
 
@@ -152,6 +163,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
         ...(opcoes.corpo !== undefined ? { payload: opcoes.corpo as object } : {}),
       })
     },
+    aplicarTrocasAgendadas: () => aplicarTrocasAgendadas(pool),
     async encerrar() {
       await app.close()
       await pool.end()

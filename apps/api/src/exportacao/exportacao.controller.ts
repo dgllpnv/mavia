@@ -155,6 +155,23 @@ const CONJUNTOS = [
               graca_ate, criado_em, atualizado_em`,
   },
   {
+    // A troca de plano agendada — P-17.
+    //
+    // Sai **inteira**, e `pedida_por` junto: diferente de `registrado_por` em
+    // `pagamentos_manuais`, aqui o id é de um usuário do próprio espaço. Num
+    // espaço compartilhado, "quem pediu para rebaixar o plano" é exatamente a
+    // pergunta que o titular tem direito de responder — e `usuarios` sai no
+    // mesmo arquivo, então o id resolve para uma pessoa em vez de ficar opaco.
+    //
+    // As encerradas saem também. Uma troca cancelada é o registro de uma
+    // decisão que foi tomada e desfeita, e omiti-la entregaria um histórico
+    // que afirma que ela nunca existiu.
+    nome: 'trocas_agendadas',
+    tabela: 'trocas_agendadas',
+    colunas: `id, plano, intervalo, plano_anterior, intervalo_anterior, aplicar_em,
+              pedida_por, pedida_em, avisada_em, aplicada_em, cancelada_em`,
+  },
+  {
     // **Sai, e sem `registrado_por`** — achado FC-4.
     //
     // A tabela estava classificada em `EXPORTADA_EM_PARTE` e **não estava em
