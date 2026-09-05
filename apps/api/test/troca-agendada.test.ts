@@ -295,3 +295,98 @@ describe('o isolamento entre espaços', () => {
     expect(doB[0]?.cancelada_em).toBeNull()
   })
 })
+
+describe('o aviso de sete dias', () => {
+  it('**avisa quem está a menos de sete dias, com data, planos e preço novo**', async () => {
+    await assinaturaEm('negocio', { periodoFim: '2026-12-01T03:00:00Z' })
+    await pedir('POST', '/v1/cobranca/plano', { plano: 'pessoal' })
+    await api.banco.cliente.query(
+      `UPDATE trocas_agendadas SET aplicar_em = now() + interval '3 days'`,
+    )
+
+    expect(await api.avisarTrocasProximas()).toBe(1)
+
+    const msg = api.caixaDeEntrada.at(-1)
+    expect(msg?.assunto).toMatch(/muda em \d{2}\/\d{2}\/\d{4}/)
+    expect(msg?.corpo).toContain('Mavia Negócio')
+    expect(msg?.corpo).toContain('Mavia Pessoal')
+    // DP-41: o Pessoal mensal é R$ 35,00. O preço sai do catálogo, não do texto.
+    expect(msg?.corpo).toContain('R$ 35,00')
+    expect((await trocas())[0]?.avisada_em).not.toBeNull()
+  })
+
+  it('não avisa quem ainda está longe', async () => {
+    await assinaturaEm('negocio', { periodoFim: '2026-12-01T03:00:00Z' })
+    await pedir('POST', '/v1/cobranca/plano', { plano: 'pessoal' })
+    await api.banco.cliente.query(
+      `UPDATE trocas_agendadas SET aplicar_em = now() + interval '30 days'`,
+    )
+
+    expect(await api.avisarTrocasProximas()).toBe(0)
+  })
+
+  it('**avisa uma vez, e não a cada hora**', async () => {
+    // Um cliente que recebe cinco vezes "seu plano vai mudar" liga achando que
+    // pediu cinco trocas — e ignora o aviso seguinte, que é o que importa.
+    await assinaturaEm('negocio', { periodoFim: '2026-12-01T03:00:00Z' })
+    await pedir('POST', '/v1/cobranca/plano', { plano: 'pessoal' })
+    await api.banco.cliente.query(
+      `UPDATE trocas_agendadas SET aplicar_em = now() + interval '3 days'`,
+    )
+
+    expect(await api.avisarTrocasProximas()).toBe(1)
+    expect(await api.avisarTrocasProximas()).toBe(0)
+    expect(await api.avisarTrocasProximas()).toBe(0)
+  })
+
+  it('não avisa sobre troca cancelada', async () => {
+    await assinaturaEm('negocio', { periodoFim: '2026-12-01T03:00:00Z' })
+    await pedir('POST', '/v1/cobranca/plano', { plano: 'pessoal' })
+    await pedir('DELETE', '/v1/cobranca/plano/agendado')
+    await api.banco.cliente.query(
+      `UPDATE trocas_agendadas SET aplicar_em = now() + interval '3 days'`,
+    )
+
+    expect(await api.avisarTrocasProximas()).toBe(0)
+  })
+
+  it('**a data no aviso é a de São Paulo, e não a de UTC**', async () => {
+    // Um instante às 02:00Z é 23:00 do **dia anterior** em São Paulo.
+    // Formatar em UTC erraria o dia inteiro numa mensagem cuja única
+    // informação é a data.
+    //
+    // A data é calculada e não literal: a janela do aviso é `now() + 7 dias`,
+    // e uma data fixa no futuro sairia dela conforme o calendário andasse. A
+    // primeira versão deste teste usou `2026-12-01` e passou por engano — a
+    // troca **não** foi avisada, e a asserção leu uma mensagem que outro teste
+    // tinha deixado na caixa. Daí `expect(avisados).toBe(1)` vir antes.
+    await assinaturaEm('negocio', { periodoFim: '2026-12-01T03:00:00Z' })
+    await pedir('POST', '/v1/cobranca/plano', { plano: 'pessoal' })
+    await api.banco.cliente.query(
+      `UPDATE trocas_agendadas
+          SET aplicar_em = ((now() + interval '3 days')::date + time '02:00') AT TIME ZONE 'UTC'`,
+    )
+
+    const quando = (await trocas())[0]?.aplicar_em
+    if (!quando) throw new Error('a troca sumiu')
+    const emSp = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(quando)
+    const emUtc = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'UTC',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(quando)
+    // Se as duas coincidissem, o teste não distinguiria nada.
+    expect(emSp).not.toBe(emUtc)
+
+    expect(await api.avisarTrocasProximas()).toBe(1)
+
+    expect(api.caixaDeEntrada.at(-1)?.assunto).toContain(emSp)
+    expect(api.caixaDeEntrada.at(-1)?.assunto).not.toContain(emUtc)
+  })
+})

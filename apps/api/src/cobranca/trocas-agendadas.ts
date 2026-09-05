@@ -1,5 +1,8 @@
 import type { Pool } from 'pg'
+import { plano, preco, valorEmTexto, type Intervalo } from '@mavia/domain'
 import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
+import type { Mensageiro } from '../mensageiro/mensageiro.js'
+import { trocaDePlanoEmSeteDias } from '../mensageiro/mensagens.js'
 
 /**
  * A metade do P-17 que cumpre a promessa.
@@ -81,40 +84,98 @@ export async function aplicarTrocasAgendadas(pool: Pool): Promise<number> {
 }
 
 /**
- * Marca como avisadas as trocas a menos de sete dias, devolvendo quem avisar.
+ * Avisa quem tem uma troca a menos de sete dias. Devolve quantos foram avisados.
  *
- * **Marca antes de o e-mail sair, e é deliberado.** O contrário — enviar e
- * depois marcar — repete o aviso a cada execução até a marca pegar, e um
- * cliente que recebe o mesmo "seu plano vai mudar" cinco vezes liga achando que
- * pediu cinco trocas. Avisar de menos é recuperável por suporte; avisar demais
- * destrói a confiança no próprio aviso.
+ * ## Marca antes de enviar, e desmarca se o envio falhar
+ *
+ * Três desenhos possíveis, e os dois óbvios são piores:
+ *
+ * - **Enviar e depois marcar** repete o aviso a cada hora até a marca pegar.
+ *   Um cliente que recebe cinco vezes "seu plano vai mudar" liga achando que
+ *   pediu cinco trocas — e o aviso seguinte, o que importa, ele já ignora.
+ * - **Marcar e não desmarcar** perde o aviso para sempre num SMTP fora do ar
+ *   por dez minutos. A pessoa é rebaixada sem nunca ter sido avisada, que é
+ *   metade do defeito P-17 de volta.
+ *
+ * O terceiro é estritamente melhor que os dois: marca, envia, e **desfaz a
+ * marca se o envio levantar**. No caminho normal, uma vez só. Numa falha
+ * transitória, a próxima execução tenta de novo. A única janela perdida é
+ * cair entre o envio bem-sucedido e o retorno — e ali a marca fica, que é o
+ * lado certo para errar.
+ *
+ * ## Sem SMTP, não marca nada
+ *
+ * A saída antecipada existe para que uma instalação sem e-mail configurado não
+ * queime os avisos contra um mensageiro que sempre levanta. Ela também é o que
+ * faz o desenvolvimento local não precisar de SMTP para exercitar o resto.
  */
-export async function marcarTrocasAvisadas(
-  pool: Pool,
-): Promise<{ tenantId: string; trocaId: string; plano: string; aplicarEm: Date }[]> {
+export async function avisarTrocasProximas(pool: Pool, mensageiro: Mensageiro): Promise<number> {
+  if (!mensageiro.configurado) return 0
+
   const proximas = await pool.query<LinhaDoJob>('SELECT * FROM jobs.trocas_a_avisar()')
 
-  const avisos: { tenantId: string; trocaId: string; plano: string; aplicarEm: Date }[] = []
+  let avisados = 0
   for (const linha of proximas.rows) {
     const ctx = contextoDoTenant(linha.pedida_por, linha.tenant_id)
+
     const marcada = await comTenant(pool, ctx, (c) =>
-      c.query<{ plano: string; aplicar_em: Date }>(
-        `UPDATE trocas_agendadas
+      c.query<{ plano: string; plano_anterior: string; intervalo: Intervalo; aplicar_em: Date; email: string }>(
+        `UPDATE trocas_agendadas t
             SET avisada_em = now()
-          WHERE id = $1 AND avisada_em IS NULL AND aplicada_em IS NULL AND cancelada_em IS NULL
-        RETURNING plano, aplicar_em`,
+          FROM usuarios u
+          WHERE t.id = $1 AND u.id = t.pedida_por
+            AND t.avisada_em IS NULL AND t.aplicada_em IS NULL AND t.cancelada_em IS NULL
+        RETURNING t.plano, t.plano_anterior, t.intervalo, t.aplicar_em, u.email`,
         [linha.troca_id],
       ),
     )
     const l = marcada.rows[0]
-    if (l) {
-      avisos.push({
-        tenantId: linha.tenant_id,
-        trocaId: linha.troca_id,
-        plano: l.plano,
-        aplicarEm: l.aplicar_em,
-      })
+    if (!l) continue
+
+    const destino = plano(l.plano)
+    const origem = plano(l.plano_anterior)
+    if (!destino || !origem) continue
+
+    try {
+      await mensageiro.enviar(
+        trocaDePlanoEmSeteDias(l.email, {
+          deNome: origem.nome,
+          paraNome: destino.nome,
+          precoNovo: `${valorEmTexto(preco(destino.codigo, l.intervalo))} por ${l.intervalo === 'anual' ? 'ano' : 'mês'}`,
+          quando: emSaoPaulo(l.aplicar_em),
+        }),
+      )
+      avisados += 1
+    } catch (erro) {
+      // Desfaz a marca para que a próxima execução tente de novo. Sem `await`
+      // dentro de outro `catch`: se **esta** escrita falhar, o aviso fica
+      // marcado e perdido — e é o menor dos males, porque um banco que recusa
+      // um `UPDATE` de uma coluna é um problema maior que um e-mail a menos.
+      await comTenant(pool, ctx, (c) =>
+        c.query('UPDATE trocas_agendadas SET avisada_em = NULL WHERE id = $1', [linha.troca_id]),
+      )
+      console.error(
+        `[trocas] aviso da troca ${linha.troca_id} falhou, marca desfeita:`,
+        (erro as Error).message,
+      )
     }
   }
-  return avisos
+  return avisados
+}
+
+/**
+ * A data como a pessoa a lê — **em `America/Sao_Paulo`**, nunca em UTC.
+ *
+ * `aplicar_em` é um instante UTC, e uma troca marcada para as 03:00Z de 01/12 é
+ * 00:00 do dia 1º em São Paulo. Formatar em UTC diria "01/12" por sorte; para
+ * uma troca das 02:00Z, diria o dia errado. Regra 7: UTC no banco, fuso do
+ * usuário na tela — e o e-mail é tela.
+ */
+function emSaoPaulo(quando: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(quando)
 }

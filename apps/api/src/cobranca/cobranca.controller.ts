@@ -93,9 +93,40 @@ export class CobrancaController {
    * fiscal — e nenhum dos três está nesta resposta.
    */
   @Get()
-  async ver(@Req() req: FastifyRequest): Promise<Assinatura> {
+  async ver(
+    @Req() req: FastifyRequest,
+  ): Promise<Assinatura & { trocaAgendada: TrocaAgendada | null }> {
     const ctx = this.contexto(req)
-    return comTenant(this.pool, ctx, (c) => lerAssinatura(c, ctx.tenantId))
+    return comTenant(this.pool, ctx, async (c) => {
+      // A troca agendada é lida **aqui**, e não dentro de `lerAssinatura`.
+      // Aquela função é chamada pelo guardião de cota em toda escrita; uma
+      // consulta a mais ali custaria em cada lançamento criado, para responder
+      // uma pergunta que só esta tela faz.
+      const assinatura = await lerAssinatura(c, ctx.tenantId)
+      const agendada = await c.query<{ plano: string; intervalo: Intervalo; aplicar_em: Date }>(
+        `SELECT plano, intervalo, aplicar_em FROM trocas_agendadas
+          WHERE tenant_id = $1 AND aplicada_em IS NULL AND cancelada_em IS NULL`,
+        [ctx.tenantId],
+      )
+      const l = agendada.rows[0]
+      return {
+        ...assinatura,
+        trocaAgendada: l
+          ? {
+              plano: l.plano,
+              intervalo: l.intervalo,
+              aplicarEm: l.aplicar_em.toISOString(),
+              // O preço do destino sai daqui e não da tela: é o mesmo catálogo
+              // dos dois lados, e duplicar a leitura é duplicar a chance de
+              // divergirem no dia em que um preço mudar.
+              precoCentavos: preco(
+                planoDoCatalogo(l.plano)?.codigo ?? 'pessoal',
+                l.intervalo,
+              ).centavos.toString(),
+            }
+          : null,
+      }
+    })
   }
 
   /**
@@ -398,6 +429,14 @@ const EVENTOS: Readonly<Record<string, EventoDaAssinatura>> = {
   'invoice.payment_succeeded': 'pagamento_recuperado',
   'invoice.payment_failed': 'pagamento_falhou',
   'customer.subscription.deleted': 'cancelou',
+}
+
+/** A troca que o cliente pediu e ainda não aconteceu — P-17. */
+export interface TrocaAgendada {
+  readonly plano: string
+  readonly intervalo: Intervalo
+  readonly aplicarEm: string
+  readonly precoCentavos: string
 }
 
 const ORDEM: Record<CodigoDoPlano, number> = { pessoal: 1, familia: 2, negocio: 3 }

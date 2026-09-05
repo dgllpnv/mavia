@@ -6,6 +6,7 @@ import { CofreDeAcesso } from './redis/cofre-de-acesso.js'
 import { LimiteDeTentativas } from './redis/limite-de-tentativas.js'
 import { EstadoDoOauth } from './redis/estado-do-oauth.js'
 import { agendarMaterializacao } from './recorrencias/agendador.js'
+import { MENSAGEIRO, type Mensageiro } from './mensageiro/mensageiro.js'
 
 /**
  * Ponto de entrada do processo `http`.
@@ -92,8 +93,13 @@ async function principal(): Promise<void> {
     poolDeEscrita,
   )
 
-  // O horizonte da recorrência passa a andar sozinho — pendência P-8.
-  const agendador = await agendarMaterializacao(pool, redis)
+  // O horizonte da recorrência passa a andar sozinho — pendência P-8; e a
+  // troca de plano agendada é aplicada e avisada — P-17.
+  //
+  // O mensageiro sai do container do Nest em vez de ser construído de novo: são
+  // duas conexões SMTP para o mesmo servidor, e a segunda leria o ambiente uma
+  // segunda vez — duas respostas possíveis para "há e-mail configurado?".
+  const agendador = await agendarMaterializacao(pool, redis, app.get<Mensageiro>(MENSAGEIRO))
 
   // Bloco 47xx, longe de 80 e 8080 — ver infra/README.md.
   const porta = Number(process.env['PORT'] ?? 4711)

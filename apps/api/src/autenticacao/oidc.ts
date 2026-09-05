@@ -144,7 +144,29 @@ export async function trocarCodigo(
     signal: AbortSignal.timeout(10_000),
   })
 
-  if (!resposta.ok) throw new EntradaFederadaInvalida(`troca recusada: ${resposta.status}`)
+  if (!resposta.ok) {
+    // **O corpo entra na mensagem, e o corpo é seguro.**
+    //
+    // A versão anterior dizia só `troca recusada: 400` — que é a informação
+    // inútil de um erro: diz que falhou e não diz nada sobre o quê. Um 400 do
+    // Google pode ser `invalid_client` (segredo errado), `invalid_grant`
+    // (código reusado, expirado, ou `code_verifier` que não bate) ou
+    // `redirect_uri_mismatch`, e as três correções são diferentes. Sem o corpo,
+    // a única saída é adivinhar em produção.
+    //
+    // A regra 20 proíbe PII e valor em log. Não há nem um nem outro aqui: a
+    // resposta de erro do endpoint de token do Google é `{"error": "...",
+    // "error_description": "..."}`, dois campos de diagnóstico. **O código e o
+    // segredo não voltam na resposta** — só foram enviados —, então nada do que
+    // se lê aqui é credencial.
+    //
+    // O corte em 300 é contra um corpo inesperado: um proxy no caminho pode
+    // devolver uma página inteira de HTML, e ela não ajuda ninguém no log.
+    const detalhe = await resposta.text().catch(() => '')
+    throw new EntradaFederadaInvalida(
+      `troca recusada: ${resposta.status} ${detalhe.slice(0, 300)}`,
+    )
+  }
 
   const dados = (await resposta.json()) as { id_token?: unknown }
   if (typeof dados.id_token !== 'string') throw new EntradaFederadaInvalida('sem id_token')

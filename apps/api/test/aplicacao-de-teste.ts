@@ -10,7 +10,7 @@ import { LimiteDeTentativas } from '../src/redis/limite-de-tentativas.js'
 import { EstadoDoOauth } from '../src/redis/estado-do-oauth.js'
 import type { Mensageiro, Mensagem } from '../src/mensageiro/mensageiro.js'
 import { semearDoisTenants, subirPostgres, USUARIO_A, USUARIO_B, type BancoDeTeste } from './postgres.js'
-import { aplicarTrocasAgendadas } from '../src/cobranca/trocas-agendadas.js'
+import { aplicarTrocasAgendadas, avisarTrocasProximas } from '../src/cobranca/trocas-agendadas.js'
 
 /**
  * Sobe a aplicação HTTP real sobre um Postgres real, com dois tenants semeados
@@ -59,6 +59,8 @@ export interface ApiDeTeste {
    * de `upsertJobScheduler`, e ela não é onde os defeitos moram.
    */
   aplicarTrocasAgendadas(): Promise<number>
+  /** Idem para o aviso de sete dias. As mensagens caem em `caixaDeEntrada`. */
+  avisarTrocasProximas(): Promise<number>
   encerrar(): Promise<void>
 }
 
@@ -164,6 +166,7 @@ export async function subirApi(): Promise<ApiDeTeste> {
       })
     },
     aplicarTrocasAgendadas: () => aplicarTrocasAgendadas(pool),
+    avisarTrocasProximas: () => avisarTrocasProximas(pool, mensageiro),
     async encerrar() {
       await app.close()
       await pool.end()

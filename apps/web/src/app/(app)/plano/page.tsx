@@ -46,6 +46,17 @@ export default function Plano() {
     onError: (e) => setErro(e instanceof ErroDaApi ? e.message : 'Não foi possível trocar.'),
   })
 
+  const cancelar = useMutation({
+    mutationFn: () =>
+      chamar<{ cancelada: true }>('/cobranca/plano/agendado', {
+        metodo: 'DELETE',
+        tenantId: espaco!.id,
+      }),
+    onSuccess: () => void fila.invalidateQueries({ queryKey: ['cobranca'] }),
+    onError: (e) =>
+      setErro(e instanceof ErroDaApi ? e.message : 'Não foi possível cancelar a troca.'),
+  })
+
   const a = assinatura.data
   const ehDono = espaco?.papel === 'proprietario'
 
@@ -78,7 +89,14 @@ export default function Plano() {
             onChange={(e) => setIntervalo(e.target.value as typeof intervalo)}
           >
             <option value="mensal">mensal</option>
-            <option value="anual">anual — dois meses grátis</option>
+            {/*
+              "dois meses grátis" era verdade sob a DP-27, quando o anual era
+              exatamente dez mensalidades. A DP-41 desfez a relação — os
+              descontos são 52,4%, 25,9% e 27,5%, três números diferentes — e o
+              rótulo passou a prometer um desconto que nenhum plano pratica.
+              O cartão mostra o valor; o seletor não precisa adjetivá-lo.
+            */}
+            <option value="anual">anual</option>
           </select>
         </label>
       </div>
@@ -136,12 +154,16 @@ export default function Plano() {
         })}
       </div>
 
-      {trocar.data?.aplicadoEm === 'fim_do_periodo' && a && (
-        <p className="mt-16 max-w-[70ch] text-corpo text-ink-2">
-          A troca vale a partir de {new Date(a.periodoFim).toLocaleDateString('pt-BR')}. Você
-          comprou este período inteiro, e ele continua sendo seu — descer de
-          plano no meio seria vender doze meses e entregar sete.
-        </p>
+      {a?.trocaAgendada && (
+        <TrocaMarcada
+          troca={a.trocaAgendada}
+          podeCancelar={ehDono}
+          cancelando={cancelar.isPending}
+          aoCancelar={() => {
+            setErro(null)
+            cancelar.mutate()
+          }}
+        />
       )}
 
       {!ehDono && (
@@ -251,4 +273,69 @@ interface Assinatura {
   readonly podeEscrever: boolean
   readonly cotas: { pessoas: number; espacos: number; anexosBytes: number; conexoes: number }
   readonly uso: { pessoas: number; espacos: number }
+  readonly trocaAgendada: TrocaAgendada | null
+}
+
+interface TrocaAgendada {
+  readonly plano: CodigoDoPlano
+  readonly intervalo: 'mensal' | 'anual'
+  readonly aplicarEm: string
+  readonly precoCentavos: string
+}
+
+/**
+ * A troca que já foi pedida e ainda não aconteceu — **P-17**.
+ *
+ * ## Por que ela é uma faixa e não um cartão
+ *
+ * A auditoria do `design.md` §5 pede que nem toda informação esteja dentro de
+ * um card, e esta é a informação certa para ficar de fora: ela não é uma coisa
+ * a mais na lista de coisas da tela — é uma **condição** que muda o significado
+ * de tudo o que está abaixo dela. Os cartões de plano dizem "seu plano atual"; a
+ * faixa é o que explica que esse "atual" tem prazo.
+ *
+ * ## A data é a única coisa em destaque
+ *
+ * Não há ícone, não há cor de alerta, não há contagem regressiva. A troca foi
+ * **pedida pela pessoa**; tratá-la como problema é retenção disfarçada de
+ * cuidado. O que ela precisa é da data e de um caminho de uma ação para
+ * desistir — e é exatamente isso que está aqui.
+ */
+function TrocaMarcada({
+  troca,
+  podeCancelar,
+  cancelando,
+  aoCancelar,
+}: {
+  troca: TrocaAgendada
+  podeCancelar: boolean
+  cancelando: boolean
+  aoCancelar: () => void
+}) {
+  const quando = new Date(troca.aplicarEm).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+
+  return (
+    <div className="mt-24 border-l-2 border-atencao pl-16">
+      <p className="text-corpo text-ink-1">
+        Em <strong className="font-numero">{quando}</strong> seu espaço passa para{' '}
+        <strong>{PLANOS[troca.plano].nome}</strong>, e a cobrança passa a ser de{' '}
+        <Valor centavos={troca.precoCentavos} isolado saldo />{' '}
+        {troca.intervalo === 'anual' ? 'por ano' : 'por mês'}.
+      </p>
+      <p className="mt-8 max-w-[70ch] text-sm text-ink-3">
+        Até lá nada muda. Você comprou este período inteiro, e ele continua sendo
+        seu — descer de plano no meio seria vender doze meses e entregar sete.
+      </p>
+      {podeCancelar && (
+        <button className="botao mt-16" onClick={aoCancelar} disabled={cancelando}>
+          {cancelando ? 'cancelando…' : 'cancelar a troca'}
+        </button>
+      )}
+    </div>
+  )
 }

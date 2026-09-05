@@ -3,7 +3,8 @@ import type Redis from 'ioredis'
 import type { Pool } from 'pg'
 import { comTenant, contextoDoTenant } from '../tenancy/tenancy.js'
 import { materializarRecorrencia } from './materializar.js'
-import { aplicarTrocasAgendadas } from '../cobranca/trocas-agendadas.js'
+import { aplicarTrocasAgendadas, avisarTrocasProximas } from '../cobranca/trocas-agendadas.js'
+import type { Mensageiro } from '../mensageiro/mensageiro.js'
 
 /**
  * O job que faz o horizonte da recorrência andar sozinho — pendência P-8.
@@ -50,7 +51,11 @@ export interface Agendador {
   encerrar(): Promise<void>
 }
 
-export async function agendarMaterializacao(pool: Pool, redis: Redis): Promise<Agendador> {
+export async function agendarMaterializacao(
+  pool: Pool,
+  redis: Redis,
+  mensageiro: Mensageiro,
+): Promise<Agendador> {
   // A conexão da fila é a mesma do cofre: BullMQ exige
   // `maxRetriesPerRequest: null`, que é como o processo já a abre.
   const fila = new Queue(FILA, { connection: redis })
@@ -79,7 +84,14 @@ export async function agendarMaterializacao(pool: Pool, redis: Redis): Promise<A
     FILA,
     async (job: Job) => {
       if (job.name === TAREFA_TROCAS) {
-        return { trocasAplicadas: await aplicarTrocasAgendadas(pool) }
+        // Avisa **antes** de aplicar, na mesma execução. A ordem importa numa
+        // borda só, e ela é real: uma troca agendada para daqui a menos de uma
+        // hora entra nas duas listas. Aplicando primeiro, ela sairia da lista
+        // de avisos por já estar aplicada — e a pessoa seria rebaixada sem
+        // nunca ter recebido nada. Avisando primeiro, ela recebe o aviso e a
+        // troca no mesmo minuto, que é feio e honesto.
+        const avisados = await avisarTrocasProximas(pool, mensageiro)
+        return { avisados, trocasAplicadas: await aplicarTrocasAgendadas(pool) }
       }
       if (job.name !== TAREFA) return { criadas: 0 }
 

@@ -1,7 +1,7 @@
 import type { Mensagem } from './mensageiro.js'
 
 /**
- * As três mensagens do produto.
+ * As mensagens do produto.
  *
  * Nenhuma delas é marketing, e o tom é o da coisa que elas são: um passo de
  * segurança. Sem saudação animada, sem emoji — `docs/design.md` proíbe emoji na
@@ -81,6 +81,56 @@ export function senhaAlterada(para: string): Mensagem {
       'acesso às sessões antigas, mas tem a senha nova:',
       '',
       `${base()}/entrar`,
+      '',
+      '— Mavia',
+    ].join('\n'),
+  }
+}
+
+/**
+ * O aviso de sete dias antes da troca de plano agendada — **P-17**.
+ *
+ * ## Por que ele existe
+ *
+ * A troca foi pedida semanas antes. Quem pediu já esqueceu, ou mudou de ideia e
+ * não se lembra de ter agendado nada. Sem este aviso, o plano encolhe num
+ * sábado qualquer e a pessoa descobre pela cota que recusou um convite.
+ *
+ * É o mesmo raciocínio dos avisos de renovação anual da spec §6.4, com o sinal
+ * trocado: lá o risco é uma cobrança que surpreende; aqui é uma **perda de
+ * função** que surpreende. Os dois se corrigem do mesmo jeito — dizendo antes,
+ * com data, valor e um caminho de uma ação para desfazer.
+ *
+ * ## O que ele não faz
+ *
+ * Não tenta reter. Sem "tem certeza?", sem oferta de desconto, sem lembrar o
+ * que ela vai perder. A pessoa decidiu; o aviso serve para ela **confirmar a
+ * decisão com informação**, e um aviso que argumenta contra o próprio
+ * destinatário é retenção disfarçada de cortesia.
+ */
+export function trocaDePlanoEmSeteDias(
+  para: string,
+  dados: {
+    readonly deNome: string
+    readonly paraNome: string
+    readonly precoNovo: string
+    readonly quando: string
+  },
+): Mensagem {
+  return {
+    para,
+    assunto: `Seu plano na Mavia muda em ${dados.quando}`,
+    corpo: [
+      `Em ${dados.quando}, seu espaço passa de ${dados.deNome} para`,
+      `${dados.paraNome}, como você pediu.`,
+      '',
+      `A partir dessa data, a cobrança passa a ser de ${dados.precoNovo}.`,
+      '',
+      'Se mudou de ideia, dá para cancelar a troca até a véspera:',
+      '',
+      `${base()}/plano`,
+      '',
+      'Se está tudo certo, não precisa fazer nada.',
       '',
       '— Mavia',
     ].join('\n'),
