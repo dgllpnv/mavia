@@ -154,7 +154,14 @@ test.describe('o extrato do mês', () => {
       textos.length - 1,
     )
 
-    const saldoDoDia = (i: number) => centavosDe(cabecalhos[i].split('saldo no dia')[1] ?? '')
+    const saldoDoDia = (i: number) => {
+      const cabecalho = cabecalhos[i]
+      // Lança em vez de cair para `0n`. Índice fora da lista devolvendo zero
+      // faria a asserção seguinte comparar `0n` com `0n` e **passar afirmando
+      // nada** — o pior desfecho possível para um teste da regra 8b.
+      if (cabecalho === undefined) throw new Error(`não há cabeçalho de dia no índice ${i}`)
+      return centavosDe(cabecalho.split('saldo no dia')[1] ?? '')
+    }
 
     expect(saldoDoDia(indice)).toBe(saldoDoDia(indice + 1))
   })

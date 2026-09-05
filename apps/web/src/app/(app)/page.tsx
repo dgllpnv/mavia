@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { api } from '../../api/cliente'
 import { montarDicionarios } from '../../api/dicionarios'
 import { mesAnterior, mesSeguinte, periodoDe } from '../../api/periodo'
+import { AcaoDeLancar } from '../../componentes/acao-de-lancar'
 import { Cartao, Vazio } from '../../componentes/cartao'
 import { FormularioDeLancamento } from '../../componentes/formulario-de-lancamento'
 import { IconeDeCategoria } from '../../componentes/icone-de-categoria'
@@ -107,9 +108,10 @@ export default function VisaoGeral() {
           <button className="botao" onClick={() => setMes(mesAnterior(mes))} aria-label="Mês anterior">
             ‹
           </button>
-          <span className="min-w-[15ch] text-center font-numero text-2 font-semibold">
-            {periodo.rotulo}
-          </span>
+          <span className="text-center font-numero text-2 font-semibold lg:min-w-[15ch]">
+            <span className="lg:hidden">{periodo.rotuloCurto}</span>
+            <span className="hidden lg:inline">{periodo.rotulo}</span>
+            </span>
           <button className="botao" onClick={() => setMes(mesSeguinte(mes))} aria-label="Mês seguinte">
             ›
           </button>
@@ -122,16 +124,21 @@ export default function VisaoGeral() {
           </div>
         )}
 
+        {/* No celular estas ações levam à rota `/lancar`; no computador abrem a
+            sobreposição sobre esta tela. Quem decide é a consulta de mídia
+            dentro de `AcaoDeLancar`, e não uma medida de largura em JavaScript. */}
         <div className="ml-auto flex flex-wrap items-center gap-8">
-          <button className="botao botao--primario" onClick={() => setLancando('despesa')}>
-            despesa
-          </button>
-          <button className="botao botao--discreto" onClick={() => setLancando('receita')}>
-            receita
-          </button>
-          <button className="botao botao--discreto" onClick={() => setLancando('transferencia')}>
-            transferência
-          </button>
+          <AcaoDeLancar rotulo="despesa" aoAbrir={() => setLancando('despesa')} />
+          <AcaoDeLancar
+            rotulo="receita"
+            variante="discreto"
+            aoAbrir={() => setLancando('receita')}
+          />
+          <AcaoDeLancar
+            rotulo="transferência"
+            variante="discreto"
+            aoAbrir={() => setLancando('transferencia')}
+          />
         </div>
       </div>
 
@@ -362,16 +369,21 @@ export default function VisaoGeral() {
         </div>
       </div>
 
-      {lancando && (
-        <FormularioDeLancamento
-          tenantId={espaco.id}
-          naturezaInicial={lancando}
-          contas={contas.data?.itens ?? []}
-          cartoes={cartoes.data?.itens ?? []}
-          categorias={categorias.data?.itens ?? []}
-          aoFechar={() => setLancando(null)}
-        />
-      )}
+      {/* A sobreposição é do computador, e o `hidden lg:contents` é o que
+          garante isso mesmo se a janela encolher com ela aberta: no celular o
+          formulário é a rota `/lancar`, que o teclado exige. */}
+      <div className="hidden lg:contents">
+        {lancando && (
+          <FormularioDeLancamento
+            tenantId={espaco.id}
+            naturezaInicial={lancando}
+            contas={contas.data?.itens ?? []}
+            cartoes={cartoes.data?.itens ?? []}
+            categorias={categorias.data?.itens ?? []}
+            aoFechar={() => setLancando(null)}
+          />
+        )}
+      </div>
     </>
   )
 }

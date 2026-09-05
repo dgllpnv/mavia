@@ -114,9 +114,10 @@ export default function Relatorios() {
           >
             ‹
           </button>
-          <span className="min-w-[15ch] text-center font-numero text-2 font-semibold">
-            {periodo.rotulo}
-          </span>
+          <span className="text-center font-numero text-2 font-semibold lg:min-w-[15ch]">
+            <span className="lg:hidden">{periodo.rotuloCurto}</span>
+            <span className="hidden lg:inline">{periodo.rotulo}</span>
+            </span>
           <button
             className="botao"
             onClick={() => setMes(mesSeguinte(mes))}

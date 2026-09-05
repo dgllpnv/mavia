@@ -185,7 +185,7 @@ const ORIGENS: Record<Lancamento['origem'], string> = {
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="linha grid-cols-[140px_1fr]">
+    <div className="linha grid-cols-[110px_minmax(0,1fr)] lg:grid-cols-[140px_1fr]">
       <dt className="rotulo">{rotulo}</dt>
       <dd className="truncate text-corpo">{valor}</dd>
     </div>

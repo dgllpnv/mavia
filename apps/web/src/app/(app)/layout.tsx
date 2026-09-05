@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
+import { BarraDeAbas } from '../../componentes/barra-de-abas'
 import { useSessao } from '../../componentes/provedores'
 import { Sino } from '../../componentes/sino'
 import { SeletorDeTema } from '../../componentes/seletor-de-tema'
@@ -18,6 +19,21 @@ import { SeletorDeTema } from '../../componentes/seletor-de-tema'
  *
  * A cor é nossa, não a deles: petróleo no lugar do verde. O pedido foi a
  * disposição, não a pele.
+ *
+ * **No celular o cromo é outro, e é isso que este arquivo passa a decidir.**
+ * Abaixo de `lg` os destinos saem do topo — oito rótulos em 390px estouram a
+ * largura e é isso que faz a página deslizar de lado — e reaparecem na barra de
+ * abas do rodapé, cinco deles, com os demais na tela `mais`. O topo fica com o
+ * que não tem outro lugar: marca, sino e conta.
+ *
+ * **O corte é `lg` (1024px) e não `md` (768px), e a diferença é um defeito
+ * medido.** Marca, oito destinos e a área de conta somam ~914px. Com o corte em
+ * `md`, a faixa de 768 a 913 recebia a barra do desktop sem caber nela e a
+ * página deslizava de lado — o mesmo sintoma que este trabalho existe para
+ * matar, sobrevivendo num tablet. A trava do épico era *"acima de `md`, idêntico
+ * ao de hoje"*, escrita para proteger um desktop que funciona; naquela faixa ele
+ * não funcionava, e proteger um defeito não era o objetivo. Acima de 1024 nada
+ * mudou.
  */
 
 const DESTINOS = [
@@ -55,7 +71,12 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
       <header className="barra sticky top-0 z-20">
         <span className="font-numero text-2 font-bold tracking-tight">mavia</span>
 
-        <nav className="flex items-center gap-20" aria-label="Navegação principal">
+        {/*
+          Mobile-first: a classe de base descreve o celular, e o `lg:` reconstrói
+          o desktop. Os oito destinos precisam de ~914px com marca e conta —
+          abaixo de `lg` eles moram na barra de abas e na tela `mais`.
+        */}
+        <nav className="hidden items-center gap-20 lg:flex" aria-label="Navegação principal">
           {DESTINOS.map((d) => {
             const ativo = d.href === '/' ? caminho === '/' : caminho.startsWith(d.href)
             return (
@@ -134,7 +155,8 @@ export default function LayoutDoApp({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1240px] px-24 py-24">{children}</main>
+      <main className="conteudo">{children}</main>
+      <BarraDeAbas />
     </div>
   )
 }

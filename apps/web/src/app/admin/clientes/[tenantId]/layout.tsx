@@ -84,7 +84,16 @@ export default function LayoutDoEspaco({ children }: { children: ReactNode }) {
     <>
       <HipoteseEmCurso hipotese={hipotese} aoFechar={() => esquecer(tenantId)} />
 
-      <nav className="mt-16 flex items-center gap-20" aria-label="Telas deste cliente">
+      {/* Medido: as cinco abas somam 285px de texto, e 390px menos o respiro dão
+          358 úteis. Com os 20px de respiro do desktop entre elas o conjunto vai
+          a 365 e "desconto" desce sozinho, ocupando uma faixa inteira para uma
+          palavra; com 12px cabe a régua toda numa linha. O `flex-wrap` é a rede
+          para o aparelho mais estreito: lá a quinta desce, em vez de empurrar a
+          página para o lado. Acima de `md` o respiro volta a 20 e nada muda. */}
+      <nav
+        className="mt-16 flex flex-wrap items-center gap-x-12 gap-y-8 md:gap-x-20"
+        aria-label="Telas deste cliente"
+      >
         {ABAS.map((a) => {
           const href = `${base}${a.sufixo}`
           const ativo = caminho === href

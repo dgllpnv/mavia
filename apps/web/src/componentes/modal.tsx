@@ -16,6 +16,19 @@ import { useEffect, useRef, type ReactNode } from 'react'
  *   sem isso, quem usa teclado é devolvido ao topo da página a cada operação;
  * - o foco fica preso dentro dele enquanto está aberto, que é o que
  *   `aria-modal` promete e o navegador não cumpre sozinho.
+ *
+ * **No celular ele é uma folha**, ancorada na base da tela e com os cantos de
+ * cima arredondados (decisão 4 do épico do navegador do celular: *"folha só
+ * para confirmações curtas"*). A base da tela é onde o polegar chega, e o topo
+ * de um telefone de 6 polegadas não é. O formulário de lançamento, que é longo
+ * e convive com o teclado, **não** usa esta moldura — ele tem a sua, em
+ * `moldura-de-lancamento.tsx`.
+ *
+ * A folha rola por dentro (`max-h-[88dvh] overflow-y-auto`) e reserva a área
+ * segura da base, senão a última ação fica atrás da barra de gestos do iPhone.
+ *
+ * Acima de `md` cada declaração volta ao valor de antes — diálogo centrado no
+ * topo, `mt-64`, `p-24`, raio nos quatro cantos. O computador não mudou.
  */
 
 export interface ModalProps {
@@ -71,7 +84,7 @@ export function Modal({ titulo, subtitulo, largura = 560, aoFechar, children }: 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgb(28_26_22/40%)] p-24"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-[rgb(28_26_22/40%)] p-0 lg:items-start lg:p-24"
       onClick={(e) => {
         if (e.target === e.currentTarget) aoFechar()
       }}
@@ -83,7 +96,7 @@ export function Modal({ titulo, subtitulo, largura = 560, aoFechar, children }: 
         aria-label={titulo}
         tabIndex={-1}
         style={{ maxWidth: largura }}
-        className="mt-64 mb-64 w-full rounded-3 border border-[var(--elev-borda)] bg-surface-1 p-24 shadow-[var(--elev-2)] outline-none"
+        className="max-h-[88dvh] w-full overflow-y-auto rounded-t-3 border border-[var(--elev-borda)] bg-surface-1 p-16 pb-[max(var(--s-16),env(safe-area-inset-bottom))] shadow-[var(--elev-2)] outline-none lg:mt-64 lg:mb-64 lg:max-h-none lg:overflow-visible lg:rounded-3 lg:p-24 lg:pb-24"
       >
         <div className="flex items-baseline justify-between gap-16">
           <div>

@@ -10,6 +10,16 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
+  /**
+   * `viewport-fit=cover` é o que **liga** `env(safe-area-inset-*)`.
+   *
+   * Sem ele os quatro insets valem zero em qualquer iPhone, e a barra de abas
+   * do rodapé — que é fixa, e é o cromo inteiro do celular — ficaria por baixo
+   * do indicador de home. O custo é que a página passa a entrar sob o entalhe
+   * em paisagem, e é por isso que `.barra`, `.abas` e `.conteudo` reservam os
+   * insets laterais em `globais.css`.
+   */
+  viewportFit: 'cover',
   // A cor da barra do navegador acompanha o tema, mas o claro é a identidade
   // canônica da Mavia — o escuro é preferência, não a cara do produto.
   themeColor: [

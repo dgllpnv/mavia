@@ -6,6 +6,7 @@ import { Valor } from '../../../../../componentes/valor'
 import { painel } from '../../../../../painel/api'
 import { usePainel } from '../../../../../painel/contexto'
 import { CabecalhoDeLeitura, Estado } from '../../../../../painel/pecas'
+import { TabelaRolavel } from '../../../tabela-rolavel'
 
 /**
  * As contas do cliente.
@@ -72,36 +73,38 @@ export default function ContasDoCliente() {
             </>
           }
         >
-          <table className="tabela">
-            <caption className="sr-only">Contas do cliente com tipo e saldo inicial</caption>
-            <thead>
-              <tr>
-                <th scope="col">Conta</th>
-                <th scope="col">Tipo</th>
-                <th scope="col">No saldo geral</th>
-                <th scope="col" className="numero">
-                  Saldo inicial
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((c) => (
-                <tr key={c.id}>
-                  <td className="text-ink-1">{c.nome}</td>
-                  <td className="text-ink-2">{TIPOS[c.tipo] ?? c.tipo}</td>
-                  {/* Palavra, e não um ícone de check: "sim" e "não" são lidos
-                      igual por todo mundo e sobrevivem a escala de cinza. */}
-                  <td className="text-ink-2">{c.incluir_no_saldo_geral ? 'sim' : 'não'}</td>
-                  <td className="numero">
-                    {/* O componente do produto: o formatador é um só em toda a
-                        Mavia. Valor formatado de dois jeitos em duas telas
-                        destrói a confiança mais rápido que um erro de cálculo. */}
-                    <Valor centavos={c.saldo_inicial_centavos} moeda={c.moeda} saldo />
-                  </td>
+          <TabelaRolavel rotulo="Contas do cliente">
+            <table className="tabela">
+              <caption className="sr-only">Contas do cliente com tipo e saldo inicial</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Conta</th>
+                  <th scope="col">Tipo</th>
+                  <th scope="col">No saldo geral</th>
+                  <th scope="col" className="numero">
+                    Saldo inicial
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {itens.map((c) => (
+                  <tr key={c.id}>
+                    <td className="text-ink-1">{c.nome}</td>
+                    <td className="text-ink-2">{TIPOS[c.tipo] ?? c.tipo}</td>
+                    {/* Palavra, e não um ícone de check: "sim" e "não" são lidos
+                        igual por todo mundo e sobrevivem a escala de cinza. */}
+                    <td className="text-ink-2">{c.incluir_no_saldo_geral ? 'sim' : 'não'}</td>
+                    <td className="numero">
+                      {/* O componente do produto: o formatador é um só em toda a
+                          Mavia. Valor formatado de dois jeitos em duas telas
+                          destrói a confiança mais rápido que um erro de cálculo. */}
+                      <Valor centavos={c.saldo_inicial_centavos} moeda={c.moeda} saldo />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TabelaRolavel>
         </Estado>
       </div>
 

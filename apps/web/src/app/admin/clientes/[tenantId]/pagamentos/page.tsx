@@ -19,6 +19,7 @@ import { usePainel } from '../../../../../painel/contexto'
 import { competenciaPorExtenso, dataEHoraNaTela, dataNaTela } from '../../../../../painel/formatos'
 import type { Hipotese } from '../../../../../painel/hipotese'
 import { CabecalhoDeLeitura, Estado, mensagemDoErro } from '../../../../../painel/pecas'
+import { TabelaRolavel } from '../../../tabela-rolavel'
 
 /**
  * As baixas anteriores, **e depois delas** o formulário de baixa.
@@ -124,46 +125,48 @@ export default function Pagamentos() {
 
 function TabelaDeBaixas({ itens }: { readonly itens: readonly BaixaAnterior[] }) {
   return (
-    <table className="tabela">
-      <caption className="sr-only">
-        Baixas de pagamento já registradas, com competência, valor e referência
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col" className="numero">
-            Competência
-          </th>
-          <th scope="col" className="numero">
-            Recebido em
-          </th>
-          <th scope="col">Meio</th>
-          <th scope="col">Referência</th>
-          <th scope="col">Observação</th>
-          <th scope="col" className="numero">
-            Valor
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {itens.map((b) => (
-          <tr key={b.id}>
-            {/* Competência como **mês por extenso**: item 9 da auditoria. E sem
-                conversão de fuso — é `DATE`, uma data civil. */}
-            <td className="text-ink-1">{competenciaPorExtenso(b.competencia)}</td>
-            <td className="numero text-ink-2">{dataNaTela(b.recebido_em)}</td>
-            <td className="text-ink-2">{MEIOS.find(([v]) => v === b.meio)?.[1] ?? b.meio}</td>
-            <td className="identificador">{b.referencia_externa}</td>
-            <td className="text-ink-3">{b.observacao ?? '—'}</td>
-            <td className="numero">
-              {/* Dinheiro que entrou na Mavia, e não movimento do razão do
-                  cliente: `saldo` tira o `+` e a tinta verde, que afirmariam
-                  uma direção que este número não tem no eixo dele. */}
-              <Valor centavos={b.valor_centavos} moeda={b.moeda} saldo />
-            </td>
+    <TabelaRolavel rotulo="Baixas registradas">
+      <table className="tabela">
+        <caption className="sr-only">
+          Baixas de pagamento já registradas, com competência, valor e referência
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="numero">
+              Competência
+            </th>
+            <th scope="col" className="numero">
+              Recebido em
+            </th>
+            <th scope="col">Meio</th>
+            <th scope="col">Referência</th>
+            <th scope="col">Observação</th>
+            <th scope="col" className="numero">
+              Valor
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {itens.map((b) => (
+            <tr key={b.id}>
+              {/* Competência como **mês por extenso**: item 9 da auditoria. E sem
+                  conversão de fuso — é `DATE`, uma data civil. */}
+              <td className="text-ink-1">{competenciaPorExtenso(b.competencia)}</td>
+              <td className="numero text-ink-2">{dataNaTela(b.recebido_em)}</td>
+              <td className="text-ink-2">{MEIOS.find(([v]) => v === b.meio)?.[1] ?? b.meio}</td>
+              <td className="identificador">{b.referencia_externa}</td>
+              <td className="text-ink-3">{b.observacao ?? '—'}</td>
+              <td className="numero">
+                {/* Dinheiro que entrou na Mavia, e não movimento do razão do
+                    cliente: `saldo` tira o `+` e a tinta verde, que afirmariam
+                    uma direção que este número não tem no eixo dele. */}
+                <Valor centavos={b.valor_centavos} moeda={b.moeda} saldo />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TabelaRolavel>
   )
 }
 

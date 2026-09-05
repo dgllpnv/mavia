@@ -290,12 +290,23 @@ select {
   box-shadow: var(--card-sombra);
 }
 
+/* `flex-wrap` e padding vertical: o cabeçalho de card quebra linha quando não
+   cabe, e é o que impede a página inteira de deslizar de lado no celular.
+   Medido: `/lancamentos` tinha `scrollWidth` 495 contra 390 úteis, e o culpado
+   era este cabeçalho — título mais navegador de período (`min-w-[15ch]`) mais
+   "recorrências" mais "lançar" não cabem em 390px de jeito nenhum.
+
+   **Ele só quebra quando falta espaço**, então não há `@media` aqui e o desktop
+   fica idêntico: com `min-height: 56px` e `align-items: center`, o padding
+   vertical não muda nada enquanto o conteúdo couber numa linha. Um breakpoint
+   aqui seria uma decisão a manter; a quebra é uma consequência a esquecer. */
 .cartao__cabecalho {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--s-16);
   min-height: 56px;
-  padding: 0 var(--s-20);
+  padding: var(--s-8) var(--s-20);
   border-bottom: 1px solid var(--line);
 }
 
@@ -395,15 +406,36 @@ select {
 
 /* --------------------------------------------------------------------------
  * A barra de navegação — sólida, na cor da marca
+ *
+ * **Mobile-first, aqui também.** A declaração de base descreve o celular e a
+ * consulta de mídia reconstrói o desktop, na mesma política do `apps/web`: a
+ * variante que alguém esquecer de escrever é a do desktop, e um desktop com
+ * respiro de celular é feio e utilizável — o inverso é o que o dono viu no
+ * telefone.
+ *
+ * `max(…, env(safe-area-inset-*))` porque o `viewportFit: 'cover'` do
+ * `app/layout.tsx` faz a página entrar por baixo do entalhe: em paisagem, num
+ * iPhone, a marca ficaria atrás da câmera sem isso. Em qualquer navegador sem
+ * entalhe o `env()` vale zero e o `max()` devolve o valor de sempre.
  * ----------------------------------------------------------------------- */
 .barra {
   display: flex;
   align-items: center;
-  gap: var(--s-24);
+  gap: var(--s-16);
   height: var(--altura-nav);
-  padding: 0 var(--s-24);
+  padding-block: 0;
+  padding-inline-start: max(var(--s-16), env(safe-area-inset-left));
+  padding-inline-end: max(var(--s-16), env(safe-area-inset-right));
   background: var(--primaria);
   color: var(--primaria-sobre);
+}
+
+@media (min-width: 1024px) {
+  .barra {
+    gap: var(--s-24);
+    padding-inline-start: max(var(--s-24), env(safe-area-inset-left));
+    padding-inline-end: max(var(--s-24), env(safe-area-inset-right));
+  }
 }
 
 .barra__destino {
@@ -421,6 +453,174 @@ select {
   color: var(--primaria-sobre);
   border-bottom-color: var(--primaria-sobre);
   font-weight: var(--peso-rotulo);
+}
+
+/* --------------------------------------------------------------------------
+ * A barra de abas — o rodapé do celular
+ *
+ * Cinco lugares e nem um a mais, porque não cabe: é a contenção estrutural que
+ * a deriva de oito destinos no topo não teve. O polegar não alcança o topo de
+ * um telefone de seis polegadas com uma mão só, e lançar despesa é a ação que
+ * se faz em pé, no caixa, com uma mão.
+ *
+ * **Sem pictograma.** O produto não tem biblioteca de ícones — o ícone de
+ * categoria é uma letra, e aqui a aba é a palavra. Um desenho de "planejamento"
+ * teria de ser aprendido; a palavra não.
+ *
+ * `env(safe-area-inset-bottom)` é o indicador de home do iPhone. No Safari, com
+ * a barra de endereço embaixo, o inset vale zero e a barra encosta nela — que é
+ * o certo: quem reserva altura fixa para a barra do navegador deixa uma faixa
+ * morta quando ela recolhe.
+ * ----------------------------------------------------------------------- */
+.abas {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 30;
+  background: var(--primaria);
+  color: var(--primaria-sobre);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-inline-start: env(safe-area-inset-left);
+  padding-inline-end: env(safe-area-inset-right);
+  /* Elevação com motivo: o conteúdo rola por baixo, e a sombra é o que diz
+     que a barra está na frente. */
+  box-shadow: 0 -2px 8px rgb(28 26 22 / 18%);
+}
+
+@media (min-width: 1024px) {
+  .abas {
+    display: none;
+  }
+}
+
+.abas__destinos {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: var(--altura-nav);
+}
+
+.abas__destino {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  /* 56px de altura por ~78px de largura num telefone de 390px: acima dos 44px
+     de alvo mínimo nos dois eixos, sem alvo colado no vizinho. */
+  min-height: 44px;
+  padding-inline: var(--s-4);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  text-align: center;
+  color: color-mix(in srgb, var(--primaria-sobre) 78%, transparent);
+  border-top: 2px solid transparent;
+}
+
+/* **Três canais para o estado ativo, e nenhum deles é só cor** (design.md
+   §2.4): a régua de 2px no topo — a mesma gramática do sublinhado do desktop —,
+   o peso 600 e a tinta cheia. Quem não distingue os dois tons de claro ainda lê
+   a régua e o peso. */
+.abas__destino[aria-current='page'] {
+  color: var(--primaria-sobre);
+  border-top-color: var(--primaria-sobre);
+  font-weight: var(--peso-realizado);
+}
+
+/* A ação do centro. Ela mora **fora** do `<nav>`, sobre a coluna vazia do
+   meio: uma aba que não navega não pertence ao marco de navegação, e anunciar
+   "lançar" entre quatro destinos faria o leitor de tela prometer uma página que
+   não existe. */
+.abas__acao {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20%;
+  height: var(--altura-nav);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.abas__acao__alvo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  width: calc(100% - var(--s-8));
+  height: 40px;
+  border-radius: var(--r-2);
+  background: var(--primaria-sobre);
+  color: var(--primaria);
+  font-family: var(--fonte-numero);
+  font-size: var(--text-xs);
+  line-height: 1;
+  font-weight: var(--peso-realizado);
+}
+
+.abas__acao__cruz {
+  font-size: var(--text-1);
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+ * A coluna de conteúdo
+ *
+ * No celular a margem lateral é 12px, e não 24: em 390px os 24 de cada lado
+ * comem 12% da tela, e o que se perde é largura de descrição de lançamento.
+ * O rodapé reserva a altura da barra de abas — sem isso ela cobre a última
+ * linha de toda lista, que é justamente onde ficam os totais.
+ * ----------------------------------------------------------------------- */
+.conteudo {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--largura-maxima);
+  padding-block-start: var(--s-16);
+  padding-block-end: calc(var(--altura-nav) + env(safe-area-inset-bottom) + var(--s-24));
+  padding-inline-start: max(var(--s-12), env(safe-area-inset-left));
+  padding-inline-end: max(var(--s-12), env(safe-area-inset-right));
+}
+
+@media (min-width: 1024px) {
+  .conteudo {
+    padding-block: var(--s-24);
+    padding-inline-start: max(var(--s-24), env(safe-area-inset-left));
+    padding-inline-end: max(var(--s-24), env(safe-area-inset-right));
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Rodapé grudado que precisa conviver com a barra de abas
+ * ----------------------------------------------------------------------- */
+/**
+ * `position: sticky` com `bottom: 0` gruda no fundo do **scrollport**, que é o
+ * viewport — não no fim do conteúdo. O `padding-block-end` do `.conteudo` só
+ * solta o elemento no fim absoluto da rolagem; durante a rolagem, que é o caso
+ * normal de um extrato, ele fica exatamente onde a barra de abas está, e a
+ * barra pinta por cima (z-30 contra z-10).
+ *
+ * Medido a 390×844 com `scrollY = 800`: **56px de sobreposição em 64** — o par
+ * realizado × previsto, que o `CONTEXT.md` chama de eixo conceitual dos
+ * relatórios, ficava invisível no celular. Achado do `revisor-codigo`, e ele
+ * bloqueou o merge com razão: a invariante de largura mede o eixo horizontal e
+ * não veria isto nunca.
+ *
+ * Esta classe é a tratativa **A** feita direito — resumo empilhado **acima** das
+ * abas, as duas coisas visíveis. Ela custa cerca de 100px permanentes num
+ * telefone, e esse custo é o argumento a favor da tratativa B, que é decisão do
+ * dono e continua aberta no ticket 02.
+ */
+.rodape-sobre-as-abas {
+  bottom: calc(var(--altura-nav) + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  /* Não há barra de abas no computador: o rodapé volta a encostar no fundo. */
+  .rodape-sobre-as-abas {
+    bottom: 0;
+  }
 }
 
 /* --------------------------------------------------------------------------

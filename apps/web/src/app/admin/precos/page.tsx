@@ -20,6 +20,7 @@ import {
   precosEmVigor,
   type PrecoEmVigor,
 } from '../../../painel/precos'
+import { TabelaRolavel } from '../tabela-rolavel'
 
 /**
  * O preço-base — **ADR 0025 D2**.
@@ -127,45 +128,47 @@ export default function Precos() {
 
 function TabelaDeVigentes({ vigentes }: { readonly vigentes: readonly PrecoEmVigor[] }) {
   return (
-    <table className="tabela">
-      <caption className="sr-only">
-        O preço em vigor de cada plano e intervalo, com a origem do valor
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Plano</th>
-          <th scope="col">Intervalo</th>
-          <th scope="col" className="numero">
-            Preço
-          </th>
-          <th scope="col">Origem</th>
-          <th scope="col" className="numero">
-            Desde
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {vigentes.map((v) => (
-          <tr key={`${v.plano}-${v.intervalo}`}>
-            <td className="text-ink-1">{NOME_DO_PLANO[v.plano]}</td>
-            <td className="curta text-ink-2">{v.intervalo}</td>
-            <td className="numero">
-              {/* `saldo`: um preço não é receita nem despesa. O `+` e a tinta
-                  verde afirmariam uma direção que este número não tem. */}
-              <Valor centavos={v.centavos} saldo />
-            </td>
-            {/* A origem é palavra, e não um ícone ou uma cor: quem lê precisa
-                saber se aquele número já passou por uma decisão de operador. */}
-            <td className="curta text-ink-2">
-              {v.origem === 'tabela' ? 'trocado no painel' : 'catálogo em código'}
-            </td>
-            <td className="numero text-ink-3">
-              {v.linha ? dataEHoraNaTela(v.linha.vigente_desde) : '—'}
-            </td>
+    <TabelaRolavel rotulo="Preços em vigor">
+      <table className="tabela">
+        <caption className="sr-only">
+          O preço em vigor de cada plano e intervalo, com a origem do valor
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Plano</th>
+            <th scope="col">Intervalo</th>
+            <th scope="col" className="numero">
+              Preço
+            </th>
+            <th scope="col">Origem</th>
+            <th scope="col" className="numero">
+              Desde
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {vigentes.map((v) => (
+            <tr key={`${v.plano}-${v.intervalo}`}>
+              <td className="text-ink-1">{NOME_DO_PLANO[v.plano]}</td>
+              <td className="curta text-ink-2">{v.intervalo}</td>
+              <td className="numero">
+                {/* `saldo`: um preço não é receita nem despesa. O `+` e a tinta
+                    verde afirmariam uma direção que este número não tem. */}
+                <Valor centavos={v.centavos} saldo />
+              </td>
+              {/* A origem é palavra, e não um ícone ou uma cor: quem lê precisa
+                  saber se aquele número já passou por uma decisão de operador. */}
+              <td className="curta text-ink-2">
+                {v.origem === 'tabela' ? 'trocado no painel' : 'catálogo em código'}
+              </td>
+              <td className="numero text-ink-3">
+                {v.linha ? dataEHoraNaTela(v.linha.vigente_desde) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TabelaRolavel>
   )
 }
 
@@ -180,42 +183,44 @@ function TabelaDoHistorico({ linhas }: { readonly linhas: readonly PrecoVigente[
     .sort((a, b) => new Date(b.vigente_desde).getTime() - new Date(a.vigente_desde).getTime())
 
   return (
-    <table className="tabela">
-      <caption className="sr-only">
-        Todas as linhas de preço já criadas, da mais recente para a mais antiga
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col" className="numero">
-            Vigente desde
-          </th>
-          <th scope="col">Plano</th>
-          <th scope="col">Intervalo</th>
-          <th scope="col" className="numero">
-            Preço
-          </th>
-          <th scope="col">Motivo</th>
-          <th scope="col">Criado por</th>
-        </tr>
-      </thead>
-      <tbody>
-        {ordenadas.map((l) => (
-          <tr key={l.id}>
-            <td className="numero text-ink-2">{dataEHoraNaTela(l.vigente_desde)}</td>
-            {/* O nome bonito quando o código é um dos três; a string crua
-                quando não é. Uma linha de um plano retirado do catálogo
-                continua no histórico, e ela precisa continuar legível. */}
-            <td className="text-ink-1">{nomeOuCodigo(l.plano)}</td>
-            <td className="curta text-ink-2">{l.intervalo}</td>
-            <td className="numero">
-              <Valor centavos={l.valor_centavos} saldo />
-            </td>
-            <td className="text-ink-2">{l.motivo}</td>
-            <td className="identificador">{l.criado_por}</td>
+    <TabelaRolavel rotulo="Histórico de preços">
+      <table className="tabela">
+        <caption className="sr-only">
+          Todas as linhas de preço já criadas, da mais recente para a mais antiga
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="numero">
+              Vigente desde
+            </th>
+            <th scope="col">Plano</th>
+            <th scope="col">Intervalo</th>
+            <th scope="col" className="numero">
+              Preço
+            </th>
+            <th scope="col">Motivo</th>
+            <th scope="col">Criado por</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {ordenadas.map((l) => (
+            <tr key={l.id}>
+              <td className="numero text-ink-2">{dataEHoraNaTela(l.vigente_desde)}</td>
+              {/* O nome bonito quando o código é um dos três; a string crua
+                  quando não é. Uma linha de um plano retirado do catálogo
+                  continua no histórico, e ela precisa continuar legível. */}
+              <td className="text-ink-1">{nomeOuCodigo(l.plano)}</td>
+              <td className="curta text-ink-2">{l.intervalo}</td>
+              <td className="numero">
+                <Valor centavos={l.valor_centavos} saldo />
+              </td>
+              <td className="text-ink-2">{l.motivo}</td>
+              <td className="identificador">{l.criado_por}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TabelaRolavel>
   )
 }
 

@@ -1,0 +1,17 @@
+{
+  // O `tsconfig.json` do app cobre `src/**` — corretamente, porque é o que
+  // entra no build do Next. O efeito colateral é que **nada** verificava tipo
+  // em `playwright.config.ts` nem nos `.spec.ts`: um `page.evaluate` devolvendo
+  // um objeto que não é serializável, ou uma asserção sobre um campo que não
+  // existe mais, só apareciam ao rodar a suíte inteira contra um ambiente de
+  // pé. Este arquivo fecha esse buraco, sem pôr E2E dentro do build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Cache próprio: compartilhar o `.tsbuildinfo` do app faria uma execução
+    // invalidar a outra em silêncio.
+    "incremental": false,
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts", "vitest.config.ts"]
+}

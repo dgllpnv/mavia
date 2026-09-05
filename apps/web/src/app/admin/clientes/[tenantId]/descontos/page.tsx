@@ -32,6 +32,7 @@ import { dataEHoraNaTela } from '../../../../../painel/formatos'
 import type { Hipotese } from '../../../../../painel/hipotese'
 import { CabecalhoDeLeitura, Estado, mensagemDoErro } from '../../../../../painel/pecas'
 import { codigoDoPlano, NOME_DO_PLANO, precoEmVigor } from '../../../../../painel/precos'
+import { TabelaRolavel } from '../../../tabela-rolavel'
 
 /**
  * O desconto deste cliente — **ADR 0025 D1**.
@@ -278,51 +279,53 @@ function EstimativaDoDesconto({
 
 function TabelaDeDescontos({ itens }: { readonly itens: readonly DescontoDoCliente[] }) {
   return (
-    <table className="tabela">
-      <caption className="sr-only">
-        Descontos já concedidos a este cliente, com espécie, duração, motivo e revogação
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col" className="numero">
-            Concedido em
-          </th>
-          <th scope="col">Espécie</th>
-          <th scope="col" className="numero">
-            Desconto
-          </th>
-          <th scope="col">Duração</th>
-          <th scope="col">Motivo</th>
-          <th scope="col" className="numero">
-            Revogado em
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {itens.map((d) => (
-          <tr key={d.id}>
-            <td className="numero text-ink-2">{dataEHoraNaTela(d.concedido_em)}</td>
-            <td className="curta text-ink-2">
-              {d.especie === 'percentual' ? 'percentual' : 'quantia fixa'}
-            </td>
-            <td className="numero">
-              {d.especie === 'percentual' ? (
-                <span className="valor">{pontosBaseNaTela(String(d.pontos_base ?? 0))}%</span>
-              ) : (
-                <Valor centavos={d.valor_centavos ?? '0'} saldo />
-              )}
-            </td>
-            <td className="curta text-ink-2">{duracaoPorExtenso(d.duracao, d.meses)}</td>
-            <td className="text-ink-2">{d.motivo}</td>
-            {/* A linha revogada continua aqui, e o estado dela é palavra: "em
-                vigor" e uma data são distinguíveis sem enxergar cor. */}
-            <td className="numero text-ink-3">
-              {d.revogado_em ? dataEHoraNaTela(d.revogado_em) : 'em vigor'}
-            </td>
+    <TabelaRolavel rotulo="Descontos concedidos">
+      <table className="tabela">
+        <caption className="sr-only">
+          Descontos já concedidos a este cliente, com espécie, duração, motivo e revogação
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="numero">
+              Concedido em
+            </th>
+            <th scope="col">Espécie</th>
+            <th scope="col" className="numero">
+              Desconto
+            </th>
+            <th scope="col">Duração</th>
+            <th scope="col">Motivo</th>
+            <th scope="col" className="numero">
+              Revogado em
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {itens.map((d) => (
+            <tr key={d.id}>
+              <td className="numero text-ink-2">{dataEHoraNaTela(d.concedido_em)}</td>
+              <td className="curta text-ink-2">
+                {d.especie === 'percentual' ? 'percentual' : 'quantia fixa'}
+              </td>
+              <td className="numero">
+                {d.especie === 'percentual' ? (
+                  <span className="valor">{pontosBaseNaTela(String(d.pontos_base ?? 0))}%</span>
+                ) : (
+                  <Valor centavos={d.valor_centavos ?? '0'} saldo />
+                )}
+              </td>
+              <td className="curta text-ink-2">{duracaoPorExtenso(d.duracao, d.meses)}</td>
+              <td className="text-ink-2">{d.motivo}</td>
+              {/* A linha revogada continua aqui, e o estado dela é palavra: "em
+                  vigor" e uma data são distinguíveis sem enxergar cor. */}
+              <td className="numero text-ink-3">
+                {d.revogado_em ? dataEHoraNaTela(d.revogado_em) : 'em vigor'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TabelaRolavel>
   )
 }
 
