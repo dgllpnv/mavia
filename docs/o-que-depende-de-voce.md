@@ -2,6 +2,14 @@
 
 As pendências que o time não pode resolver sozinho.
 
+> ### ✅ Resolvido em 2026-09-04, direto na VPS
+>
+> - **Endereço público:** `https://mavia.o9cmue.easypanel.host`, o que o EasyPanel gera. Serve até você bater o nome do domínio.
+> - **E-mail:** Resend por SMTP, configurado e **verificado com handshake real** (STARTTLS + AUTH LOGIN + `250` no DATA). ⚠️ **Só entrega no seu próprio endereço** enquanto não houver domínio verificado — o remetente é o compartilhado `onboarding@resend.dev`, e o Resend restringe o destino ao dono da conta. Cadastro de cliente real não funciona até o item 1.
+> - **Redis:** senha e ACL no ar. Ele estava **sem senha nenhuma** — o container tinha subido antes de a exigência existir.
+> - **Stripe:** variáveis pré-configuradas. Vazias, o checkout responde 503 e o webhook recusa com 400. Basta colar as chaves quando a conta existir.
+> - ⚠️ **A chave do Resend passou pelo chat.** Revogue e gere outra quando puder.
+>
 > **Atualizado em 2026-09-04.** As **oito decisões** do painel de administração (DP-32 a DP-40) foram **todas respondidas** e estão em `docs/decisoes-do-produto.md`. O que resta aqui são **ações**, não escolhas: coisas que exigem a sua mão num serviço de terceiro ou um dado que só você tem.
 
 As quatro primeiras **bloqueiam** alguma coisa. A sexta e a sétima reúnem oito escolhas que quase todas **não** bloqueiam — têm um padrão que eu sigo se você não disser nada. Duas exceções, e são as que valem a sua atenção: a **DP-32** decide quando o painel de administração pode ver cliente real, e a **DP-39** não tem padrão nenhum.
