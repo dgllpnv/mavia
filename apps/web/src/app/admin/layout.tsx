@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useSessao } from '../../componentes/provedores'
 import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 import { ProvedorDoPainel } from '../../painel/contexto'
+import { comoMeChamo } from '../../painel/operadores'
 import { useNivel } from '../../painel/nivel'
 import './painel.css'
 
@@ -118,6 +119,39 @@ export default function LayoutDoPainel({ children }: { children: ReactNode }) {
                 390px ele empurraria o seletor de tema para uma quarta linha, e
                 quem está no painel sabe com que conta entrou. */}
             <span className="hidden text-sm text-ink-3 sm:inline">{eu.usuario.email}</span>
+
+            {/*
+              O nível de quem está operando, **dito** em vez de deduzido.
+
+              Ele já decidia coisas — quais destinos aparecem, qual frase a tela
+              de operadores mostra — e nunca aparecia escrito. Quem opera
+              descobria o próprio poder pela **ausência** de um link, que é a
+              pior forma de descobrir: indistinguível de um link que não
+              carregou.
+
+              É sobre quem pergunta, e só. O dado vem de `/admin/eu`, cuja
+              leitura a policy `concessao_propria` da `0031` restringe à própria
+              concessão. Isto **não** é o começo de uma listagem de operadores —
+              ver `POR_QUE_NAO_HA_LISTAGEM` em `painel/operadores.ts`.
+
+              Some abaixo de `sm` pelo mesmo motivo do e-mail: numa faixa de
+              390px ele empurraria o seletor de tema para outra linha. O poder
+              não muda com a largura da tela, e quem precisa conferir tem a tela
+              de operadores.
+            */}
+            {nivel !== null && (
+              <span
+                className="painel-barra__nivel hidden sm:inline"
+                title={
+                  nivel === 'super'
+                    ? 'Você concede e revoga acesso ao painel.'
+                    : 'Conceder e revogar acesso é do superadministrador.'
+                }
+              >
+                {comoMeChamo(nivel)}
+              </span>
+            )}
+
             <SeletorDeTema />
             <button className="botao botao--discreto text-sm" onClick={() => void sair()}>
               sair

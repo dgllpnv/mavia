@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   administraOperadores,
+  comoMeChamo,
   emailNormalizado,
   emailValido,
   O_QUE_A_REVOGACAO_FAZ,
@@ -64,5 +65,22 @@ describe('quem administra operadores', () => {
     // A ausência é a decisão, e uma tela que não a explica é uma tela em que
     // alguém vai acrescentar a lista por conveniência.
     expect(POR_QUE_NAO_HA_LISTAGEM).toContain('Enumerar, não')
+  })
+})
+
+describe('o nível dito, e não deduzido', () => {
+  it('nomeia os dois níveis com a palavra que a tela usa', () => {
+    // O rótulo é o mesmo vocabulário do resto do painel — `super` é detalhe do
+    // banco, `superadministrador` é o que a pessoa lê.
+    expect(comoMeChamo('super')).toBe('superadministrador')
+    expect(comoMeChamo('operador')).toBe('operadora')
+  })
+
+  it('**concorda com quem administra operadores**', () => {
+    // Se as duas divergirem, a barra diz um poder e o menu oferece outro — e o
+    // operador aprende a não confiar em nenhum dos dois.
+    for (const nivel of ['super', 'operador'] as const) {
+      expect(comoMeChamo(nivel) === 'superadministrador').toBe(administraOperadores(nivel))
+    }
   })
 })

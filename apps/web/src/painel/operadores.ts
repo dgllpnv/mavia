@@ -59,6 +59,22 @@ export function administraOperadores(nivel: NivelDeAdmin): boolean {
   return nivel === 'super'
 }
 
+/**
+ * Como o painel **nomeia** o nível de quem está operando, na barra.
+ *
+ * Existe porque o nível decidia coisas — quais destinos aparecem, qual frase a
+ * tela de operadores mostra — e nunca era **dito**. Quem opera descobria o
+ * próprio poder pela ausência de um link, que é a pior forma de descobrir.
+ *
+ * **É sempre sobre quem pergunta, nunca sobre terceiros.** O dado vem de
+ * `/admin/eu`, e a policy `concessao_propria` da migration `0031` garante que
+ * aquela leitura só enxerga a própria concessão. Esta função não abre caminho
+ * para listar ninguém — ver `POR_QUE_NAO_HA_LISTAGEM`.
+ */
+export function comoMeChamo(nivel: NivelDeAdmin): string {
+  return nivel === 'super' ? 'superadministrador' : 'operadora'
+}
+
 /** O que conceder faz, dito antes do botão. É escalada de privilégio. */
 export function oQueAConcessaoFaz(nivel: NivelDeAdmin): string {
   if (nivel === 'super') {

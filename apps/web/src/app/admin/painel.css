@@ -138,6 +138,32 @@
   color: var(--ink-3);
 }
 
+/**
+ * O nível de quem está operando.
+ *
+ * Mesma voz do `__lugar` — versalete de rótulo, não texto de leitura: é
+ * identificação periférica, do mesmo naipe de "painel de operação". Quem opera
+ * precisa saber o próprio poder de relance, e não parar para ler.
+ *
+ * **Sem cor própria, e é decisão.** A tentação é pintar `superadministrador` de
+ * alguma cor de alerta, e ela erra duas vezes: gasta o único canal de cor que a
+ * barra de papel tem, e trata privilégio como perigo. O peso e a borda separam
+ * o suficiente. `docs/design.md` §2.4: cor com opinião, e pouca.
+ */
+.painel-barra__nivel {
+  font-family: var(--fonte-corpo);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--tracking-xs);
+  text-transform: uppercase;
+  font-weight: var(--peso-rotulo);
+  color: var(--ink-2);
+  border: 1px solid var(--line-forte);
+  border-radius: var(--r-1);
+  padding: var(--s-2) var(--s-8);
+  white-space: nowrap;
+}
+
 .painel-barra__destino {
   font-size: var(--text-corpo);
   color: var(--ink-3);
