@@ -61,6 +61,30 @@
   --primaria-fundo-sutil: var(--petroleo-50);
   --foco: var(--petroleo-600);
 
+  /**
+   * A barra sólida da marca — **superfície, não acento**, e a distinção é a
+   * razão destes dois tokens existirem.
+   *
+   * `--primaria` é um **acento**: cor de botão, de link, de foco. Num tema
+   * escuro um acento precisa ser *claro* para ler sobre fundo escuro, e é por
+   * isso que `--escuro-primaria` é `--petroleo-300`, um ciano claro. Isso está
+   * certo para um botão e **errado para uma barra**: usar o acento como fundo
+   * de superfície invertia a relação e punha uma barra clara em cima de uma
+   * página escura — a inversão que o `docs/design.md` §2.4 proíbe, relatada do
+   * telefone como *"a barra de cima fica meio azul"*.
+   *
+   * A identidade que se quer preservar nos dois temas é **barra sólida escura
+   * com texto claro**. No claro isso é petróleo-700; no escuro, petróleo-900.
+   * O ciano continua sendo o acento — dentro da barra ele é a aba ativa e a
+   * tecla de lançar, que é exatamente o papel dele.
+   *
+   * Decisão do dono do produto em 2026-09-05, sobre duas renderizações.
+   */
+  --barra-fundo: var(--petroleo-700);
+  --barra-sobre: var(--paper-0);
+  /** O acento **dentro** da barra: aba ativa, tecla de lançar. */
+  --barra-acento: var(--paper-0);
+
   /* ---------------------------------------------------------------------
    * Direção do dinheiro. Sempre o quarto canal, nunca o único.
    * Transferência é neutra de propósito: não é receita nem despesa, e
@@ -167,6 +191,11 @@
   --escuro-primaria-sobre: var(--petroleo-900);
   --escuro-primaria-fundo-sutil: #12242a;
   --escuro-foco: var(--petroleo-300);
+  /* Ver `--barra-fundo`: superfície escura nos dois temas, e o ciano guardado
+     para o acento dentro dela. */
+  --escuro-barra-fundo: var(--petroleo-900);
+  --escuro-barra-sobre: var(--petroleo-100);
+  --escuro-barra-acento: var(--petroleo-300);
   --escuro-receita: #4fb98a;
   --escuro-receita-fundo: #12241c;
   --escuro-despesa: #ef8577;
@@ -222,6 +251,9 @@
     --primaria-sobre: var(--escuro-primaria-sobre);
     --primaria-fundo-sutil: var(--escuro-primaria-fundo-sutil);
     --foco: var(--escuro-foco);
+    --barra-fundo: var(--escuro-barra-fundo);
+    --barra-sobre: var(--escuro-barra-sobre);
+    --barra-acento: var(--escuro-barra-acento);
     --receita: var(--escuro-receita);
     --receita-fundo: var(--escuro-receita-fundo);
     --despesa: var(--escuro-despesa);
@@ -263,6 +295,9 @@
   --primaria-sobre: var(--escuro-primaria-sobre);
   --primaria-fundo-sutil: var(--escuro-primaria-fundo-sutil);
   --foco: var(--escuro-foco);
+  --barra-fundo: var(--escuro-barra-fundo);
+  --barra-sobre: var(--escuro-barra-sobre);
+  --barra-acento: var(--escuro-barra-acento);
   --receita: var(--escuro-receita);
   --receita-fundo: var(--escuro-receita-fundo);
   --despesa: var(--escuro-despesa);

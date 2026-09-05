@@ -418,16 +418,31 @@ select {
  * iPhone, a marca ficaria atrás da câmera sem isso. Em qualquer navegador sem
  * entalhe o `env()` vale zero e o `max()` devolve o valor de sempre.
  * ----------------------------------------------------------------------- */
+/**
+ * `padding-block-start` com o inset do topo, e **é ele que conserta a barra de
+ * duas cores**.
+ *
+ * `viewport-fit=cover` faz a página entrar sob o status bar. Sem reservar o
+ * inset **do topo** — só os laterais estavam reservados —, a barra começava
+ * abaixo daquela faixa, e a faixa mostrava o fundo da página: um filete escuro
+ * colado numa barra petróleo. No modo escuro isso fica gritante, porque ali
+ * `--primaria` é `--petroleo-300`, um ciano claro, contra um fundo quase preto.
+ *
+ * `min-height` no lugar de `height`: com `box-sizing: border-box`, uma altura
+ * fixa mais o padding do inset espremeria o conteúdo da barra contra o status
+ * bar em vez de descê-lo.
+ */
 .barra {
   display: flex;
   align-items: center;
   gap: var(--s-16);
-  height: var(--altura-nav);
-  padding-block: 0;
+  min-height: calc(var(--altura-nav) + env(safe-area-inset-top, 0px));
+  padding-block-start: env(safe-area-inset-top, 0px);
+  padding-block-end: 0;
   padding-inline-start: max(var(--s-16), env(safe-area-inset-left));
   padding-inline-end: max(var(--s-16), env(safe-area-inset-right));
-  background: var(--primaria);
-  color: var(--primaria-sobre);
+  background: var(--barra-fundo);
+  color: var(--barra-sobre);
 }
 
 @media (min-width: 1024px) {
@@ -440,18 +455,18 @@ select {
 
 .barra__destino {
   font-size: var(--text-corpo);
-  color: color-mix(in srgb, var(--primaria-sobre) 78%, transparent);
+  color: color-mix(in srgb, var(--barra-sobre) 78%, transparent);
   padding: var(--s-8) 0;
   border-bottom: 2px solid transparent;
 }
 
 .barra__destino:hover {
-  color: var(--primaria-sobre);
+  color: var(--barra-sobre);
 }
 
 .barra__destino[aria-current='page'] {
-  color: var(--primaria-sobre);
-  border-bottom-color: var(--primaria-sobre);
+  color: var(--barra-sobre);
+  border-bottom-color: var(--barra-acento);
   font-weight: var(--peso-rotulo);
 }
 
@@ -477,8 +492,8 @@ select {
   inset-inline: 0;
   bottom: 0;
   z-index: 30;
-  background: var(--primaria);
-  color: var(--primaria-sobre);
+  background: var(--barra-fundo);
+  color: var(--barra-sobre);
   padding-bottom: env(safe-area-inset-bottom);
   padding-inline-start: env(safe-area-inset-left);
   padding-inline-end: env(safe-area-inset-right);
@@ -511,7 +526,7 @@ select {
   font-size: var(--text-xs);
   line-height: var(--lh-xs);
   text-align: center;
-  color: color-mix(in srgb, var(--primaria-sobre) 78%, transparent);
+  color: color-mix(in srgb, var(--barra-sobre) 78%, transparent);
   border-top: 2px solid transparent;
 }
 
@@ -520,8 +535,8 @@ select {
    o peso 600 e a tinta cheia. Quem não distingue os dois tons de claro ainda lê
    a régua e o peso. */
 .abas__destino[aria-current='page'] {
-  color: var(--primaria-sobre);
-  border-top-color: var(--primaria-sobre);
+  color: var(--barra-sobre);
+  border-top-color: var(--barra-acento);
   font-weight: var(--peso-realizado);
 }
 
@@ -552,8 +567,8 @@ select {
   width: calc(100% - var(--s-8));
   height: 40px;
   border-radius: var(--r-2);
-  background: var(--primaria-sobre);
-  color: var(--primaria);
+  background: var(--barra-acento);
+  color: var(--barra-fundo);
   font-family: var(--fonte-numero);
   font-size: var(--text-xs);
   line-height: 1;

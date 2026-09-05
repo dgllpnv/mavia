@@ -20,11 +20,26 @@ export const viewport: Viewport = {
    * insets laterais em `globais.css`.
    */
   viewportFit: 'cover',
-  // A cor da barra do navegador acompanha o tema, mas o claro é a identidade
-  // canônica da Mavia — o escuro é preferência, não a cara do produto.
+  /**
+   * **A cor do cromo do navegador é a cor da barra do produto, não a do papel.**
+   *
+   * Antes eram `#FFFEFB` e `#0E0D0B` — as cores de **fundo** do tema. No
+   * computador ninguém via; no celular, o Chrome pinta a faixa da barra de
+   * endereço com este valor, e ela encosta na barra do produto. O resultado, em
+   * modo escuro, era um preto colado num ciano claro: *"a barra de cima fica
+   * meio azul, a outra metade preta"*, relatado do telefone.
+   *
+   * Os valores são exatamente os de `--barra-fundo` em cada tema: petróleo-700
+   * no claro, petróleo-900 no escuro. Precisam ser **literais** — `theme-color`
+   * é lido pelo navegador antes de qualquer CSS, e uma `var()` aqui não resolve.
+   *
+   * ⚠️ **Se `--barra-fundo` mudar em `packages/ui/src/tokens.css`, estes dois
+   * valores mudam junto.** É uma cópia, e cópias divergem — está escrito aqui
+   * porque não há como o navegador ler o token.
+   */
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#FFFEFB' },
-    { media: '(prefers-color-scheme: dark)', color: '#0E0D0B' },
+    { media: '(prefers-color-scheme: light)', color: '#0b4f5f' },
+    { media: '(prefers-color-scheme: dark)', color: '#062a33' },
   ],
 }
 
