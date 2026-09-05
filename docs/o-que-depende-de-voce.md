@@ -8,7 +8,9 @@ As pendências que o time não pode resolver sozinho.
 > - **E-mail:** Resend por SMTP, configurado e **verificado com handshake real** (STARTTLS + AUTH LOGIN + `250` no DATA). ⚠️ **Só entrega no seu próprio endereço** enquanto não houver domínio verificado — o remetente é o compartilhado `onboarding@resend.dev`, e o Resend restringe o destino ao dono da conta. Cadastro de cliente real não funciona até o item 1.
 > - **Redis:** senha e ACL no ar. Ele estava **sem senha nenhuma** — o container tinha subido antes de a exigência existir.
 > - **Stripe:** variáveis pré-configuradas. Vazias, o checkout responde 503 e o webhook recusa com 400. Basta colar as chaves quando a conta existir.
-> - ⚠️ **A chave do Resend passou pelo chat.** Revogue e gere outra quando puder.
+> - **Google OAuth:** cliente criado, credenciais na VPS, rota `/v1/auth/google` devolvendo `200` com os escopos certos (`openid email profile`), PKCE e nonce. App em **Testes** com `davilopesg@gmail.com` como usuário de teste — publicar exige domínio verificado.
+> - **Encarregado de dados (art. 41):** **Davi Gonçalves Lopes**, `davilopesg@gmail.com`. Fecha metade da **O-6**; a outra metade é a política de privacidade em si, que ainda não existe.
+> - ⚠️ **A chave do Resend e o secret do Google passaram pelo chat.** Gire os dois quando estiver tudo funcionando.
 >
 > **Atualizado em 2026-09-04.** As **oito decisões** do painel de administração (DP-32 a DP-40) foram **todas respondidas** e estão em `docs/decisoes-do-produto.md`. O que resta aqui são **ações**, não escolhas: coisas que exigem a sua mão num serviço de terceiro ou um dado que só você tem.
 

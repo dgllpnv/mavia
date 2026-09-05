@@ -36,6 +36,7 @@ Este arquivo é um índice, não a fonte. A justificativa completa e as consequ�
 | **DP-25** | Existe canal humano de recuperação? | **Não existe.** Confirmado | `docs/produto/spec-autenticacao.md` |
 | **DP-26** | Teto de tenants por usuário | Padrão aceito: **3 por dia, 10 ativos** | `docs/produto/spec-autenticacao.md` |
 | **DP-27** ⛔ | Preços e desconto anual | ~~R$ 59 · R$ 79 · R$ 99; anual = 10 × mensal~~ — **substituída pela DP-41** | `docs/produto/spec-planos-e-assinatura.md` |
+| **DP-42** | Encarregado de dados (LGPD art. 41) | **Davi Gonçalves Lopes**, `davilopesg@gmail.com`. O dono do produto acumula a função. Nome e endereço **têm de aparecer na política de privacidade** — art. 41 §2º I exige que a identidade e o contato sejam publicamente divulgados, e um formulário genérico de contato não cumpre | **O-6** |
 | **DP-41** | Preços alinhados ao Organizze | **R$ 35 · R$ 45 · R$ 69** por mês; anual à vista **R$ 199,90 · R$ 399,90 · R$ 599,90**, sem fórmula ligando os dois | `docs/produto/spec-planos-e-assinatura.md` §2.4, §2.6 |
 | **DP-28** | Ajustar cotas por causa do preço maior | **Não.** Cotas mantidas como estão. Sem promessa de prazo de suporte na página | `docs/produto/spec-planos-e-assinatura.md` |
 | **DP-29** | Duração do teste (7 dias) | **Mantida.** Reavaliar com dado de conversão, não por opinião | `docs/produto/spec-planos-e-assinatura.md` |
