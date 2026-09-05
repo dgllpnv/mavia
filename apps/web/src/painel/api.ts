@@ -1,22 +1,38 @@
 import {
   zBaixaRegistrada,
   zClienteCadastrado,
+  zDescontoConcedido,
+  zEuNoPainel,
   zListaDeBaixas,
   zListaDeClientes,
   zListaDeContasDoCliente,
+  zListaDeDescontos,
   zListaDeLancamentosDoCliente,
   zListaDePerfis,
+  zListaDePrecos,
   zListaDoRegistro,
+  zOperadorConcedido,
+  zOperadorRevogado,
+  zPrecoCriado,
   zTempoConcedido,
   type BaixaAnterior,
   type ClienteNaLista,
   type ContaDoCliente,
+  type DescontoDoCliente,
+  type EuNoPainel,
   type LancamentoDoCliente,
   type LinhaDoRegistro,
   type MeioDePagamento,
+  type NivelDeAdmin,
+  type OperadorConcedido,
+  type OperadorRevogado,
   type PerfilDoCliente,
+  type PrecoCriado,
+  type PrecoVigente,
 } from '@mavia/contracts'
+import type { CodigoDoPlano, Intervalo } from '@mavia/domain'
 import { chamar } from '../api/cliente'
+import type { CorpoDoDesconto } from './descontos'
 import { cabecalhosDaHipotese, type Hipotese } from './hipotese'
 
 /**
@@ -39,10 +55,19 @@ import { cabecalhosDaHipotese, type Hipotese } from './hipotese'
  *
  * Não há chamada para trocar plano ou intervalo — DP-40: *"a rota não existe.
  * Não é 403 nem 404 de controle: é ação que este épico não tem."* Nem para
- * editar preço ou cota: preço, cota e desconto vivem no catálogo em código,
- * nunca em tabela. Nem caminho para as telas `⊙` do cliente (alertas,
- * preferências, sessões) — a §1.7 as declara **não visíveis** pelo painel, e a
- * ausência de rota é a forma dessa decisão.
+ * editar **cota**: a D3 da ADR 0020 vale inteira para cotas, e a ADR 0025
+ * reafirma que não há rota, coluna nem tela — uma cota editada em produção muda
+ * o comportamento do produto para todo mundo sem que teste nenhum perceba.
+ *
+ * **Preço e desconto saíram do catálogo em código** (ADR 0025): o preço-base é
+ * `precos_vigentes`, append-only, e o desconto é por cliente. As duas escritas
+ * estão abaixo. Nem caminho para as telas `⊙` do cliente (alertas, preferências,
+ * sessões) — a §1.7 as declara **não visíveis** pelo painel, e a ausência de
+ * rota é a forma dessa decisão.
+ *
+ * **Não há chamada que liste operadores**, e a ausência é a decisão da migration
+ * `0031`: a rota não existe no servidor, e escrevê-la aqui produziria um 404
+ * que alguém trataria como bug. Ver `painel/operadores.ts`.
  */
 
 /**
@@ -222,6 +247,118 @@ export const painel = {
         corpo: { titularId, nome },
         ...comHipotese(h),
       }),
+    )
+  },
+
+  // -------------------------------------------------------------------------
+  // Preço e desconto — ADR 0025
+  // -------------------------------------------------------------------------
+
+  /**
+   * O histórico de preço, e ele **não pede hipótese**.
+   *
+   * Preço não pertence a espaço de cliente nenhum: é do produto. Declarar motivo
+   * e referência para lê-lo registraria a abertura de um espaço que não foi
+   * aberto — e um registro que afirma um acesso inexistente é pior do que um
+   * registro a menos. É a mesma razão de a rota não passar por `abrir_espaco`.
+   */
+  async precos(): Promise<PrecoVigente[]> {
+    return analisar('/admin/precos', zListaDePrecos, await chamar<unknown>('/admin/precos')).itens
+  },
+
+  /**
+   * Trocar o preço — que é **criar** uma linha, nunca alterar uma.
+   *
+   * `centavos` vai como string de dígitos, como toda quantia que atravessa o
+   * fio. `assinaturasAfetadas` volta do servidor e é sempre zero: a ADR 0025 D2
+   * exige que a tela mostre esse número, e ele vem de lá justamente para não ser
+   * a interface a afirmá-lo.
+   */
+  async criarPreco(corpo: {
+    plano: CodigoDoPlano
+    intervalo: Intervalo
+    centavos: string
+    motivo: string
+  }): Promise<PrecoCriado> {
+    return analisar(
+      '/admin/precos',
+      zPrecoCriado,
+      await chamar<unknown>('/admin/precos', { metodo: 'POST', corpo }),
+    )
+  },
+
+  /** O desconto de um cliente. Pede hipótese: é leitura dentro do espaço dele. */
+  async descontos(tenantId: string, h: Hipotese): Promise<DescontoDoCliente[]> {
+    return analisar(
+      '/admin/clientes/:tenantId/descontos',
+      zListaDeDescontos,
+      await chamar<unknown>(`/admin/clientes/${tenantId}/descontos`, comHipotese(h)),
+    ).itens
+  },
+
+  /**
+   * Conceder desconto. O corpo é um tipo em que a combinação inválida não se
+   * escreve — ver `CorpoDoDesconto`.
+   */
+  async concederDesconto(tenantId: string, h: Hipotese, corpo: CorpoDoDesconto) {
+    return analisar(
+      '/admin/clientes/:tenantId/descontos',
+      zDescontoConcedido,
+      await chamar<unknown>(`/admin/clientes/${tenantId}/descontos`, {
+        metodo: 'POST',
+        corpo,
+        ...comHipotese(h),
+      }),
+    )
+  },
+
+  /**
+   * Revogar o desconto ativo. `motivo` é obrigatório e vai para o registro.
+   *
+   * `DELETE` **com corpo**, como a rota espera: o motivo não cabe na URL, onde
+   * ele acabaria num log de acesso de servidor.
+   */
+  async revogarDesconto(tenantId: string, h: Hipotese, motivo: string) {
+    return analisar(
+      '/admin/clientes/:tenantId/descontos',
+      zDescontoConcedido,
+      await chamar<unknown>(`/admin/clientes/${tenantId}/descontos`, {
+        metodo: 'DELETE',
+        corpo: { motivo },
+        ...comHipotese(h),
+      }),
+    )
+  },
+
+  // -------------------------------------------------------------------------
+  // Operadores — quem tem acesso ao painel
+  // -------------------------------------------------------------------------
+
+  /**
+   * O que **eu** sou no painel — e nunca o que outra pessoa é.
+   *
+   * A policy `concessao_propria` da `0031` autoriza exatamente esta leitura: o
+   * `usuario_id` é o da sessão, e a RLS repete a restrição embaixo. Não há como
+   * usá-la para descobrir o nível de terceiros.
+   */
+  async eu(): Promise<EuNoPainel> {
+    return analisar('/admin/eu', zEuNoPainel, await chamar<unknown>('/admin/eu'))
+  },
+
+  /** Tornar alguém operadora. **Por e-mail**, e sem hipótese: não abre espaço. */
+  async concederOperador(email: string, nivel: NivelDeAdmin): Promise<OperadorConcedido> {
+    return analisar(
+      '/admin/operadores',
+      zOperadorConcedido,
+      await chamar<unknown>('/admin/operadores', { metodo: 'POST', corpo: { email, nivel } }),
+    )
+  },
+
+  async revogarOperador(email: string): Promise<OperadorRevogado> {
+    return analisar(
+      '/admin/operadores',
+      zOperadorRevogado,
+      await chamar<unknown>('/admin/operadores', { metodo: 'DELETE', corpo: { email } }),
     )
   },
 }

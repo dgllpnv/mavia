@@ -85,10 +85,6 @@ const RECUSAS: readonly (readonly [string, string])[] = [
   ['PRORROGACAO_IMPLAUSIVEL', 'Dias entre 1 e 3650. Acima disso é engano de digitação.'],
   ['JA_E_OPERADOR', 'Essa pessoa já é operadora.'],
   [
-    'EXIGE_SUPERADMIN',
-    'Só um superadministrador concede ou revoga acesso ao painel.',
-  ],
-  [
     'SUPER_ATIVO_INSUFICIENTE',
     'Não dá para tirar o último superadministrador: sem ele, ninguém mais concede ' +
       'acesso ao painel. Promova outro antes.',
@@ -616,7 +612,16 @@ export class AdminController {
             WHERE usuario_id = $1 AND revogada_em IS NULL`,
           [operador],
         )
-        return { nivel: r.rows[0]?.nivel ?? 'operador' }
+        // **`?? 'operador'` era o defeito S-3.** A policy `concessao_propria`
+        // faz o trabalho dela e devolve zero linhas para quem não é operador; o
+        // default transformava "não é operador" em "é operador comum", e a
+        // casca do painel carregava para qualquer cliente autenticado.
+        //
+        // Ausência de linha é **ausência de concessão**, e o nome da recusa é o
+        // mesmo que as funções levantam — para a tradução ser uma só.
+        const linha = r.rows[0]
+        if (!linha) throw new ForbiddenException('Esta conta não tem concessão de administrador ativa.')
+        return { nivel: linha.nivel }
       }),
     )
   }
@@ -678,10 +683,25 @@ export class AdminController {
   /**
    * Desligar um operador.
    *
-   * `exigir_dois_admins_ativos` (migration `0031`) recusa qualquer revogação
-   * que deixe menos de dois ativos — **inclusive a de si mesmo**, que é
-   * permitida de propósito: quem percebe que a própria conta foi comprometida
-   * precisa poder se desligar sem esperar por outra pessoa.
+   * **Desligar a si mesmo é livre para qualquer operador; desligar outra pessoa
+   * exige `super`.** A regra vive em `admin.revogar_operador` (migration
+   * `0047`), não aqui.
+   *
+   * ## O defeito S-4, registrado porque quase custou caro
+   *
+   * A `0045` escreveu a justificativa da auto-revogação — *"quem percebe que a
+   * própria conta foi comprometida precisa poder se desligar sem esperar por
+   * outra pessoa"* — e a `0046` a revogou ao exigir `super` para tudo, sem
+   * mencionar. **Este comentário continuou descrevendo o controle removido**,
+   * citando `exigir_dois_admins_ativos`, que nem chegava a rodar porque a
+   * checagem de `super` recusava antes.
+   *
+   * Um controle descrito e ausente é pior que ausente: alguém conta com ele
+   * durante um incidente. E sem MFA (DP-32 revista) esta é a contenção que
+   * resta — a alternativa é SSH na VPS.
+   *
+   * As invariantes de contagem seguem por cima das duas: `exigir_dois_admins_
+   * ativos` (`0031`) e `manter_um_super_ativo` (`0046`).
    */
   @Delete('operadores')
   @HttpCode(200)
@@ -718,11 +738,12 @@ export class AdminController {
     const operador = this.operador(req)
     return this.traduzindoRecusa(async () =>
       comAdmin(this.pool, contextoDeOperador(operador), async (c) => {
-        const r = await c.query(
-          `SELECT id, plano, intervalo, valor_centavos::text AS valor_centavos, moeda,
-                  stripe_price_id, vigente_desde, criado_por, motivo
-             FROM precos_vigentes ORDER BY vigente_desde DESC LIMIT 100`,
-        )
+        // **`SELECT` direto era o defeito S-1.** Esta rota era a única leitura do
+        // painel que não passava por função `admin.*`, e é lá que a checagem de
+        // concessão mora. `ROTAS_DE_ADMIN` dispensa a matriz de papéis e exige
+        // só sessão — logo qualquer cliente autenticado lia o histórico de
+        // preços com a nota interna do operador e o UUID de quem a escreveu.
+        const r = await c.query('SELECT * FROM admin.listar_precos($1)', [100])
         return { itens: r.rows }
       }),
     )
@@ -1035,6 +1056,15 @@ export class AdminController {
       const texto = String((erro as { message?: string }).message ?? '')
       if (texto.includes('SEM_CONCESSAO_DE_ADMIN')) {
         throw new ForbiddenException('Esta conta não tem concessão de administrador ativa.')
+      }
+      // **403 e não 400 — o defeito S-6.** `EXIGE_SUPERADMIN` estava na lista
+      // `RECUSAS`, que traduz tudo para `BadRequestException`. Uma tentativa de
+      // escalada de privilégio ficava indistinguível de erro de digitação em
+      // qualquer alerta baseado em status.
+      if (texto.includes('EXIGE_SUPERADMIN')) {
+        throw new ForbiddenException(
+          'Só um superadministrador concede acesso ao painel, ou desliga outra pessoa.',
+        )
       }
       // As recusas das funções de contrato são **regra de negócio**, não falha:
       // teto excedido, estado que não permite, teste já prorrogado. Devolver

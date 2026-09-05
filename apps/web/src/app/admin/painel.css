@@ -253,6 +253,77 @@
   font-variant-numeric: proportional-nums lining-nums slashed-zero;
 }
 
+/* --------------------------------------------------------------------------
+ * O número que veio de um ato — contagem de assinaturas afetadas, desconto
+ * ativo.
+ *
+ * 36px contra 15px de corpo: 2,4×. Quem carrega a relação de escala de 3:1 da
+ * auditoria é o `painel-heroi` do cabeçalho; este é o segundo degrau, e passar
+ * dos dois faria a tela ter duas manchetes.
+ *
+ * `tabular-nums` mesmo fora de coluna: um número que troca sozinho quando a
+ * resposta chega não pode mudar de largura ao trocar — o olho lê o salto como
+ * se o valor tivesse mudado mais do que mudou.
+ * ----------------------------------------------------------------------- */
+.numero-forte {
+  font-family: var(--fonte-numero);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-size: var(--text-4);
+  line-height: var(--lh-4);
+  font-weight: var(--peso-realizado);
+  color: var(--ink-0);
+}
+
+/* --------------------------------------------------------------------------
+ * A troca de preço: o valor atual, a seta, o valor novo
+ *
+ * **Assimétrico de propósito** (§2.5): o preço novo é maior que o atual porque
+ * é ele que está sendo decidido. Duas colunas do mesmo tamanho diriam que os
+ * dois números têm o mesmo peso, e a decisão é sobre um deles.
+ *
+ * A seta é `aria-hidden`: a ordem dos rótulos ("Preço atual", "Preço novo") já
+ * carrega a direção para quem lê com leitor de tela, e uma seta lida em voz
+ * alta vira ruído no meio de dois valores.
+ * ----------------------------------------------------------------------- */
+.troca {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: var(--s-24);
+  align-items: start;
+}
+
+.troca__de {
+  font-size: var(--text-2);
+  line-height: var(--lh-2);
+  color: var(--ink-2);
+}
+
+.troca__para {
+  font-size: var(--text-4);
+  line-height: var(--lh-4);
+  color: var(--ink-0);
+}
+
+/* A seta na linha dos números, e não na dos rótulos: é entre eles que ela
+   significa alguma coisa. */
+.troca__seta {
+  align-self: center;
+  color: var(--ink-4);
+  font-size: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .troca {
+    grid-template-columns: 1fr;
+    gap: var(--s-12);
+  }
+
+  /* Empilhado, a seta apontaria para o lado errado. O rótulo já diz. */
+  .troca__seta {
+    display: none;
+  }
+}
+
 /** O identificador técnico — UUID, correlação, referência externa. */
 .identificador {
   font-family: var(--fonte-id);

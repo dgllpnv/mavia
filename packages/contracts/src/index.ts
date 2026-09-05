@@ -887,6 +887,19 @@ export const zOperadorConcedido = z.object({
   operadoresAtivos: z.number(),
 })
 
+/**
+ * A revogação, e ela **não devolve `id`**.
+ *
+ * Não há concessão nova a nomear: `admin.revogar_operador` carimba
+ * `revogada_em` na que existia. O que volta é quem perdeu o acesso e quantos
+ * operadores sobraram — e o segundo número é o que prova que a invariante dos
+ * dois ativos continua valendo depois do ato.
+ */
+export const zOperadorRevogado = z.object({
+  usuarioId: zUuid,
+  operadoresAtivos: z.number(),
+})
+
 export type EstadoDaAssinatura = z.infer<typeof zEstadoDaAssinatura>
 export type MotivoDeAcesso = z.infer<typeof zMotivoDeAcesso>
 export type MeioDePagamento = z.infer<typeof zMeioDePagamento>
@@ -904,6 +917,7 @@ export type PrecoCriado = z.infer<typeof zPrecoCriado>
 export type DescontoDoCliente = z.infer<typeof zDescontoDoCliente>
 export type EuNoPainel = z.infer<typeof zEuNoPainel>
 export type OperadorConcedido = z.infer<typeof zOperadorConcedido>
+export type OperadorRevogado = z.infer<typeof zOperadorRevogado>
 export type NivelDeAdmin = EuNoPainel['nivel']
 
 /**

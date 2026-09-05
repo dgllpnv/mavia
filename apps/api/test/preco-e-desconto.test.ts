@@ -58,6 +58,15 @@ const conceder = (tenant = TENANT_A, corpo: Record<string, unknown> = {}) =>
     ...corpo,
   })
 
+/** O endereço de um usuário da semente — os testes de operadora falam por e-mail. */
+async function emailDe(usuario: string): Promise<string> {
+  const r = await api.banco.cliente.query<{ email: string }>(
+    'SELECT email FROM usuarios WHERE id = $1',
+    [usuario],
+  )
+  return r.rows[0]!.email
+}
+
 beforeAll(async () => {
   api = await subirApi()
   await api.banco.cliente.query('SELECT admin.conceder($1, $2)', [USUARIO_A, USUARIO_A])
@@ -367,14 +376,6 @@ describe('conceder e revogar operadora pelo painel', () => {
   const conceder = (email: string) => comoOperador('POST', '/v1/admin/operadores', { email })
   const revogar = (email: string) => comoOperador('DELETE', '/v1/admin/operadores', { email })
 
-  async function emailDe(usuario: string): Promise<string> {
-    const r = await api.banco.cliente.query<{ email: string }>(
-      'SELECT email FROM usuarios WHERE id = $1',
-      [usuario],
-    )
-    return r.rows[0]!.email
-  }
-
   it('**concede por e-mail, e quem concede é quem pediu**', async () => {
     const alvo = await emailDe(USUARIO_B)
     const r = await conceder(alvo)
@@ -461,16 +462,42 @@ describe('superadministrador — a única diferença entre os dois níveis', () 
     const r = await comoOperadorComum('POST', '/v1/admin/operadores', {
       email: 'alguem@exemplo.test',
     })
-    expect(r.statusCode).toBe(400)
+    // **403 e não 400** — achado S-6 do parecer. `EXIGE_SUPERADMIN` estava na
+    // lista que traduz tudo para `BadRequestException`, e uma tentativa de
+    // escalada de privilégio ficava indistinguível de erro de digitação em
+    // qualquer alerta baseado em status.
+    expect(r.statusCode).toBe(403)
     expect(String(r.json().message)).toContain('superadministrador')
   })
 
-  it('o operador comum não revoga acesso', async () => {
-    const r = await comoOperadorComum('DELETE', '/v1/admin/operadores', {
-      email: 'alguem@exemplo.test',
-    })
-    expect(r.statusCode).toBe(400)
+  it('**o operador comum não desliga OUTRA pessoa**', async () => {
+    // Achado S-4. A `0045` permitia a qualquer operador revogar; a `0046`
+    // exigiu `super` para tudo — e apagou a auto-revogação sem dizer, embora o
+    // controlador continuasse a documentar como controle vivo.
+    //
+    // A regra da `0047` separa os dois casos, e é a leitura literal do pedido
+    // do dono: a única diferença do super é **conceder**.
+    const alvo = await emailDe(USUARIO_A)
+    const r = await comoOperadorComum('DELETE', '/v1/admin/operadores', { email: alvo })
+
+    expect(r.statusCode).toBe(403)
     expect(String(r.json().message)).toContain('superadministrador')
+  })
+
+  it('**mas desliga a si mesmo** — a contenção que resta sem MFA', async () => {
+    // Quem percebe que a própria conta foi comprometida precisa se desligar sem
+    // esperar por outra pessoa. Sem MFA (DP-32 revista) esta é a contenção que
+    // sobra; a alternativa é SSH na VPS.
+    //
+    // A asserção é sobre **qual** recusa chega: com dois operadores ativos, a
+    // invariante de contagem barra por último. O que importa é que a recusa
+    // **não** seja `EXIGE_SUPERADMIN` — isso prova que o ramo de autorização
+    // foi atravessado.
+    const proprio = await emailDe(USUARIO_B)
+    const r = await comoOperadorComum('DELETE', '/v1/admin/operadores', { email: proprio })
+
+    expect(String(r.json().message)).not.toContain('superadministrador')
+    expect(String(r.json().message)).toContain('dois operadores')
   })
 
   it('**e faz todo o resto igual** — o nível não toca em mais nada', async () => {

@@ -150,8 +150,9 @@ function Contrato({ cliente }: { readonly cliente: PerfilDoCliente }) {
       <p className="mt-24 max-w-[70ch] text-sm text-ink-3">
         Não há como trocar plano ou intervalo por aqui, e não é um controle de permissão: a ação não
         existe no painel. O cliente troca pela própria tela de plano, que é onde a regra do
-        rebaixamento no meio do ciclo já está implementada. Preço e cota também não se editam —
-        vivem no catálogo em código.
+        rebaixamento no meio do ciclo já está implementada. Cota também não se edita — vive no
+        catálogo em código, porque uma cota mudada em produção muda o produto para todo mundo. O
+        desconto deste cliente fica na aba ao lado, e o preço-base dos planos em preços.
       </p>
     </>
   )
@@ -165,7 +166,7 @@ function Contrato({ cliente }: { readonly cliente: PerfilDoCliente }) {
  *
  * | Ato | Estado | Teto |
  * |---|---|---|
- * | prorrogar o teste | `teste` | uma vez por espaço, no máximo +7 dias |
+ * | prorrogar o teste | `teste` | **sem teto e repetível** desde 2026-09-05 |
  * | conceder cortesia | `ativa`, `em_atraso`, `cancelada` | +30 por vez, +60 acumulados |
  *
  * `expirada` é recusado nas duas: dar tempo a quem já expirou é reativar sem
@@ -188,7 +189,15 @@ function TempoConcedido({
 
   const ehTeste = estado === 'teste'
   const aceita = ehTeste || estado === 'ativa' || estado === 'em_atraso' || estado === 'cancelada'
-  const teto = ehTeste ? 7 : 30
+  // **Prorrogação e cortesia deixaram de compartilhar o teto**, e é decisão de
+  // produto, não simetria perdida: uma estende um teste grátis, a outra
+  // compensa um cliente pagante. O dono derrubou o teto da primeira em
+  // 2026-09-05; o da segunda continua em pé (30 por vez, 60 acumulados).
+  //
+  // 3650 não é política: é guarda de digitação — a diferença entre "trinta" e
+  // "trinta mil porque o zero grudou". A API repete a mesma faixa, e é ela que
+  // vale; isto aqui evita a ida ao servidor para recusar o óbvio.
+  const teto = ehTeste ? 3650 : 30
 
   const conceder = useMutation({
     mutationFn: () =>
@@ -228,7 +237,7 @@ function TempoConcedido({
 
       <p className="mt-8 text-corpo text-ink-2">
         {ehTeste
-          ? 'Uma vez por espaço, no máximo sete dias. O teste não é prorrogado automaticamente em nenhuma outra circunstância.'
+          ? 'Sem teto, e pode repetir — cada prorrogação soma sobre a anterior. O teste não é prorrogado automaticamente em nenhuma outra circunstância.'
           : 'No máximo trinta dias por concessão e sessenta acumulados no mesmo período. O tempo entra em cortesia, e nunca no fim do ciclo.'}
       </p>
 

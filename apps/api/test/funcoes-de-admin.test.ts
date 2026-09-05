@@ -68,6 +68,9 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   // as duas são consultadas de dentro de policies, e uma função de policy
   // precisa atravessar a RLS da tabela que consulta.
   ['tem_concessao_super', 'mavia_migrate'],
+  // Achado S-1 do parecer: a leitura de preço fazia SELECT direto, sem passar
+  // por funcao nenhuma — e é dentro delas que a checagem de concessao mora.
+  ['listar_precos', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

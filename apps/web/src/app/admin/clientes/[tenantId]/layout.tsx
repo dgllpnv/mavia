@@ -15,17 +15,22 @@ import { Portao } from '../../../../painel/portao'
  * uma promessa de fluxo e vira uma propriedade da árvore de componentes: as
  * telas abaixo não existem para o React, logo não há consulta a disparar.
  *
- * ## Quatro telas, quatro rotas, quatro linhas no registro
+ * ## Uma tela, uma rota, uma linha no registro
  *
- * Perfil, contas, lançamentos e baixas anteriores têm rota própria na API
- * (§1.4), e aqui elas têm rota própria também. Uma página única que carregasse
- * as quatro de uma vez gravaria quatro leituras toda vez que alguém quisesse
- * conferir uma data no perfil — e um registro que diz que o operador leu 200
- * lançamentos quando ele leu zero é um registro que ninguém consegue usar.
+ * Perfil, contas, lançamentos, baixas anteriores e desconto têm rota própria na
+ * API (§1.4 e ADR 0025), e aqui elas têm rota própria também. Uma página única
+ * que carregasse todas de uma vez gravaria uma leitura de cada toda vez que
+ * alguém quisesse conferir uma data no perfil — e um registro que diz que o
+ * operador leu 200 lançamentos quando ele leu zero é um registro que ninguém
+ * consegue usar.
  *
- * A **quinta** tela de cliente não existe, e a §1.4 diz isso por escrito: é
- * ticket próprio. As telas `⊙` — alertas, preferências, sessões — **não são
- * visíveis pelo painel** (§1.7), e a ausência de rota é a forma dessa decisão.
+ * **Desconto entrou aqui, e não numa tela de produto**: ele é do cliente, por
+ * negociação, e conceder é um ato dentro do espaço dele — com hipótese
+ * declarada, como toda escrita do painel. Preço é o oposto: é do produto, não
+ * abre espaço nenhum, e por isso mora em `/admin/precos`.
+ *
+ * As telas `⊙` — alertas, preferências, sessões — **não são visíveis pelo
+ * painel** (§1.7), e a ausência de rota é a forma dessa decisão.
  */
 
 const ABAS = [
@@ -33,6 +38,7 @@ const ABAS = [
   { sufixo: '/contas', rotulo: 'contas' },
   { sufixo: '/lancamentos', rotulo: 'lançamentos' },
   { sufixo: '/pagamentos', rotulo: 'baixas' },
+  { sufixo: '/descontos', rotulo: 'desconto' },
 ] as const
 
 export default function LayoutDoEspaco({ children }: { children: ReactNode }) {

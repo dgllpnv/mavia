@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useSessao } from '../../componentes/provedores'
 import { SeletorDeTema } from '../../componentes/seletor-de-tema'
 import { ProvedorDoPainel } from '../../painel/contexto'
+import { useNivel } from '../../painel/nivel'
 import './painel.css'
 
 /**
@@ -35,25 +36,49 @@ import './painel.css'
  *
  * Nenhum link para tela do cliente: alertas, preferências e sessões são as
  * telas `⊙` da §1.7, **não visíveis pelo painel**, e a ausência de rota é a
- * forma dessa decisão. Não há tela de trocar plano (DP-40) nem de editar preço
- * ou cota — preço, cota e desconto vivem no catálogo em código, nunca em tabela.
+ * forma dessa decisão. Não há tela de trocar plano (DP-40) nem de editar
+ * **cota** — a D3 da ADR 0020 vale inteira para cotas, e a ADR 0025 a reafirma:
+ * uma cota editada em produção muda o comportamento do produto para todo mundo
+ * sem que teste nenhum perceba. Não há rota, não há coluna, não há tela.
+ *
+ * **Preço e desconto saíram do código** (ADR 0025) e têm tela: `/admin/precos`,
+ * append-only, e a sub-tela de desconto dentro da ficha do cliente. A metade da
+ * D3 que caiu foi a do preço — ele já era cópia, porque quem cobra é o provedor
+ * de pagamento; a metade das cotas continua de pé.
+ *
+ * ## `operadores` só aparece para quem pode usá-lo
+ *
+ * O destino é escondido de quem não é `super`. **Esconder não é o controle** —
+ * `admin.conceder_operador` exige `super` de qualquer jeito, e a policy
+ * `concessao_propria` da `0031` garante que a leitura de nível é sobre quem
+ * pergunta. O que se evita é um caminho que sempre termina em recusa: uma
+ * interface que mente sobre o que oferece ensina o operador a duvidar do resto.
  */
 
 const DESTINOS = [
   { href: '/admin', rotulo: 'clientes' },
+  { href: '/admin/precos', rotulo: 'preços' },
   { href: '/admin/registro', rotulo: 'registro' },
 ] as const
+
+/** O destino que só existe para o superadministrador. */
+const OPERADORES = { href: '/admin/operadores', rotulo: 'operadores' } as const
 
 export default function LayoutDoPainel({ children }: { children: ReactNode }) {
   const { eu, carregando, sair } = useSessao()
   const router = useRouter()
   const caminho = usePathname()
+  const { nivel } = useNivel(!carregando && eu !== null)
 
   useEffect(() => {
     if (!carregando && !eu) router.replace('/entrar')
   }, [carregando, eu, router])
 
   if (carregando || !eu) return null
+
+  // Enquanto o nível não chegou, o destino não aparece: um link que some depois
+  // de aparecer é pior do que um link que demora um instante a nascer.
+  const destinos = nivel !== null && nivel === 'super' ? [...DESTINOS, OPERADORES] : DESTINOS
 
   return (
     <ProvedorDoPainel>
@@ -63,7 +88,7 @@ export default function LayoutDoPainel({ children }: { children: ReactNode }) {
           <span className="painel-barra__lugar">painel de operação</span>
 
           <nav className="flex items-center gap-20" aria-label="Navegação do painel">
-            {DESTINOS.map((d) => {
+            {destinos.map((d) => {
               const ativo =
                 d.href === '/admin' ? caminho === '/admin' || caminho.startsWith('/admin/clientes') : caminho.startsWith(d.href)
               return (
