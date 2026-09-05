@@ -97,6 +97,9 @@ export function contextoDeOperador(usuarioId: string): ContextoDeOperador {
   return { usuarioId } as ContextoDeOperador
 }
 
+export type ContextoDeOperadorEscrita = Readonly<{ usuarioId: string }> &
+  Marcado<'operador-escrita'>
+
 /**
  * **Chamada apenas por `admin.abrir_espaco`** (ticket 05), depois de a função
  * ter gravado a auditoria e definido o GUC na mesma instrução. Chamá-la de
@@ -105,6 +108,25 @@ export function contextoDeOperador(usuarioId: string): ContextoDeOperador {
  */
 export function contextoDeAdmin(usuarioId: string, tenantId: string): ContextoDeAdmin {
   return { usuarioId, tenantId } as ContextoDeAdmin
+}
+
+/**
+ * Escrita de operador **sem espaço de cliente** — ADR 0025.
+ *
+ * O quarto contexto, e ele existe porque um preço de plano **não pertence a
+ * espaço nenhum**: é do produto. `contextoDeAdminEscrita` exige um `tenantId`
+ * porque toda escrita anterior do painel acontecia dentro de um cliente, com o
+ * espaço aberto e auditado. Trocar o preço do `Pessoal` não abre espaço de
+ * ninguém, e passar um tenant qualquer para satisfazer o tipo produziria uma
+ * linha de auditoria afirmando que alguém entrou num espaço em que não entrou.
+ *
+ * A marca é própria — e não um `tenantId` opcional no tipo existente — porque
+ * a diferença precisa ser visível na assinatura de quem recebe. Um contexto
+ * "às vezes com tenant" faria as duas unidades de trabalho aceitarem as duas
+ * formas, e a distinção viraria uma condição em tempo de execução.
+ */
+export function contextoDeOperadorEscrita(usuarioId: string): ContextoDeOperadorEscrita {
+  return { usuarioId } as ContextoDeOperadorEscrita
 }
 
 /** Irmã da anterior, para `admin.abrir_espaco_para_escrita`. */
@@ -318,6 +340,32 @@ export async function comTenantDeAdmin<T>(
  * leitura: `mavia_admin` não é membro de `mavia_admin_escrita`, então esta
  * função recebendo o pool de leitura morre no `SET LOCAL ROLE`.
  */
+/**
+ * Escrita de operador fora de qualquer espaço — ADR 0025.
+ *
+ * `app.tenant_id` é definido como vazio **explicitamente**, e não deixado sem
+ * definir: a conexão vem de um pool e pode carregar o resto de uma transação
+ * anterior. Um GUC herdado faria esta escrita acontecer dentro do espaço do
+ * último cliente que alguém abriu — silenciosamente, e só às vezes.
+ */
+export async function comAdminEscrita<T>(
+  poolDeEscrita: Pool,
+  contexto: ContextoDeOperadorEscrita,
+  trabalho: (cliente: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!contexto.usuarioId) throw new ContextoAusente('app.usuario_id')
+
+  return emTransacao(
+    poolDeEscrita,
+    'mavia_admin_escrita',
+    async (cliente) => {
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.usuario_id', contexto.usuarioId])
+      await cliente.query('SELECT set_config($1, $2, true)', ['app.tenant_id', ''])
+    },
+    trabalho,
+  )
+}
+
 export async function comTenantDeAdminEscrita<T>(
   poolDeEscrita: Pool,
   contexto: ContextoDeAdminEscrita,

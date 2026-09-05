@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -12,17 +13,20 @@ import {
   Req,
   UnauthorizedException,
 } from '@nestjs/common'
+import { randomUUID } from 'node:crypto'
 import type { FastifyRequest } from 'fastify'
 import type { Pool, PoolClient } from 'pg'
 import { z } from 'zod'
 import { MENSAGEIRO, type Mensageiro } from '../mensageiro/mensageiro.js'
 import {
   comAdmin,
+  comAdminEscrita,
   comTenantDeAdmin,
   comTenantDeAdminEscrita,
   contextoDeAdmin,
   contextoDeAdminEscrita,
   contextoDeOperador,
+  contextoDeOperadorEscrita,
 } from '../tenancy/tenancy.js'
 
 export const POOL_DO_PAINEL = Symbol('POOL_DO_PAINEL')
@@ -84,6 +88,10 @@ const RECUSAS: readonly (readonly [string, string])[] = [
   ['ASSINATURA_INEXISTENTE', 'Este espaço não tem assinatura.'],
   ['RAZAO_AUSENTE', 'Escreva a razão: ela vai para o registro.'],
   ['VALOR_INVALIDO', 'O valor da baixa é positivo, em centavos.'],
+  ['PRECO_INALTERADO', 'Este já é o preço vigente. Nada foi gravado.'],
+  ['PLANO_INVALIDO', 'Informe o plano.'],
+  ['MOTIVO_INSUFICIENTE', 'Escreva o motivo com pelo menos oito caracteres: ele vai para o registro.'],
+  ['SEM_DESCONTO_ATIVO', 'Este espaço não tem desconto ativo para revogar.'],
   ['RECEBIMENTO_NO_FUTURO', 'A data do recebimento não pode estar no futuro.'],
   [
     'ESTADO_NAO_PERMITE_BAIXA',
@@ -190,6 +198,52 @@ const zTempoConcedido = z.object({
   dias: z.number().int().min(1).max(30),
   razao: z.string().trim().min(3).max(280),
 })
+
+/**
+ * Preço novo — ADR 0025 D2.
+ *
+ * `centavos` como **string** e não `number`: um preço anual de R$ 599,90 cabe
+ * num `number`, e a regra 1 do `CLAUDE.md` não fala do que cabe. Dinheiro
+ * atravessa o fio em decimal, é convertido para `bigint` na borda, e nenhum
+ * caminho o transforma em ponto flutuante.
+ */
+const zPrecoNovo = z.object({
+  plano: z.enum(['pessoal', 'familia', 'negocio']),
+  intervalo: z.enum(['mensal', 'anual']),
+  centavos: z.string().regex(/^[1-9][0-9]{0,11}$/, 'centavos: inteiro positivo, em texto'),
+  motivo: z.string().trim().min(8).max(280),
+})
+
+/**
+ * Desconto — ADR 0025 D1.
+ *
+ * `pontosBase` inteiro de 1 a 10000. `0.15` traria ponto flutuante para dois
+ * passos de uma `Money`, e é o que `packages/domain/src/desconto.ts` recusa.
+ *
+ * O `superRefine` existe porque a combinação é o que importa: um corpo que
+ * declara `percentual` **e** manda `centavos` é ambíguo, e o banco o recusaria
+ * com `valor_combina_com_especie` — uma mensagem que o operador não entenderia.
+ */
+const zDesconto = z
+  .object({
+    especie: z.enum(['percentual', 'valor']),
+    pontosBase: z.number().int().min(1).max(10_000).optional(),
+    centavos: z.string().regex(/^[1-9][0-9]{0,11}$/).optional(),
+    duracao: z.enum(['uma_vez', 'meses', 'sempre']),
+    meses: z.number().int().min(1).max(120).optional(),
+    motivo: z.string().trim().min(8).max(280),
+  })
+  .superRefine((d, ctx) => {
+    const erro = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message })
+    if (d.especie === 'percentual' && d.pontosBase === undefined) erro('percentual pede pontosBase')
+    if (d.especie === 'percentual' && d.centavos !== undefined) erro('percentual não leva centavos')
+    if (d.especie === 'valor' && d.centavos === undefined) erro('valor pede centavos')
+    if (d.especie === 'valor' && d.pontosBase !== undefined) erro('valor não leva pontosBase')
+    if (d.duracao === 'meses' && d.meses === undefined) erro('duração em meses pede meses')
+    if (d.duracao !== 'meses' && d.meses !== undefined) erro('meses só com duração em meses')
+  })
+
+const zMotivo = z.object({ motivo: z.string().trim().min(8).max(280) })
 
 @Controller('v1/admin')
 export class AdminController {
@@ -466,6 +520,139 @@ export class AdminController {
     })
   }
 
+  // -------------------------------------------------------------------------
+  // Preço e desconto — ADR 0025
+  // -------------------------------------------------------------------------
+
+  /**
+   * O histórico de preço de cada plano.
+   *
+   * **Leitura sem espaço aberto**, porque preço não pertence a espaço nenhum:
+   * é do produto. Nenhuma linha de `abrir_espaco` é escrita, e nenhuma deveria
+   * ser — auditar "entrou no espaço X" para ler uma tabela sem tenant seria
+   * registrar um acesso que não aconteceu.
+   */
+  @Get('precos')
+  async precos(@Req() req: FastifyRequest) {
+    const operador = this.operador(req)
+    return this.traduzindoRecusa(async () =>
+      comAdmin(this.pool, contextoDeOperador(operador), async (c) => {
+        const r = await c.query(
+          `SELECT id, plano, intervalo, valor_centavos::text AS valor_centavos, moeda,
+                  stripe_price_id, vigente_desde, criado_por, motivo
+             FROM precos_vigentes ORDER BY vigente_desde DESC LIMIT 100`,
+        )
+        return { itens: r.rows }
+      }),
+    )
+  }
+
+  /**
+   * Trocar o preço-base de um plano. **Cria; nunca altera.**
+   *
+   * A ausência de Stripe **não bloqueia** esta rota — ver a D3 reescrita da ADR
+   * 0025. Hoje ninguém é cobrado nada, então a nossa linha não é uma segunda
+   * verdade sobre o preço: é a única. A trava contra cobrar errado vive na
+   * abertura da assinatura, no épico 11, e não aqui.
+   *
+   * `assinaturasAfetadas` volta na resposta **sempre zero**, e a tela é
+   * obrigada a mostrá-lo. Não é decoração: quem clica precisa ler, em número,
+   * que ninguém que já paga vai ser tocado.
+   */
+  @Post('precos')
+  @HttpCode(201)
+  async criarPreco(@Req() req: FastifyRequest, @Body() corpo: unknown) {
+    const operador = this.operador(req)
+    const analise = zPrecoNovo.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const d = analise.data
+
+    return this.traduzindoRecusa(async () =>
+      comAdminEscrita(this.poolDeEscrita, contextoDeOperadorEscrita(operador), async (c) => {
+        const r = await c.query<{ id_do_preco: string; valor_anterior: string | null }>(
+          'SELECT * FROM admin.criar_preco($1, $2::intervalo_de_cobranca, $3::bigint, $4, $5, $6)',
+          [d.plano, d.intervalo, d.centavos, d.motivo, randomUUID(), null],
+        )
+        return {
+          id: r.rows[0]!.id_do_preco,
+          valorAnterior: r.rows[0]!.valor_anterior,
+          assinaturasAfetadas: 0,
+        }
+      }),
+    )
+  }
+
+  /** O desconto vigente de um cliente, e o histórico dele. */
+  @Get('clientes/:tenantId/descontos')
+  async descontos(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string) {
+    return this.comEspacoAberto(req, tenantId, 'descontos', async (c) => {
+      const r = await c.query(
+        `SELECT id, especie, pontos_base, valor_centavos::text AS valor_centavos, moeda,
+                duracao, meses, stripe_coupon_id, motivo, concedido_em, revogado_em
+           FROM descontos_de_cliente WHERE tenant_id = $1 ORDER BY concedido_em DESC`,
+        [tenantId],
+      )
+      return { itens: r.rows }
+    })
+  }
+
+  /**
+   * Conceder desconto. Substitui o vigente, e as duas linhas ficam.
+   *
+   * Este **abre o espaço do cliente**, ao contrário da rota de preço: o
+   * desconto é do cliente, e conceder é um ato dentro do espaço dele — com
+   * hipótese declarada e auditoria, como toda escrita do painel.
+   */
+  @Post('clientes/:tenantId/descontos')
+  @HttpCode(201)
+  async concederDesconto(
+    @Req() req: FastifyRequest,
+    @Param('tenantId') tenantId: string,
+    @Body() corpo: unknown,
+  ) {
+    const analise = zDesconto.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+    const d = analise.data
+
+    return this.escrevendoNoEspaco(req, tenantId, 'concedeu_desconto', async (c, correlacao) => {
+      const r = await c.query<{ id: string }>(
+        `SELECT admin.conceder_desconto($1, $2::especie_de_desconto, $3, $4::bigint,
+                                        $5::duracao_de_desconto, $6, $7, $8, $9) AS id`,
+        [
+          tenantId,
+          d.especie,
+          d.pontosBase ?? null,
+          d.centavos ?? null,
+          d.duracao,
+          d.meses ?? null,
+          d.motivo,
+          correlacao,
+          null,
+        ],
+      )
+      return { id: r.rows[0]!.id }
+    })
+  }
+
+  @Delete('clientes/:tenantId/descontos')
+  @HttpCode(200)
+  async revogarDesconto(
+    @Req() req: FastifyRequest,
+    @Param('tenantId') tenantId: string,
+    @Body() corpo: unknown,
+  ) {
+    const analise = zMotivo.safeParse(corpo)
+    if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return this.escrevendoNoEspaco(req, tenantId, 'revogou_desconto', async (c, correlacao) => {
+      const r = await c.query<{ id: string }>(
+        'SELECT admin.revogar_desconto($1, $2, $3) AS id',
+        [tenantId, analise.data.motivo, correlacao],
+      )
+      return { id: r.rows[0]!.id }
+    })
+  }
+
   @Post('clientes/:tenantId/cortesia')
   @HttpCode(201)
   async concederCortesia(@Req() req: FastifyRequest, @Param('tenantId') tenantId: string, @Body() corpo: unknown) {
@@ -538,11 +725,34 @@ export class AdminController {
     acao: string,
     trabalho: (c: PoolClient, dados: { dias: number; razao: string }, correlacao: string) => Promise<T>,
   ): Promise<T> {
-    const { motivo, referencia } = this.hipotese(req)
-    const operador = this.operador(req)
-
     const analise = zTempoConcedido.safeParse(corpo)
     if (!analise.success) throw new BadRequestException(analise.error.issues.map((i) => i.message))
+
+    return this.escrevendoNoEspaco(req, tenantId, acao, (c, correlacao) =>
+      trabalho(c, analise.data, correlacao),
+    )
+  }
+
+  /**
+   * Escrita dentro do espaço de um cliente, com o corpo já analisado.
+   *
+   * Extraído de `escrevendoContrato`, que era o mesmo bloco amarrado ao schema
+   * de `{ dias, razao }`. As rotas de desconto têm corpos diferentes e a mesma
+   * cerimônia — hipótese declarada, espaço aberto na mesma transação,
+   * correlação vinda da própria função que auditou.
+   *
+   * A correlação **vem de `abrir_espaco_para_escrita`** e não é gerada aqui: é
+   * ela que liga a linha de intenção à linha de efeito, e gerá-la fora
+   * permitiria auditar um espaço e efetivar noutro.
+   */
+  private async escrevendoNoEspaco<T>(
+    req: FastifyRequest,
+    tenantId: string,
+    acao: string,
+    trabalho: (c: PoolClient, correlacao: string) => Promise<T>,
+  ): Promise<T> {
+    const { motivo, referencia } = this.hipotese(req)
+    const operador = this.operador(req)
 
     return this.traduzindoRecusa(async () =>
       comTenantDeAdminEscrita(
@@ -553,7 +763,7 @@ export class AdminController {
             `SELECT admin.abrir_espaco_para_escrita($1, $2::motivo_de_acesso, $3, $4, $5) AS correlacao`,
             [tenantId, motivo, referencia, acao, `/v1/admin/${acao}`],
           )
-          return trabalho(c, analise.data, r.rows[0]!.correlacao)
+          return trabalho(c, r.rows[0]!.correlacao)
         },
       ),
     )

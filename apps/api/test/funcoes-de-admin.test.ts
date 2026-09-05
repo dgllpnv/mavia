@@ -54,6 +54,11 @@ const FUNCOES_DE_ADMIN: ReadonlyMap<
   ['registrar_pagamento', 'mavia_admin_contrato'],
   ['estornar_baixa', 'mavia_admin_contrato'],
   ['cadastrar_cliente', 'mavia_admin_contrato'],
+  // ADR 0025. `criar_preco` é a única que não recebe um tenant: preço de plano
+  // é do produto, e ela grava auditoria com `tenant_id` nulo.
+  ['criar_preco', 'mavia_admin_contrato'],
+  ['conceder_desconto', 'mavia_admin_contrato'],
+  ['revogar_desconto', 'mavia_admin_contrato'],
   // Provisionamento — não servem requisição, e por isso o dono é o de migration.
   ['conceder', 'mavia_migrate'],
   ['revogar', 'mavia_migrate'],

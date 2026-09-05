@@ -155,6 +155,14 @@ const CONJUNTOS = [
               graca_ate, criado_em, atualizado_em`,
   },
   {
+    // O desconto vigente e o histórico dele — ADR 0025. Sem `motivo` nem os
+    // dois crachás; ver `EXPORTADA_EM_PARTE`.
+    nome: 'descontos_de_cliente',
+    tabela: 'descontos_de_cliente',
+    colunas: `id, especie, pontos_base, valor_centavos::text, moeda, duracao,
+              meses, concedido_em, revogado_em`,
+  },
+  {
     // A troca de plano agendada — P-17.
     //
     // Sai **inteira**, e `pedida_por` junto: diferente de `registrado_por` em
@@ -256,6 +264,23 @@ export const EXPORTADA_EM_PARTE: ReadonlyMap<
   string,
   { readonly colunasOmitidas: readonly string[]; readonly porque: string }
 > = new Map([
+  [
+    'descontos_de_cliente',
+    {
+      // Mesma forma, e pela mesma razão. O titular tem direito ao **fato** do
+      // desconto — quanto, por quanto tempo, desde quando —, porque é o preço
+      // que ele paga. `motivo` é a nota interna do operador ("cliente
+      // reclamou", "amigo do dono") e os dois ids são crachás de funcionário.
+      //
+      // E a omissão é privilégio, não linha no serializador: o `GRANT` de
+      // `mavia_app` na `0043` não inclui as três colunas, então acrescentá-las
+      // à consulta faz o **banco** recusar.
+      colunasOmitidas: ['motivo', 'concedido_por', 'revogado_por'],
+      porque:
+        'o titular tem direito ao desconto que recebe, não à nota interna de quem o concedeu — ' +
+        'e os crachás dos operadores seguem a mesma regra de pagamentos_manuais',
+    },
+  ],
   [
     'pagamentos_manuais',
     {

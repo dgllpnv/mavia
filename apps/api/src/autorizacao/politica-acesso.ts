@@ -259,6 +259,16 @@ export const ROTAS_DE_ADMIN: ReadonlySet<string> = new Set([
   'GET /v1/admin/clientes/:tenantId/pagamentos',
   'POST /v1/admin/clientes/:tenantId/pagamentos',
   'POST /v1/admin/clientes',
+  // ADR 0025 — preço e desconto.
+  //
+  // `GET /v1/admin/precos` e `POST /v1/admin/precos` **não têm `:tenantId`**, e
+  // são as duas únicas rotas do painel assim: preço de plano é do produto, não
+  // de um espaço. Ver `comAdminEscrita`.
+  'GET /v1/admin/precos',
+  'POST /v1/admin/precos',
+  'GET /v1/admin/clientes/:tenantId/descontos',
+  'POST /v1/admin/clientes/:tenantId/descontos',
+  'DELETE /v1/admin/clientes/:tenantId/descontos',
   'GET /v1/admin/registro',
 ])
 

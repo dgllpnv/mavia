@@ -61,6 +61,13 @@ describe('as rotas do painel estão declaradas, e o boot passou', () => {
       'POST /v1/admin/clientes/:tenantId/cortesia',
       'POST /v1/admin/clientes/:tenantId/pagamentos',
       'POST /v1/admin/clientes/:tenantId/teste/prorrogar',
+      // ADR 0025. As duas de preço **não têm `:tenantId`** — preço de plano é
+      // do produto, não de um espaço —, e são as únicas do painel assim.
+      'GET /v1/admin/precos',
+      'POST /v1/admin/precos',
+      'GET /v1/admin/clientes/:tenantId/descontos',
+      'POST /v1/admin/clientes/:tenantId/descontos',
+      'DELETE /v1/admin/clientes/:tenantId/descontos',
     ]
     expect([...ROTAS_DE_ADMIN].sort()).toEqual([...esperadas].sort())
   })
